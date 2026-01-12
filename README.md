@@ -60,6 +60,19 @@ supabase link --project-ref mtjfypwrtvzhnzgatoim
 supabase db push
 ```
 
+Or run the helper script:
+
+```bash
+./scripts/apply-migrations.sh
+```
+
+If you prefer using `psql` directly (with `DATABASE_URL` exported):
+
+```bash
+export DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@db.mtjfypwrtvzhnzgatoim.supabase.co:5432/postgres"
+./scripts/apply-migrations-psql.sh
+```
+
 ### 4. Deploy Edge Functions
 
 Deploy all 21 Edge Functions to Supabase:
