@@ -17,7 +17,7 @@ async function fetchVehicles({ customerId, siteId } = {}) {
   if (customerId && customerId !== 'all') params.customer_id = customerId;
   if (siteId && siteId !== 'all') params.site_id = siteId;
   const response = await supabaseClient.elora.vehicles(params);
-  return response.data;
+  return response?.data ?? response ?? [];
 }
 
 async function fetchScans({ customerId, siteId } = {}) {
@@ -27,7 +27,7 @@ async function fetchScans({ customerId, siteId } = {}) {
   if (customerId && customerId !== 'all') params.customer_id = customerId;
   if (siteId && siteId !== 'all') params.site_id = siteId;
   const response = await supabaseClient.elora.scans(params);
-  return response.data;
+  return response?.data ?? response ?? [];
 }
 
 export default function Leaderboard() {

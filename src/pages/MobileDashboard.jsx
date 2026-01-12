@@ -30,7 +30,8 @@ export default function MobileDashboard() {
     queryKey: ['mobile-vehicles'],
     queryFn: async () => {
       const response = await supabaseClient.elora.vehicles({});
-      return response.data.map(v => ({
+      const data = response?.data ?? response ?? [];
+      return data.map(v => ({
         id: v.vehicleRef,
         name: v.vehicleName,
         rfid: v.vehicleRfid,

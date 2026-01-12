@@ -22,7 +22,7 @@ async function fetchRecentActivity({ customerRef, siteRef, limit = 20 } = {}) {
       siteRef,
       limit
     });
-    return response.data || [];
+    return response?.data ?? response ?? [];
   } catch (error) {
     console.error('Error fetching recent activity:', error);
     return [];

@@ -12,7 +12,8 @@ import { usePermissions, useFilteredData } from '@/components/auth/PermissionGua
 
 async function fetchSites() {
   const response = await supabaseClient.elora.sites({});
-  return response.data.map(s => ({
+  const data = response?.data ?? response ?? [];
+  return data.map(s => ({
     id: s.ref,
     name: s.siteName,
     customer_ref: s.customerRef
@@ -21,7 +22,7 @@ async function fetchSites() {
 
 async function fetchVehicles({ startDate, endDate } = {}) {
   const response = await supabaseClient.elora.vehicles({});
-  return response.data;
+  return response?.data ?? response ?? [];
 }
 
 async function fetchScans({ startDate, endDate } = {}) {
@@ -30,7 +31,7 @@ async function fetchScans({ startDate, endDate } = {}) {
   if (endDate) params.end_date = endDate;
 
   const response = await supabaseClient.elora.scans(params);
-  return response.data;
+  return response?.data ?? response ?? [];
 }
 
 export default function SiteAnalytics() {
