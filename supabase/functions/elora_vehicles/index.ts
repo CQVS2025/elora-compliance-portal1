@@ -1,40 +1,41 @@
-import { corsHeaders, handleCors } from '../_shared/cors.ts';
-import { callEloraAPI } from '../_shared/elora-api.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-Deno.serve(async (req) => {
-  // Handle CORS preflight
-  const corsResponse = handleCors(req);
-  if (corsResponse) return corsResponse;
+const ELORA_API_KEY = Deno.env.get('ELORA_API_KEY')
+const ELORA_BASE_URL = 'https://www.elora.com.au/api'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const customerId = body.customer_id;
-    const siteId = body.site_id;
-
-    const params: Record<string, string> = { status: '1' }; // active only
-    if (customerId && customerId !== 'all') {
-      params.customer = customerId;
-    }
-    if (siteId && siteId !== 'all') {
-      params.site = siteId;
-    }
-
-    const data = await callEloraAPI('/vehicles', params);
-
+    const url = new URL(req.url)
+    const params = url.searchParams
+    
+    const eloraUrl = `${ELORA_BASE_URL}/vehicles?${params.toString()}`
+    
+    const response = await fetch(eloraUrl, {
+      headers: {
+        'x-api-key': ELORA_API_KEY || '',
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    const data = await response.json()
+    
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
-    });
+    })
   } catch (error) {
-    console.error('Server error:', error);
-    return new Response(
-      JSON.stringify({
-        error: error.message,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
+    })
   }
-});
+})
