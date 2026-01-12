@@ -1,10 +1,15 @@
-import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { callEloraAPI } from '../_shared/elora-api.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
-  const corsResponse = handleCors(req);
-  if (corsResponse) return corsResponse;
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
 
   try {
     const url = new URL(req.url);
