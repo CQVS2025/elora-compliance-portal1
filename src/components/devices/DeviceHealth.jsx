@@ -24,7 +24,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
     queryKey: ['devices'],
     queryFn: async () => {
       const response = await supabaseClient.elora.devices({ status: 'active' });
-      return response.data || [];
+      return response?.data ?? response ?? [];
     }
   });
 

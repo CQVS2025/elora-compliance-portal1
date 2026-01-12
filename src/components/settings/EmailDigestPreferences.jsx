@@ -10,7 +10,7 @@ async function fetchDigestPreferences(userEmail) {
   if (!userEmail) return null;
   try {
     const response = await supabaseClient.digest.getPreferences(userEmail);
-    return response.data || null;
+    return response?.data ?? response ?? null;
   } catch (error) {
     console.error('Error fetching digest preferences:', error);
     return null;
@@ -19,7 +19,7 @@ async function fetchDigestPreferences(userEmail) {
 
 async function saveDigestPreferences(preferences) {
   const response = await supabaseClient.digest.savePreferences(preferences);
-  return response.data;
+  return response?.data ?? response;
 }
 
 export default function EmailDigestPreferences({ userEmail }) {

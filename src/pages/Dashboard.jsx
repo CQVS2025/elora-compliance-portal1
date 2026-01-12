@@ -15,12 +15,13 @@ async function fetchDashboardData({ customerId, siteId, startDate, endDate } = {
   if (endDate) params.end_date = endDate;
 
   const response = await supabaseClient.elora.dashboard(params);
-  return response.data;
+  return response?.data ?? response;
 }
 
 async function fetchCustomers() {
   const response = await supabaseClient.elora.customers();
-  return response.data.map(c => ({
+  const data = response?.data ?? response ?? [];
+  return data.map(c => ({
     id: c.ref,
     name: c.name
   }));
@@ -28,7 +29,8 @@ async function fetchCustomers() {
 
 async function fetchSites() {
   const response = await supabaseClient.elora.sites({});
-  return response.data.map(s => ({
+  const data = response?.data ?? response ?? [];
+  return data.map(s => ({
     id: s.ref,
     name: s.siteName,
     customer_ref: s.customerRef
@@ -202,7 +204,7 @@ export default function Dashboard() {
         customerRef: selectedCustomer,
         siteRef: selectedSite
       });
-      return response.data || [];
+      return response?.data ?? response ?? [];
     },
     retry: 1,
     staleTime: 30000,
