@@ -16,7 +16,7 @@ export function useFavoriteVehicles(userEmail) {
       if (!userEmail) return [];
       try {
         const response = await supabaseClient.favorites.get( { userEmail });
-        return response.data || [];
+        return response?.data ?? response ?? [];
       } catch (error) {
         console.error('Error fetching favorites:', error);
         return [];
@@ -34,7 +34,7 @@ export function useFavoriteVehicles(userEmail) {
         vehicleName,
         isFavorite
       });
-      return response.data;
+      return response?.data ?? response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['favoriteVehicles', userEmail]);

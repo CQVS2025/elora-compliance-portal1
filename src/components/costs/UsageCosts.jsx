@@ -193,7 +193,7 @@ async function fetchScans({ customerId, siteId, startDate, endDate } = {}) {
   if (endDate) params.end_date = endDate;
   
   const response = await supabaseClient.elora.scans(params);
-  return response.data;
+  return response?.data ?? response ?? [];
 }
 
 export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }) {

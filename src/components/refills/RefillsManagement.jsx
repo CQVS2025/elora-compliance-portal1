@@ -23,14 +23,14 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
     queryKey: ['refills', selectedCustomer, selectedSite, dateRange.start, dateRange.end],
     queryFn: async () => {
       const params = {
-        from_date: dateRange.start,
-        to_date: dateRange.end
+        fromDate: dateRange.start,
+        toDate: dateRange.end
       };
-      if (selectedCustomer && selectedCustomer !== 'all') params.customer_id = selectedCustomer;
-      if (selectedSite && selectedSite !== 'all') params.site_id = selectedSite;
+      if (selectedCustomer && selectedCustomer !== 'all') params.customerRef = selectedCustomer;
+      if (selectedSite && selectedSite !== 'all') params.siteRef = selectedSite;
       
-      const response = await supabaseClient.elora.refills', params);
-      return response.data || [];
+      const response = await supabaseClient.elora.refills(params);
+      return response?.data ?? response ?? [];
     }
   });
 
