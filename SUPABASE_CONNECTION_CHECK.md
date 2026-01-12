@@ -123,6 +123,10 @@ Once the anon key is verified:
    # - supabase/migrations/20250112000002_rls_policies.sql
    # - supabase/migrations/20250112000003_seed_test_data.sql
    ```
+   Or run the helper script:
+   ```bash
+   ./scripts/apply-migrations.sh
+   ```
 
 2. **Deploy Edge Functions**
    ```bash
