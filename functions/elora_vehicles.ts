@@ -6,9 +6,16 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'API key not configured' }, { status: 500 });
     }
 
+    const url = new URL(req.url);
     const body = await req.json().catch(() => ({}));
-    const customerId = body.customer_id;
-    const siteId = body.site_id;
+    const customerId = body.customer_id
+      ?? body.customer
+      ?? url.searchParams.get('customer_id')
+      ?? url.searchParams.get('customer');
+    const siteId = body.site_id
+      ?? body.site
+      ?? url.searchParams.get('site_id')
+      ?? url.searchParams.get('site');
 
     const params = new URLSearchParams({ status: '1' }); // active only
     if (customerId && customerId !== 'all') {
@@ -34,7 +41,7 @@ Deno.serve(async (req) => {
     }
 
     const json = await response.json();
-    return Response.json(json.data || []);
+    return Response.json(json?.data ?? json);
     
   } catch (error) {
     console.error('Server error:', error);

@@ -7,7 +7,8 @@ Deno.serve(async (req) => {
     }
 
     const url = new URL(req.url);
-    const status = url.searchParams.get('status') || 'active';
+    const body = await req.json().catch(() => ({}));
+    const status = url.searchParams.get('status') || body.status || 'active';
 
     const response = await fetch(`https://www.elora.com.au/api/customers?status=${status}`, {
       headers: {
@@ -25,7 +26,7 @@ Deno.serve(async (req) => {
     }
 
     const json = await response.json();
-    return Response.json(json.data || []);
+    return Response.json(json?.data ?? json);
     
   } catch (error) {
     console.error('Server error:', error);

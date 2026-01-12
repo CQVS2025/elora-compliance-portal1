@@ -1,5 +1,3 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
-
 const ELORA_API_KEY = Deno.env.get("ELORA_API_KEY");
 
 Deno.serve(async (req) => {
