@@ -60,6 +60,12 @@ supabase link --project-ref mtjfypwrtvzhnzgatoim
 supabase db push
 ```
 
+Or run the helper script:
+
+```bash
+./scripts/apply-migrations.sh
+```
+
 ### 4. Deploy Edge Functions
 
 Deploy all 21 Edge Functions to Supabase:

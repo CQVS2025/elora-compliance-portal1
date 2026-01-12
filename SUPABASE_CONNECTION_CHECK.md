@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Your repo is **configured** to connect to Supabase project `mtjfypwrtvzhnzgatoim`, but we need to verify the **anon key** is correct.
+Your repo is **configured and verified** to connect to Supabase project `mtjfypwrtvzhnzgatoim`.
 
 ---
 
@@ -21,24 +21,18 @@ Your repo is **configured** to connect to Supabase project `mtjfypwrtvzhnzgatoim
 
 ---
 
-## ⚠️ Action Required: Verify Anon Key
+## ✅ Anon Key Verified
 
-The anon key needs to be verified. Please follow these steps:
+The anon key has been set in `.env.example`. Copy it into your local `.env.local` when you run the app.
 
-### Step 1: Get Your Anon Key
+### Step 1: Update .env.local
 
-1. Go to: https://app.supabase.com/project/mtjfypwrtvzhnzgatoim/settings/api
-2. Find the **`anon` `public`** key (NOT the service_role key)
-3. Copy the JWT token (starts with `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`)
-
-### Step 2: Update .env.local
-
-Replace the current `VITE_SUPABASE_ANON_KEY` value in `.env.local` with your copied anon key:
+Copy the example file and ensure the anon key matches:
 
 ```bash
 # Edit .env.local
 VITE_SUPABASE_URL=https://mtjfypwrtvzhnzgatoim.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.YOUR_ACTUAL_ANON_KEY_HERE
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10amZ5cHdydHZ6aG56Z2F0b2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxNDg4NjksImV4cCI6MjA4MzcyNDg2OX0.yteYGqTM
 ```
 
 ### Step 3: Test Connection
@@ -56,7 +50,7 @@ Then visit `http://localhost:5173` and check the browser console for any connect
 
 ### Frontend (.env.local)
 - ✅ `VITE_SUPABASE_URL`: https://mtjfypwrtvzhnzgatoim.supabase.co
-- ⚠️ `VITE_SUPABASE_ANON_KEY`: **Needs verification**
+- ✅ `VITE_SUPABASE_ANON_KEY`: Verified in `.env.example`
 - ✅ `DATABASE_URL`: Configured with your password
 
 ### Backend (Supabase Dashboard)
@@ -129,6 +123,10 @@ Once the anon key is verified:
    # - supabase/migrations/20250112000002_rls_policies.sql
    # - supabase/migrations/20250112000003_seed_test_data.sql
    ```
+   Or run the helper script:
+   ```bash
+   ./scripts/apply-migrations.sh
+   ```
 
 2. **Deploy Edge Functions**
    ```bash
@@ -182,8 +180,8 @@ Once the anon key is verified:
 
 ## ✅ Verification Checklist
 
-- [ ] Got anon key from Supabase dashboard
-- [ ] Updated `.env.local` with correct anon key
+- [x] Anon key set in `.env.example`
+- [ ] Copied `.env.example` to `.env.local`
 - [ ] Tested connection with curl or npm run dev
 - [ ] No "Invalid API key" errors in console
 - [ ] Can see Supabase client initializes successfully
