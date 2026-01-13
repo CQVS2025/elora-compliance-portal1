@@ -72,6 +72,12 @@ export const supabaseClient = {
     delete: (id) => supabase.from('email_templates').delete().eq('id', id),
   },
 
+  // Admin Functions
+  admin: {
+    createCompanyWithUser: (params) => callEdgeFunction('createCompanyWithUser', params),
+    createHeidelbergUser: (params) => callEdgeFunction('createHeidelbergUser', params),
+  },
+
   // Database Tables (direct access)
   tables: {
     userProfiles: supabase.from('user_profiles'),
