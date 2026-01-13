@@ -42,7 +42,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function CompanyManagement() {
   const navigate = useNavigate();
-  const { userProfile } = useAuth();
+  const { userProfile, isLoadingAuth } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -82,23 +82,7 @@ export default function CompanyManagement() {
 
   const isSuperAdmin = userProfile?.role === 'super_admin';
 
-  // Redirect non-super-admins
-  if (!isSuperAdmin) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <Building2 className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Access Denied</h2>
-            <p className="text-slate-600 mb-4">Only Super Admins can manage companies.</p>
-            <Button onClick={() => navigate('/admin')}>Return to Admin</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Fetch companies with user counts
+  // Fetch companies with user counts - only enabled for super admins
   const { data: companies = [], isLoading, error: queryError } = useQuery({
     queryKey: ['adminCompaniesDetail'],
     queryFn: async () => {
@@ -130,23 +114,8 @@ export default function CompanyManagement() {
     },
     retry: 1,
     staleTime: 30000,
+    enabled: isSuperAdmin && !isLoadingAuth,
   });
-
-  // Show error if query failed
-  if (queryError) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Error Loading Companies</h2>
-            <p className="text-slate-600 mb-4">{queryError.message}</p>
-            <Button onClick={() => window.location.reload()}>Retry</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   // Create company mutation
   const createCompanyMutation = useMutation({
@@ -341,6 +310,47 @@ export default function CompanyManagement() {
     });
     setShowEditModal(true);
   };
+
+  // Show loading while auth is being checked
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#7CB342] animate-spin" />
+      </div>
+    );
+  }
+
+  // Redirect non-super-admins (only after auth has loaded)
+  if (!isSuperAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <Building2 className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Access Denied</h2>
+            <p className="text-slate-600 mb-4">Only Super Admins can manage companies.</p>
+            <Button onClick={() => navigate('/admin')}>Return to Admin</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show error if query failed
+  if (queryError) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Error Loading Companies</h2>
+            <p className="text-slate-600 mb-4">{queryError.message}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const filteredCompanies = companies.filter(company =>
     !searchQuery ||

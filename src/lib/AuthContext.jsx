@@ -37,7 +37,13 @@ export const AuthProvider = ({ children }) => {
       setIsLoadingAuth(true);
       setAuthError(null);
 
-      const { data: { session }, error } = await supabase.auth.getSession();
+      // Add timeout for session check to prevent hanging
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Session check timeout')), 15000)
+      );
+
+      const { data: { session }, error } = await Promise.race([sessionPromise, timeoutPromise]);
 
       if (error) {
         console.error('Session error:', error);
@@ -59,8 +65,8 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Auth check failed:', error);
       setAuthError({
-        type: 'unknown',
-        message: error.message || 'An unexpected error occurred'
+        type: 'timeout',
+        message: error.message || 'Connection timeout - please check your network and refresh'
       });
       setIsLoadingAuth(false);
       setIsAuthenticated(false);
@@ -71,12 +77,18 @@ export const AuthProvider = ({ children }) => {
     try {
       setUser(user);
 
-      // Load user profile from database
-      const { data: profile, error } = await supabase
+      // Load user profile from database with timeout
+      const profilePromise = supabase
         .from('user_profiles')
         .select('*')
         .eq('id', user.id)
         .single();
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Profile load timeout')), 10000)
+      );
+
+      const { data: profile, error } = await Promise.race([profilePromise, timeoutPromise]);
 
       if (error) {
         console.error('Failed to load profile:', error);
