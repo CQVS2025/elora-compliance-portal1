@@ -42,7 +42,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function CompanyManagement() {
   const navigate = useNavigate();
-  const { userProfile, isLoadingAuth } = useAuth();
+  const { userProfile, isLoadingAuth, authError, checkAuth } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -316,6 +316,29 @@ export default function CompanyManagement() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-[#7CB342] animate-spin" />
+      </div>
+    );
+  }
+
+  // Show timeout/connection error with retry option
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Connection Issue</h2>
+            <p className="text-slate-600 mb-4">
+              {authError.type === 'timeout'
+                ? 'The authentication check timed out. Please check your connection and try again.'
+                : authError.message || 'An error occurred while checking your credentials.'}
+            </p>
+            <div className="flex gap-2 justify-center">
+              <Button variant="outline" onClick={() => navigate('/admin')}>Return to Admin</Button>
+              <Button onClick={() => checkAuth()}>Retry</Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
