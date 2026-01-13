@@ -21,7 +21,7 @@ import {
   Save,
   CheckCircle
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 
 export default function Profile() {
   const navigate = useNavigate();
