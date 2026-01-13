@@ -32,7 +32,7 @@ Copy the example file and ensure the anon key matches:
 ```bash
 # Edit .env.local
 VITE_SUPABASE_URL=https://mtjfypwrtvzhnzgatoim.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10amZ5cHdydHZ6aG56Z2F0b2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxNDg4NjksImV4cCI6MjA4MzcyNDg2OX0.yteYGqTM
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10amZ5cHdydHZ6aG56Z2F0b2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxNDg4NjksImV4cCI6MjA4MzcyNDg2OX0.6bLX8uIVCYNKwwRDooVWbVuMVZ6-DMMzCnqVK_iK910
 ```
 
 ### Step 3: Test Connection
