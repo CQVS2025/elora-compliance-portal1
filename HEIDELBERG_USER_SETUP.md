@@ -1,100 +1,71 @@
 # Heidelberg Materials User Setup Guide
 
-## User Details
-- **Email:** jonny.harper01@gmail.com
-- **Password:** jonnyharper5
-- **Name:** Jonny Harper
-- **Role:** Admin
-- **Company:** Heidelberg Materials
+## Login Credentials
+| Field | Value |
+|-------|-------|
+| **Email** | jonny.harper01@gmail.com |
+| **Password** | jonnyharper5 |
 
-## Branding Colors
-- **Primary:** #003DA5 (Heidelberg Blue)
-- **Secondary:** #00A3E0 (Light Blue)
-- **Tagline:** "Building Tomorrow's Infrastructure Today"
+## Branding
+| Property | Value |
+|----------|-------|
+| Company | Heidelberg Materials |
+| Primary Color | #003DA5 (Heidelberg Blue) |
+| Secondary Color | #00A3E0 (Light Blue) |
+| Tagline | "Building Tomorrow's Infrastructure Today" |
 
 ---
 
-## Setup Steps
+## Setup Instructions
 
-### Step 1: Run the Migration
+### Step 1: Run the Database Migration
 
-Go to your Supabase Dashboard:
-1. Open https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim
-2. Navigate to **SQL Editor** in the left sidebar
-3. Create a new query and paste the contents of:
-   `supabase/migrations/20250115000001_heidelberg_full_branding.sql`
-4. Click **Run** to execute
+1. Go to [Supabase SQL Editor](https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim/sql/new)
+2. Copy and paste the contents of:
+   ```
+   supabase/migrations/20250116000001_heidelberg_complete_setup.sql
+   ```
+3. Click **Run** to execute
 
-This sets up:
-- Full Heidelberg Materials branding (login, email, PDF)
-- User permissions for jonny.harper01@gmail.com
-- Company settings
+This creates:
+- Heidelberg Materials company
+- Full branding configuration (login, email, PDF styles)
+- User permissions for the demo user
+- Sample compliance targets
 
-### Step 2: Deploy the Edge Function
+### Step 2: Create the Auth User
 
-**Option A: Via Supabase CLI (if installed locally)**
-```bash
-supabase functions deploy createHeidelbergUser --project-ref mtjfypwrtvzhnzgatoim
-```
-
-**Option B: Via Supabase Dashboard**
-1. Go to https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim/functions
-2. Click **New Function**
-3. Name it: `createHeidelbergUser`
-4. Paste the code from: `supabase/functions/createHeidelbergUser/index.ts`
-5. Deploy
-
-### Step 3: Create the User
-
-**Option A: Via curl**
-```bash
-curl -X POST 'https://mtjfypwrtvzhnzgatoim.supabase.co/functions/v1/createHeidelbergUser' \
-  -H 'Authorization: Bearer YOUR_ANON_KEY' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "email": "jonny.harper01@gmail.com",
-    "password": "jonnyharper5",
-    "full_name": "Jonny Harper",
-    "job_title": "Fleet Manager",
-    "role": "admin"
-  }'
-```
-
-**Option B: Via Supabase Dashboard (Direct Auth User Creation)**
-1. Go to https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim/auth/users
+1. Go to [Supabase Authentication](https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim/auth/users)
 2. Click **Add user** → **Create new user**
 3. Enter:
    - Email: `jonny.harper01@gmail.com`
    - Password: `jonnyharper5`
-   - Check "Auto Confirm User"
+   - Check **Auto Confirm User**
 4. Click **Create user**
 
-Then run this SQL in the SQL Editor to create the profile:
+### Step 3: Create the User Profile
+
+1. Go to [Supabase SQL Editor](https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim/sql/new)
+2. Run the following SQL:
+
 ```sql
-INSERT INTO user_profiles (
-    id,
-    company_id,
-    email,
-    full_name,
-    phone,
-    job_title,
-    role,
-    company_name,
-    is_active
-)
+INSERT INTO user_profiles (id, company_id, email, full_name, phone, job_title, role, company_name, is_active)
 SELECT
-    id,
-    'hm-001-uuid-4a8b-9c3d-e2f1a5b6c7d8'::uuid,
+    au.id,
+    c.id,
     'jonny.harper01@gmail.com',
     'Jonny Harper',
-    '',
+    '+61 400 000 000',
     'Fleet Manager',
     'admin',
     'Heidelberg Materials',
     true
-FROM auth.users
-WHERE email = 'jonny.harper01@gmail.com'
+FROM auth.users au
+CROSS JOIN companies c
+WHERE au.email = 'jonny.harper01@gmail.com'
+AND c.email_domain = 'heidelberg.com.au'
 ON CONFLICT (email) DO UPDATE SET
+    company_id = EXCLUDED.company_id,
     full_name = 'Jonny Harper',
     role = 'admin',
     company_name = 'Heidelberg Materials',
@@ -105,12 +76,33 @@ ON CONFLICT (email) DO UPDATE SET
 
 ## Verification
 
-After setup, verify by logging in:
-1. Go to your portal URL
+### Test Login
+1. Go to your portal URL (e.g., http://localhost:5173 or deployed URL)
 2. Login with:
    - Email: `jonny.harper01@gmail.com`
    - Password: `jonnyharper5`
-3. You should see Heidelberg Materials branding (blue theme)
+3. You should see:
+   - Heidelberg Materials logo
+   - Blue gradient theme (#003DA5 → #00A3E0)
+   - "Building Tomorrow's Infrastructure Today" tagline
+   - Full dashboard access
+
+### Verify in Database
+Run this SQL to confirm setup:
+
+```sql
+SELECT
+    up.email,
+    up.full_name,
+    up.role,
+    c.name as company,
+    cb.primary_color,
+    cb.login_tagline
+FROM user_profiles up
+JOIN companies c ON up.company_id = c.id
+LEFT JOIN client_branding cb ON c.id = cb.company_id
+WHERE up.email = 'jonny.harper01@gmail.com';
+```
 
 ---
 
@@ -118,8 +110,14 @@ After setup, verify by logging in:
 
 | Item | Value |
 |------|-------|
-| Project Ref | mtjfypwrtvzhnzgatoim |
-| Company ID | hm-001-uuid-4a8b-9c3d-e2f1a5b6c7d8 |
-| Email Domain | heidelberg.com.au |
-| Primary Color | #003DA5 |
-| Secondary Color | #00A3E0 |
+| Supabase Project | mtjfypwrtvzhnzgatoim |
+| Company Email Domain | heidelberg.com.au |
+| User Role | admin |
+| Has Full Access | Yes |
+
+## What You'll See
+
+- **Login Page**: Blue gradient background with Heidelberg Materials logo
+- **Dashboard**: Full compliance analytics and reporting
+- **Reports**: PDF reports with Heidelberg branding
+- **Emails**: Branded email templates with company colors
