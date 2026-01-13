@@ -99,20 +99,24 @@ export default function CompanyManagement() {
   }
 
   // Fetch companies with user counts
-  const { data: companies = [], isLoading } = useQuery({
+  const { data: companies = [], isLoading, error: queryError } = useQuery({
     queryKey: ['adminCompaniesDetail'],
     queryFn: async () => {
+      console.log('Fetching companies...');
       const { data: companiesData, error: companiesError } = await supabase
         .from('companies')
         .select('*')
         .order('name');
 
+      console.log('Companies result:', companiesData, companiesError);
       if (companiesError) throw companiesError;
 
       // Get user counts per company
-      const { data: users } = await supabase
+      const { data: users, error: usersError } = await supabase
         .from('user_profiles')
         .select('company_id');
+
+      console.log('Users result:', users, usersError);
 
       const userCounts = {};
       users?.forEach(u => {
@@ -124,7 +128,25 @@ export default function CompanyManagement() {
         userCount: userCounts[c.id] || 0
       }));
     },
+    retry: 1,
+    staleTime: 30000,
   });
+
+  // Show error if query failed
+  if (queryError) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Error Loading Companies</h2>
+            <p className="text-slate-600 mb-4">{queryError.message}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Create company mutation
   const createCompanyMutation = useMutation({
