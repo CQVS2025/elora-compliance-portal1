@@ -79,6 +79,24 @@ const AuthenticatedApp = () => {
             }
           />
         ))}
+        {/* Add lowercase routes for common pages to handle case-sensitivity on Vercel */}
+        {Object.entries(Pages).map(([path, Page]) => {
+          const lowerPath = path.toLowerCase();
+          if (lowerPath !== path) {
+            return (
+              <Route
+                key={`${path}-lower`}
+                path={`/${lowerPath}`}
+                element={
+                  <LayoutWrapper currentPageName={path}>
+                    <Page />
+                  </LayoutWrapper>
+                }
+              />
+            );
+          }
+          return null;
+        })}
         <Route path="*" element={<PageNotFound />} />
       </Routes>
     </>
