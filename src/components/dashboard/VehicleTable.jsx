@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, Truck, Plus, Wrench } from 'lucide-react';
+import { Search, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, Truck } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,15 +25,6 @@ export default function VehicleTable({ vehicles, scans, searchQuery, setSearchQu
   const userEmail = typeof window !== 'undefined'
     ? localStorage.getItem('userEmail') || sessionStorage.getItem('userEmail')
     : null;
-
-  // Placeholder for maintenance data - can be enhanced later
-  const vehicleMaintenance = [];
-
-  const handleAddMaintenance = (vehicle, e) => {
-    e.stopPropagation();
-    // TODO: Implement add maintenance functionality
-    console.log('Add maintenance for vehicle:', vehicle.name);
-  };
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -321,55 +312,6 @@ export default function VehicleTable({ vehicles, scans, searchQuery, setSearchQu
                               )}
                             </div>
 
-                            {/* Maintenance History */}
-                            <div className="bg-white rounded-lg border border-slate-200 p-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-sm font-bold text-slate-800">Maintenance History</h3>
-                                {permissions.user && permissions.canEditVehicles && (
-                                  <Button
-                                    size="sm"
-                                    onClick={(e) => handleAddMaintenance(vehicle, e)}
-                                    className="bg-[#7CB342] hover:bg-[#689F38]"
-                                  >
-                                    <Plus className="w-3 h-3 mr-1" />
-                                    Add Service
-                                  </Button>
-                                )}
-                              </div>
-                              {vehicleMaintenance.length === 0 ? (
-                                <p className="text-sm text-slate-500">No maintenance records yet</p>
-                              ) : (
-                                <div className="space-y-2 max-h-64 overflow-y-auto">
-                                  {vehicleMaintenance.map((record, idx) => (
-                                    <div 
-                                      key={idx}
-                                      className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded border border-slate-100"
-                                    >
-                                      <div className="flex items-center gap-4">
-                                        <Wrench className="w-4 h-4 text-[#7CB342]" />
-                                        <div>
-                                          <p className="text-sm font-semibold text-slate-800">
-                                            {record.service_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                          </p>
-                                          <p className="text-xs text-slate-500">
-                                            {moment(record.service_date).format('MMM D, YYYY')}
-                                            {record.cost && ` • $${record.cost.toFixed(2)}`}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      {record.next_service_date && (
-                                        <div className="text-right">
-                                          <p className="text-xs text-slate-600">Next Service</p>
-                                          <p className="text-xs font-semibold text-slate-800">
-                                            {moment(record.next_service_date).format('MMM D, YYYY')}
-                                          </p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
                           </div>
                         </td>
                       </motion.tr>

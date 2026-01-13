@@ -166,7 +166,6 @@ export default function EmailDigestPreferences({ userEmail }) {
         <div className="space-y-3">
           {[
             { key: 'includeCompliance', label: 'Compliance Summary', desc: 'Vehicle wash compliance rates and alerts' },
-            { key: 'includeMaintenance', label: 'Maintenance Updates', desc: 'Upcoming and overdue maintenance' },
             { key: 'includeAlerts', label: 'Important Alerts', desc: 'Critical issues requiring attention' },
             { key: 'includeActivity', label: 'Recent Activity', desc: 'Latest changes and updates' },
           ].map((option) => (

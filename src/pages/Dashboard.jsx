@@ -52,6 +52,8 @@ import ReportsDashboard from '@/components/reports/ReportsDashboard';
 import EmailReportSettings from '@/components/reports/EmailReportSettings';
 import RoleManagement from '@/components/admin/RoleManagement';
 import MultiTenantConfig from '@/components/admin/MultiTenantConfig';
+import PermissionsManagement from '@/components/admin/PermissionsManagement';
+import BrandingManagement from '@/components/admin/BrandingManagement';
 import UsageCosts from '@/components/costs/UsageCosts';
 import MobileDashboard from './MobileDashboard';
 import DeviceHealth from '@/components/devices/DeviceHealth';
@@ -65,7 +67,19 @@ import EmailDigestPreferences from '@/components/settings/EmailDigestPreferences
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import CustomComplianceTargets from '@/components/compliance/CustomComplianceTargets';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { usePermissions, useFilteredData, getUserSpecificConfig } from '@/components/auth/PermissionGuard';
+import { usePermissions, useFilteredData, useAvailableTabs } from '@/components/auth/PermissionGuard';
+
+// All available tabs (maintenance removed)
+const ALL_TABS = [
+  { value: 'compliance', label: 'Compliance' },
+  { value: 'costs', label: 'Usage Costs' },
+  { value: 'refills', label: 'Refills' },
+  { value: 'devices', label: 'Device Health' },
+  { value: 'sites', label: 'Sites' },
+  { value: 'reports', label: 'Reports' },
+  { value: 'email-reports', label: 'Email Reports' },
+  { value: 'users', label: 'Users' }
+];
 
 export default function Dashboard() {
   const permissions = usePermissions();
@@ -74,28 +88,8 @@ export default function Dashboard() {
   const [selectedSite, setSelectedSite] = useState('all');
   const [showCustomizer, setShowCustomizer] = useState(false);
 
-  const userConfig = getUserSpecificConfig(permissions.user?.email);
-
-  const availableTabs = useMemo(() => {
-    const allTabs = [
-      { value: 'compliance', label: 'Compliance' },
-      { value: 'costs', label: 'Usage Costs' },
-      { value: 'refills', label: 'Refills' },
-      { value: 'devices', label: 'Device Health' },
-      { value: 'sites', label: 'Sites' },
-      { value: 'reports', label: 'Reports' },
-      { value: 'email-reports', label: 'Email Reports' },
-      { value: 'users', label: 'Users' }
-    ];
-
-    if (userConfig?.visibleTabs) {
-      return allTabs.filter(tab => userConfig.visibleTabs.includes(tab.value));
-    } else if (userConfig?.hiddenTabs) {
-      return allTabs.filter(tab => !userConfig.hiddenTabs.includes(tab.value));
-    }
-
-    return allTabs;
-  }, [userConfig]);
+  // Use database-driven tab visibility from permissions
+  const availableTabs = useAvailableTabs(ALL_TABS);
 
   const [dateRange, setDateRange] = useState({
     start: moment().startOf('month').format('YYYY-MM-DD'),
@@ -149,18 +143,18 @@ export default function Dashboard() {
   });
 
   const filteredCustomers = useMemo(() => {
-    if (!userConfig?.restrictedCustomer) return customers;
+    if (!permissions.restrictedCustomer) return customers;
     const restrictedCustomer = customers.find(c =>
-      c.name && c.name.toUpperCase().includes(userConfig.restrictedCustomer.toUpperCase())
+      c.name && c.name.toUpperCase().includes(permissions.restrictedCustomer.toUpperCase())
     );
     return restrictedCustomer ? [restrictedCustomer] : customers;
-  }, [customers, userConfig]);
+  }, [customers, permissions.restrictedCustomer]);
 
   useEffect(() => {
-    if (userConfig?.restrictedCustomer && filteredCustomers.length === 1) {
+    if (permissions.restrictedCustomer && filteredCustomers.length === 1) {
       setSelectedCustomer(filteredCustomers[0].id);
     }
-  }, [filteredCustomers, userConfig]);
+  }, [filteredCustomers, permissions.restrictedCustomer]);
 
   const { data: rawSites = [], isLoading: sitesLoading, error: sitesError } = useQuery({
     queryKey: ['sites'],
@@ -486,8 +480,8 @@ export default function Dashboard() {
             setDateRange={setDateRange}
             activePeriod={activePeriod}
             setActivePeriod={setActivePeriod}
-            lockCustomerFilter={userConfig?.lockCustomerFilter}
-            restrictedCustomerName={userConfig?.restrictedCustomer}
+            lockCustomerFilter={permissions.lockCustomerFilter}
+            restrictedCustomerName={permissions.restrictedCustomer}
           />
         </div>
 
@@ -512,7 +506,7 @@ export default function Dashboard() {
         </div>
 
         {/* Cost Forecast */}
-        {!userConfig?.hideCostForecast && (
+        {!permissions.hideCostForecast && (
           <div className="mb-8">
             <CostForecast
               scans={filteredScans}
@@ -523,7 +517,7 @@ export default function Dashboard() {
         )}
 
         {/* Leaderboard Link */}
-        {!userConfig?.hideLeaderboard && (
+        {!permissions.hideLeaderboard && (
           <Link to={`${createPageUrl('Leaderboard')}?customer=${selectedCustomer}&site=${selectedSite}`}>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -641,25 +635,24 @@ export default function Dashboard() {
             {activeTab === 'users' && (
               <div className="space-y-6">
                 <Tabs defaultValue="roles" className="w-full">
-                  <TabsList className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-xl p-1">
+                  <TabsList className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-xl p-1 flex-wrap">
                     <TabsTrigger value="roles" className="rounded-lg">User Roles</TabsTrigger>
-                    <TabsTrigger value="multitenant" className="rounded-lg">Multi-Tenant Config</TabsTrigger>
-                    <TabsTrigger value="preferences" className="rounded-lg">User Preferences</TabsTrigger>
+                    <TabsTrigger value="permissions" className="rounded-lg">Permissions</TabsTrigger>
+                    <TabsTrigger value="branding" className="rounded-lg">Branding</TabsTrigger>
+                    <TabsTrigger value="multitenant" className="rounded-lg">Multi-Tenant</TabsTrigger>
                     <TabsTrigger value="digest" className="rounded-lg">Email Digest</TabsTrigger>
                   </TabsList>
                   <TabsContent value="roles" className="mt-6">
                     <RoleManagement vehicles={enrichedVehicles} sites={allSites} />
                   </TabsContent>
+                  <TabsContent value="permissions" className="mt-6">
+                    <PermissionsManagement />
+                  </TabsContent>
+                  <TabsContent value="branding" className="mt-6">
+                    <BrandingManagement />
+                  </TabsContent>
                   <TabsContent value="multitenant" className="mt-6">
                     <MultiTenantConfig />
-                  </TabsContent>
-                  <TabsContent value="preferences" className="mt-6">
-                    <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl p-6">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">User Preferences</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        User preference options will be available here.
-                      </p>
-                    </div>
                   </TabsContent>
                   <TabsContent value="digest" className="mt-6">
                     <EmailDigestPreferences />

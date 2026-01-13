@@ -35,9 +35,6 @@ export default function NotificationSettings() {
         const defaultPrefs = {
           user_email: user.email,
           email_notifications_enabled: true,
-          maintenance_due_days: 7,
-          notify_maintenance_due: true,
-          notify_maintenance_overdue: true,
           notify_low_compliance: true,
           notify_vehicle_assigned: true,
           notify_issue_updates: true,
@@ -107,7 +104,7 @@ export default function NotificationSettings() {
               </div>
               <Switch
                 checked={preferences?.email_notifications_enabled}
-                onCheckedChange={(checked) => 
+                onCheckedChange={(checked) =>
                   setPreferences({ ...preferences, email_notifications_enabled: checked })
                 }
               />
@@ -126,54 +123,12 @@ export default function NotificationSettings() {
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-slate-800">Maintenance Due Soon</p>
-                <p className="text-sm text-slate-600">Alert when vehicle maintenance is approaching</p>
-              </div>
-              <Switch
-                checked={preferences?.notify_maintenance_due}
-                onCheckedChange={(checked) => 
-                  setPreferences({ ...preferences, notify_maintenance_due: checked })
-                }
-              />
-            </div>
-
-            {preferences?.notify_maintenance_due && (
-              <div className="ml-6 space-y-2">
-                <Label>Days Before Maintenance to Notify</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="30"
-                  value={preferences?.maintenance_due_days}
-                  onChange={(e) => 
-                    setPreferences({ ...preferences, maintenance_due_days: parseInt(e.target.value) })
-                  }
-                  className="w-32"
-                />
-              </div>
-            )}
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-slate-800">Overdue Maintenance</p>
-                <p className="text-sm text-slate-600">Alert when maintenance is past due</p>
-              </div>
-              <Switch
-                checked={preferences?.notify_maintenance_overdue}
-                onCheckedChange={(checked) => 
-                  setPreferences({ ...preferences, notify_maintenance_overdue: checked })
-                }
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
                 <p className="font-medium text-slate-800">Low Compliance Rate</p>
                 <p className="text-sm text-slate-600">Alert when vehicle compliance drops below threshold</p>
               </div>
               <Switch
                 checked={preferences?.notify_low_compliance}
-                onCheckedChange={(checked) => 
+                onCheckedChange={(checked) =>
                   setPreferences({ ...preferences, notify_low_compliance: checked })
                 }
               />
@@ -187,7 +142,7 @@ export default function NotificationSettings() {
                   min="0"
                   max="100"
                   value={preferences?.compliance_threshold}
-                  onChange={(e) => 
+                  onChange={(e) =>
                     setPreferences({ ...preferences, compliance_threshold: parseInt(e.target.value) })
                   }
                   className="w-32"
@@ -202,7 +157,7 @@ export default function NotificationSettings() {
               </div>
               <Switch
                 checked={preferences?.notify_vehicle_assigned}
-                onCheckedChange={(checked) => 
+                onCheckedChange={(checked) =>
                   setPreferences({ ...preferences, notify_vehicle_assigned: checked })
                 }
               />
@@ -215,7 +170,7 @@ export default function NotificationSettings() {
               </div>
               <Switch
                 checked={preferences?.notify_issue_updates}
-                onCheckedChange={(checked) => 
+                onCheckedChange={(checked) =>
                   setPreferences({ ...preferences, notify_issue_updates: checked })
                 }
               />
@@ -224,7 +179,7 @@ export default function NotificationSettings() {
         </Card>
 
         <div className="flex justify-end">
-          <Button 
+          <Button
             onClick={handleSave}
             disabled={saveMutation.isPending}
             className="bg-[#7CB342] hover:bg-[#689F38]"
