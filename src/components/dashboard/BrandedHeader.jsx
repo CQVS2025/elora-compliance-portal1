@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChevronDown, Settings, LogOut, User } from 'lucide-react';
 import { useAuth } from "@/lib/AuthContext";
 import {
@@ -7,35 +8,32 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { supabaseClient } from '@/api/supabaseClient';
+import { supabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 import NotificationCenter from '@/components/notifications/NotificationCenter';
 
-async function fetchUserAndBranding() {
-  const { user } = useAuth(); if (!user) throw new Error("Not authenticated");
-  const emailDomain = user.email.split('@')[1];
-
-  // Fetch branding for this domain
-  const branding = await supabaseClient.tables.Client_Branding.filter({
-    client_email_domain: emailDomain
-  });
-
-  return {
-    user,
-    branding: branding.length > 0 ? branding[0] : null
-  };
-}
-
 export default function BrandedHeader({ onNotificationClick }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['userAndBranding'],
-    queryFn: fetchUserAndBranding,
-    staleTime: 0,
-    cacheTime: 0
+  const navigate = useNavigate();
+  const { user, userProfile, logout } = useAuth();
+
+  // Fetch branding based on user's email domain
+  const { data: clientBranding, isLoading } = useQuery({
+    queryKey: ['clientBranding', user?.email],
+    queryFn: async () => {
+      if (!user?.email) return null;
+      const emailDomain = user.email.split('@')[1];
+      const { data, error } = await supabase
+        .from('client_branding')
+        .select('*')
+        .eq('client_email_domain', emailDomain)
+        .single();
+      if (error) return null;
+      return data;
+    },
+    enabled: !!user?.email,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  const user = data?.user;
-  const clientBranding = data?.branding;
   const emailDomain = user?.email?.split('@')[1];
 
   // Default fallback branding
@@ -71,7 +69,13 @@ export default function BrandedHeader({ onNotificationClick }) {
     }
   }, [branding]);
 
-  const initials = user?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U';
+  const displayName = userProfile?.full_name || user?.email?.split('@')[0] || 'User';
+  const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/Login');
+  };
 
   if (isLoading) {
     return (
@@ -185,7 +189,7 @@ export default function BrandedHeader({ onNotificationClick }) {
                   </div>
                   <div className="hidden lg:block text-left">
                     <span className="text-white font-semibold text-sm block leading-tight drop-shadow">
-                      {user?.full_name || 'User'}
+                      {displayName}
                     </span>
                     <span className="text-white/70 text-xs">Account</span>
                   </div>
@@ -200,22 +204,28 @@ export default function BrandedHeader({ onNotificationClick }) {
                 }}
               >
                 <div className="px-3 py-3 mb-1">
-                  <p className="text-sm font-bold text-slate-900">{user?.full_name || 'User'}</p>
+                  <p className="text-sm font-bold text-slate-900">{displayName}</p>
                   <p className="text-xs text-slate-500 mt-0.5">{user?.email}</p>
                 </div>
                 <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent my-2" />
-                <DropdownMenuItem className="cursor-pointer py-3 px-4 rounded-xl hover:bg-gradient-to-r hover:from-slate-100 hover:to-slate-50 transition-all">
+                <DropdownMenuItem
+                  className="cursor-pointer py-3 px-4 rounded-xl hover:bg-gradient-to-r hover:from-slate-100 hover:to-slate-50 transition-all"
+                  onClick={() => navigate('/Profile')}
+                >
                   <User className="w-4 h-4 mr-3 text-slate-600" />
                   <span className="font-medium text-slate-700">Profile</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="cursor-pointer py-3 px-4 rounded-xl hover:bg-gradient-to-r hover:from-slate-100 hover:to-slate-50 transition-all">
+                <DropdownMenuItem
+                  className="cursor-pointer py-3 px-4 rounded-xl hover:bg-gradient-to-r hover:from-slate-100 hover:to-slate-50 transition-all"
+                  onClick={() => navigate('/Settings')}
+                >
                   <Settings className="w-4 h-4 mr-3 text-slate-600" />
                   <span className="font-medium text-slate-700">Settings</span>
                 </DropdownMenuItem>
                 <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent my-2" />
                 <DropdownMenuItem
                   className="cursor-pointer py-3 px-4 rounded-xl text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100 transition-all font-semibold"
-                  onClick={() => window.location.href = "/logout"}
+                  onClick={handleLogout}
                 >
                   <LogOut className="w-4 h-4 mr-3" />
                   Logout
