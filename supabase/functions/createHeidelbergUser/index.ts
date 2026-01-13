@@ -1,7 +1,8 @@
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { createSupabaseAdminClient } from '../_shared/supabase.ts';
 
-const HEIDELBERG_COMPANY_ID = 'hm-001-uuid-4a8b-9c3d-e2f1a5b6c7d8';
+// Heidelberg Materials email domain - used to find company dynamically
+const HEIDELBERG_EMAIL_DOMAIN = 'heidelberg.com.au';
 
 interface CreateUserRequest {
   email: string;
@@ -27,7 +28,7 @@ Deno.serve(async (req) => {
       email,
       password,
       full_name = 'Jonny Harper',
-      phone = '',
+      phone = '+61 400 000 000',
       job_title = 'Fleet Manager',
       role = 'admin'
     } = body;
@@ -40,6 +41,26 @@ Deno.serve(async (req) => {
         status: 400
       });
     }
+
+    // Get Heidelberg Materials company ID from database
+    const { data: company, error: companyError } = await adminSupabase
+      .from('companies')
+      .select('id, name')
+      .eq('email_domain', HEIDELBERG_EMAIL_DOMAIN)
+      .single();
+
+    if (companyError || !company) {
+      console.error('Company lookup error:', companyError);
+      return new Response(JSON.stringify({
+        error: 'Heidelberg Materials company not found. Please run the database migration first.',
+        details: companyError?.message
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 404
+      });
+    }
+
+    const HEIDELBERG_COMPANY_ID = company.id;
 
     // Check if user already exists
     const { data: existingUsers } = await adminSupabase.auth.admin.listUsers();
@@ -77,7 +98,8 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         message: `User ${email} already exists. Profile updated.`,
-        user_id: existingUser.id
+        user_id: existingUser.id,
+        company_id: HEIDELBERG_COMPANY_ID
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
