@@ -1,35 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { Slider } from '@/components/ui/slider';
 import {
   ArrowLeft,
-  Loader2,
-  Save,
   Bell,
+  Moon,
+  Sun,
+  Globe,
+  Shield,
+  Trash2,
+  ChevronRight,
   Mail,
   Clock,
   Gauge,
-  Sun,
-  Moon,
-  Globe
+  Loader2,
+  Save,
+  AlertTriangle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Settings() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
 
   const [settings, setSettings] = useState({
     // Notification Preferences
@@ -48,7 +46,6 @@ export default function Settings() {
     // Display Preferences
     timezone: 'Australia/Sydney',
     theme: 'light',
-    dashboardRefreshInterval: 5,
   });
 
   useEffect(() => {
@@ -56,7 +53,10 @@ export default function Settings() {
   }, [user]);
 
   const loadSettings = async () => {
-    if (!user) return;
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -77,21 +77,21 @@ export default function Settings() {
       if (notifPrefs) {
         setSettings(prev => ({
           ...prev,
-          emailNotifications: notifPrefs.email_notifications_enabled,
-          notifyMaintenanceDue: notifPrefs.notify_maintenance_due,
-          notifyMaintenanceOverdue: notifPrefs.notify_maintenance_overdue,
-          notifyLowCompliance: notifPrefs.notify_low_compliance,
-          maintenanceDueDays: notifPrefs.maintenance_due_days,
-          complianceThreshold: notifPrefs.compliance_threshold,
+          emailNotifications: notifPrefs.email_notifications_enabled ?? true,
+          notifyMaintenanceDue: notifPrefs.notify_maintenance_due ?? true,
+          notifyMaintenanceOverdue: notifPrefs.notify_maintenance_overdue ?? true,
+          notifyLowCompliance: notifPrefs.notify_low_compliance ?? true,
+          maintenanceDueDays: notifPrefs.maintenance_due_days ?? 7,
+          complianceThreshold: notifPrefs.compliance_threshold ?? 50,
         }));
       }
 
       if (digestPrefs) {
         setSettings(prev => ({
           ...prev,
-          digestEnabled: digestPrefs.enabled,
-          digestFrequency: digestPrefs.frequency,
-          digestTime: digestPrefs.send_time,
+          digestEnabled: digestPrefs.enabled ?? true,
+          digestFrequency: digestPrefs.frequency ?? 'daily',
+          digestTime: digestPrefs.send_time ?? '08:00',
         }));
       }
     } catch (error) {
@@ -102,6 +102,15 @@ export default function Settings() {
   };
 
   const handleSaveSettings = async () => {
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to save settings.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -158,271 +167,341 @@ export default function Settings() {
     }
   };
 
+  // Toggle component
+  const Toggle = ({ enabled, onChange }) => (
+    <button
+      onClick={() => onChange(!enabled)}
+      className={`w-12 h-7 rounded-full transition-colors duration-200 relative
+                 ${enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-zinc-700'}`}
+    >
+      <motion.div
+        className="w-5 h-5 rounded-full bg-white shadow-md absolute top-1"
+        animate={{ left: enabled ? 24 : 4 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      />
+    </button>
+  );
+
+  // Setting Row component
+  const SettingRow = ({ icon: Icon, title, description, children, iconColor = "text-gray-600 dark:text-gray-400" }) => (
+    <div className="flex items-center justify-between py-4">
+      <div className="flex items-center gap-4">
+        <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-zinc-800
+                       flex items-center justify-center">
+          <Icon className={`w-5 h-5 ${iconColor}`} />
+        </div>
+        <div>
+          <p className="font-medium">{title}</p>
+          {description && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
+          )}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-[#7CB342] animate-spin" />
+      <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+          <p className="text-gray-500 dark:text-gray-400">Loading settings...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8">
-      <div className="max-w-2xl mx-auto px-4">
-        {/* Back Button */}
-        <Button
-          variant="ghost"
-          className="mb-6"
-          onClick={() => navigate('/')}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
-        </Button>
-
-        <div className="space-y-6">
-          {/* Notification Settings */}
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-[#7CB342]" />
-                Notification Preferences
-              </CardTitle>
-              <CardDescription>
-                Configure how and when you receive notifications
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-base">Email Notifications</Label>
-                  <p className="text-sm text-slate-500">Receive notifications via email</p>
-                </div>
-                <Switch
-                  checked={settings.emailNotifications}
-                  onCheckedChange={(checked) => setSettings({ ...settings, emailNotifications: checked })}
-                />
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Maintenance Due Alerts</Label>
-                    <p className="text-sm text-slate-500">Get notified when maintenance is coming up</p>
-                  </div>
-                  <Switch
-                    checked={settings.notifyMaintenanceDue}
-                    onCheckedChange={(checked) => setSettings({ ...settings, notifyMaintenanceDue: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Maintenance Overdue Alerts</Label>
-                    <p className="text-sm text-slate-500">Get notified when maintenance is overdue</p>
-                  </div>
-                  <Switch
-                    checked={settings.notifyMaintenanceOverdue}
-                    onCheckedChange={(checked) => setSettings({ ...settings, notifyMaintenanceOverdue: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Low Compliance Alerts</Label>
-                    <p className="text-sm text-slate-500">Get notified when compliance drops below threshold</p>
-                  </div>
-                  <Switch
-                    checked={settings.notifyLowCompliance}
-                    onCheckedChange={(checked) => setSettings({ ...settings, notifyLowCompliance: checked })}
-                  />
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div>
-                  <Label className="flex items-center gap-2 mb-3">
-                    <Clock className="w-4 h-4" />
-                    Maintenance Alert Days: {settings.maintenanceDueDays} days before due
-                  </Label>
-                  <Slider
-                    value={[settings.maintenanceDueDays]}
-                    onValueChange={([value]) => setSettings({ ...settings, maintenanceDueDays: value })}
-                    min={1}
-                    max={30}
-                    step={1}
-                    className="w-full"
-                  />
-                </div>
-
-                <div>
-                  <Label className="flex items-center gap-2 mb-3">
-                    <Gauge className="w-4 h-4" />
-                    Compliance Alert Threshold: {settings.complianceThreshold}%
-                  </Label>
-                  <Slider
-                    value={[settings.complianceThreshold]}
-                    onValueChange={([value]) => setSettings({ ...settings, complianceThreshold: value })}
-                    min={0}
-                    max={100}
-                    step={5}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Email Digest Settings */}
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="w-5 h-5 text-[#7CB342]" />
-                Email Digest
-              </CardTitle>
-              <CardDescription>
-                Configure your daily/weekly email summary
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-base">Enable Email Digest</Label>
-                  <p className="text-sm text-slate-500">Receive periodic summary emails</p>
-                </div>
-                <Switch
-                  checked={settings.digestEnabled}
-                  onCheckedChange={(checked) => setSettings({ ...settings, digestEnabled: checked })}
-                />
-              </div>
-
-              {settings.digestEnabled && (
-                <>
-                  <Separator />
-
-                  <div className="grid gap-4">
-                    <div className="grid gap-2">
-                      <Label>Frequency</Label>
-                      <Select
-                        value={settings.digestFrequency}
-                        onValueChange={(value) => setSettings({ ...settings, digestFrequency: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label>Send Time</Label>
-                      <Select
-                        value={settings.digestTime}
-                        onValueChange={(value) => setSettings({ ...settings, digestTime: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="06:00">6:00 AM</SelectItem>
-                          <SelectItem value="08:00">8:00 AM</SelectItem>
-                          <SelectItem value="09:00">9:00 AM</SelectItem>
-                          <SelectItem value="12:00">12:00 PM</SelectItem>
-                          <SelectItem value="17:00">5:00 PM</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Display Preferences */}
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="w-5 h-5 text-[#7CB342]" />
-                Display Preferences
-              </CardTitle>
-              <CardDescription>
-                Customize your dashboard experience
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-2">
-                <Label>Timezone</Label>
-                <Select
-                  value={settings.timezone}
-                  onValueChange={(value) => setSettings({ ...settings, timezone: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Australia/Sydney">Sydney (AEST/AEDT)</SelectItem>
-                    <SelectItem value="Australia/Melbourne">Melbourne (AEST/AEDT)</SelectItem>
-                    <SelectItem value="Australia/Brisbane">Brisbane (AEST)</SelectItem>
-                    <SelectItem value="Australia/Perth">Perth (AWST)</SelectItem>
-                    <SelectItem value="Australia/Adelaide">Adelaide (ACST/ACDT)</SelectItem>
-                    <SelectItem value="Pacific/Auckland">Auckland (NZST/NZDT)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <Label>Theme</Label>
-                <div className="flex gap-2">
-                  <Button
-                    variant={settings.theme === 'light' ? 'default' : 'outline'}
-                    className={settings.theme === 'light' ? 'bg-[#7CB342] hover:bg-[#689F38]' : ''}
-                    onClick={() => setSettings({ ...settings, theme: 'light' })}
-                  >
-                    <Sun className="w-4 h-4 mr-2" />
-                    Light
-                  </Button>
-                  <Button
-                    variant={settings.theme === 'dark' ? 'default' : 'outline'}
-                    className={settings.theme === 'dark' ? 'bg-[#7CB342] hover:bg-[#689F38]' : ''}
-                    onClick={() => setSettings({ ...settings, theme: 'dark' })}
-                  >
-                    <Moon className="w-4 h-4 mr-2" />
-                    Dark
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Save Button */}
-          <div className="flex justify-end">
-            <Button
-              className="bg-[#7CB342] hover:bg-[#689F38]"
-              onClick={handleSaveSettings}
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Settings
-                </>
-              )}
-            </Button>
-          </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-zinc-950">
+      {/* Header */}
+      <div className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
+                      border-b border-gray-200/20 dark:border-zinc-800/50">
+        <div className="max-w-2xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400
+                                   hover:text-gray-900 dark:hover:text-white transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+            <span className="font-medium">Back to Dashboard</span>
+          </Link>
+          <button
+            onClick={handleSaveSettings}
+            disabled={isSaving}
+            className="h-10 px-5 rounded-full bg-emerald-500 text-white
+                      font-semibold text-sm hover:bg-emerald-600
+                      active:scale-95 transition-all duration-150
+                      shadow-lg shadow-emerald-500/30
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                      flex items-center gap-2"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
         </div>
       </div>
+
+      {/* Content */}
+      <main className="max-w-2xl mx-auto px-6 py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="space-y-6"
+        >
+          {/* Page Title */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold mb-1">Settings</h1>
+            <p className="text-gray-500 dark:text-gray-400">Customize your experience</p>
+          </div>
+
+          {/* Appearance Section */}
+          <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
+                         rounded-2xl border border-gray-200/20 dark:border-zinc-800/50
+                         shadow-lg shadow-black/5 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200/50 dark:border-zinc-800/50">
+              <h2 className="font-semibold text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wide">
+                Appearance
+              </h2>
+            </div>
+            <div className="px-6 divide-y divide-gray-200/50 dark:divide-zinc-800/50">
+              <SettingRow
+                icon={darkMode ? Moon : Sun}
+                title="Dark Mode"
+                description="Switch between light and dark themes"
+                iconColor={darkMode ? "text-indigo-500" : "text-yellow-500"}
+              >
+                <Toggle enabled={darkMode} onChange={setDarkMode} />
+              </SettingRow>
+            </div>
+          </div>
+
+          {/* Notifications Section */}
+          <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
+                         rounded-2xl border border-gray-200/20 dark:border-zinc-800/50
+                         shadow-lg shadow-black/5 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200/50 dark:border-zinc-800/50">
+              <h2 className="font-semibold text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wide">
+                Notifications
+              </h2>
+            </div>
+            <div className="px-6 divide-y divide-gray-200/50 dark:divide-zinc-800/50">
+              <SettingRow
+                icon={Bell}
+                title="Email Notifications"
+                description="Receive notifications via email"
+                iconColor="text-emerald-500"
+              >
+                <Toggle
+                  enabled={settings.emailNotifications}
+                  onChange={(val) => setSettings({...settings, emailNotifications: val})}
+                />
+              </SettingRow>
+
+              <SettingRow
+                icon={AlertTriangle}
+                title="Maintenance Due Alerts"
+                description="Get notified when maintenance is coming up"
+                iconColor="text-amber-500"
+              >
+                <Toggle
+                  enabled={settings.notifyMaintenanceDue}
+                  onChange={(val) => setSettings({...settings, notifyMaintenanceDue: val})}
+                />
+              </SettingRow>
+
+              <SettingRow
+                icon={AlertTriangle}
+                title="Maintenance Overdue Alerts"
+                description="Get notified when maintenance is overdue"
+                iconColor="text-red-500"
+              >
+                <Toggle
+                  enabled={settings.notifyMaintenanceOverdue}
+                  onChange={(val) => setSettings({...settings, notifyMaintenanceOverdue: val})}
+                />
+              </SettingRow>
+
+              <SettingRow
+                icon={Gauge}
+                title="Low Compliance Alerts"
+                description={`Alert when compliance drops below ${settings.complianceThreshold}%`}
+                iconColor="text-orange-500"
+              >
+                <Toggle
+                  enabled={settings.notifyLowCompliance}
+                  onChange={(val) => setSettings({...settings, notifyLowCompliance: val})}
+                />
+              </SettingRow>
+
+              {/* Thresholds */}
+              <div className="py-4">
+                <div className="mb-4">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    <Clock className="w-4 h-4" />
+                    Maintenance Alert Days: {settings.maintenanceDueDays} days before due
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="30"
+                    value={settings.maintenanceDueDays}
+                    onChange={(e) => setSettings({...settings, maintenanceDueDays: parseInt(e.target.value)})}
+                    className="w-full h-2 bg-gray-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer
+                              accent-emerald-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>1 day</span>
+                    <span>30 days</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    <Gauge className="w-4 h-4" />
+                    Compliance Alert Threshold: {settings.complianceThreshold}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={settings.complianceThreshold}
+                    onChange={(e) => setSettings({...settings, complianceThreshold: parseInt(e.target.value)})}
+                    className="w-full h-2 bg-gray-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer
+                              accent-emerald-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>0%</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Email Digest Section */}
+          <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
+                         rounded-2xl border border-gray-200/20 dark:border-zinc-800/50
+                         shadow-lg shadow-black/5 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200/50 dark:border-zinc-800/50">
+              <h2 className="font-semibold text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wide">
+                Email Digest
+              </h2>
+            </div>
+            <div className="px-6 divide-y divide-gray-200/50 dark:divide-zinc-800/50">
+              <SettingRow
+                icon={Mail}
+                title="Enable Email Digest"
+                description="Receive periodic summary emails"
+                iconColor="text-blue-500"
+              >
+                <Toggle
+                  enabled={settings.digestEnabled}
+                  onChange={(val) => setSettings({...settings, digestEnabled: val})}
+                />
+              </SettingRow>
+
+              {settings.digestEnabled && (
+                <div className="py-4 space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Frequency
+                    </label>
+                    <div className="flex gap-2">
+                      {['daily', 'weekly', 'monthly'].map((freq) => (
+                        <button
+                          key={freq}
+                          onClick={() => setSettings({...settings, digestFrequency: freq})}
+                          className={`h-10 px-4 rounded-full text-sm font-medium transition-all
+                                    ${settings.digestFrequency === freq
+                                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                                      : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-zinc-700'
+                                    }`}
+                        >
+                          {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Send Time
+                    </label>
+                    <select
+                      value={settings.digestTime}
+                      onChange={(e) => setSettings({...settings, digestTime: e.target.value})}
+                      className="h-12 px-4 rounded-xl w-full
+                                bg-gray-100 dark:bg-zinc-800
+                                border border-gray-200 dark:border-zinc-700
+                                focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20
+                                transition-all outline-none text-base"
+                    >
+                      <option value="06:00">6:00 AM</option>
+                      <option value="08:00">8:00 AM</option>
+                      <option value="09:00">9:00 AM</option>
+                      <option value="12:00">12:00 PM</option>
+                      <option value="17:00">5:00 PM</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Account Section */}
+          <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
+                         rounded-2xl border border-gray-200/20 dark:border-zinc-800/50
+                         shadow-lg shadow-black/5 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200/50 dark:border-zinc-800/50">
+              <h2 className="font-semibold text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wide">
+                Account
+              </h2>
+            </div>
+            <div className="px-6 divide-y divide-gray-200/50 dark:divide-zinc-800/50">
+              <SettingRow
+                icon={Shield}
+                title="Privacy & Security"
+                iconColor="text-emerald-500"
+              >
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              </SettingRow>
+
+              <SettingRow
+                icon={Globe}
+                title="Language & Region"
+                description="English (Australia)"
+                iconColor="text-blue-500"
+              >
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              </SettingRow>
+            </div>
+          </div>
+
+          {/* Danger Zone */}
+          <div className="backdrop-blur-xl bg-red-50 dark:bg-red-500/10
+                         rounded-2xl border border-red-200/50 dark:border-red-500/20
+                         overflow-hidden">
+            <div className="px-6 py-4">
+              <SettingRow
+                icon={Trash2}
+                title="Delete Account"
+                description="Permanently delete your account and data"
+                iconColor="text-red-500"
+              >
+                <button className="h-10 px-4 rounded-full bg-red-500/10 text-red-500
+                                  font-semibold text-sm hover:bg-red-500/20
+                                  transition-colors">
+                  Delete
+                </button>
+              </SettingRow>
+            </div>
+          </div>
+        </motion.div>
+      </main>
     </div>
   );
 }
