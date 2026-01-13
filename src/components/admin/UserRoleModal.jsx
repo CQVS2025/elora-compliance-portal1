@@ -93,7 +93,7 @@ export default function UserRoleModal({ open, onClose, user, vehicles, sites, on
                 <SelectItem value="technician">
                   <div className="flex flex-col">
                     <span className="font-semibold">Technician</span>
-                    <span className="text-xs text-slate-500">Maintenance management and vehicle viewing</span>
+                    <span className="text-xs text-slate-500">Technical operations and vehicle monitoring</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="viewer">

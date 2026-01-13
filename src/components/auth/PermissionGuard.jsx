@@ -1,167 +1,257 @@
-import React from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabaseClient } from "@/api/supabaseClient";
+import { useAuth } from '@/lib/AuthContext';
 
-// User-specific access configuration - takes precedence over domain config
-const USER_SPECIFIC_CONFIG = {
-  'jonny@elora.com.au': {
-    restrictedCustomer: 'HEIDELBERG MATERIALS', // Customer name to match
-    lockCustomerFilter: true, // Prevent changing customer filter
-    showAllData: false, // Only show data for restricted customer
-    defaultSite: 'all',
-    hiddenTabs: ['costs', 'refills', 'devices', 'sites', 'users'],
-    visibleTabs: ['compliance', 'reports', 'email-reports'],
-    hideCostForecast: true, // Hide cost forecast component
-    hideLeaderboard: false, // Hide leaderboard link
-    hideUsageCosts: true // Hide usage costs in vehicle profile modal
-  }
-  // Add more user-specific restrictions as needed
+/**
+ * Database-Driven Permission System
+ *
+ * Permissions are now stored in the user_permissions table and fetched at runtime.
+ * This replaces the hardcoded USER_SPECIFIC_CONFIG and DOMAIN_CONFIG objects.
+ *
+ * Permission scopes:
+ * - 'user': Specific user by email
+ * - 'domain': All users with a given email domain
+ *
+ * Priority: User-specific > Domain-level > Default (full access)
+ */
+
+// Default permissions (used when no database permissions exist)
+const DEFAULT_PERMISSIONS = {
+  source: 'default',
+  show_all_data: true,
+  restricted_customer: null,
+  lock_customer_filter: false,
+  default_site: 'all',
+  visible_tabs: null,
+  hidden_tabs: null,
+  hide_cost_forecast: false,
+  hide_leaderboard: false,
+  hide_usage_costs: false,
+  can_view_compliance: true,
+  can_view_reports: true,
+  can_manage_sites: true,
+  can_manage_users: true,
+  can_export_data: true,
+  can_view_costs: true,
+  can_generate_ai_reports: true,
+  can_edit_vehicles: true,
+  can_edit_sites: true,
+  can_delete_records: true,
 };
 
-// Domain-based access configuration - CUSTOMIZE HERE
-const DOMAIN_CONFIG = {
-  'elora.com.au': {
-    showAllData: true,
-    defaultCustomer: 'all', // or specific customer ID/name
-    defaultSite: 'all',
-    hiddenTabs: [], // e.g., ['users', 'sites'] to hide tabs
-    visibleTabs: ['compliance', 'maintenance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'users']
-  },
-  'heidelberg.com.au': {
-    showAllData: true,
-    defaultCustomer: 'all',
-    defaultSite: 'all',
-    hiddenTabs: [],
-    visibleTabs: ['compliance', 'maintenance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'users']
-  }
-  // Add more domains as needed
-};
+// Permission context for app-wide access
+const PermissionContext = createContext(null);
 
-export function getUserSpecificConfig(email) {
-  if (!email) return null;
-  return USER_SPECIFIC_CONFIG[email] || null;
-}
-
-export function getDomainConfig(email) {
-  if (!email) return null;
-  const domain = email.split('@')[1];
-  return DOMAIN_CONFIG[domain] || null;
-}
-
-export function getEffectiveConfig(email) {
-  // User-specific config takes precedence over domain config
-  return getUserSpecificConfig(email) || getDomainConfig(email) || null;
-}
-
-export function usePermissions() {
-  const { data: user, isLoading: userLoading, error: userError } = useQuery({
-    queryKey: ['currentUser'],
+/**
+ * Hook to fetch and use user permissions from database
+ */
+export function useUserPermissions(email) {
+  const { data: permissionsData, isLoading, error } = useQuery({
+    queryKey: ['userPermissions', email],
     queryFn: async () => {
+      if (!email) return DEFAULT_PERMISSIONS;
+
       try {
-        // Add timeout to prevent hanging
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Auth timeout')), 2000)
-        );
-        // Auth is handled by AuthContext
-        return await Promise.race([authPromise, timeoutPromise]);
-      } catch {
-        // Auth is optional, return null if it fails
-        return null;
+        const response = await supabaseClient.permissions.get(email);
+        return response?.data ?? DEFAULT_PERMISSIONS;
+      } catch (err) {
+        console.warn('Failed to fetch permissions, using defaults:', err);
+        return DEFAULT_PERMISSIONS;
       }
     },
-    retry: 0, // Don't retry since auth is optional
+    enabled: !!email,
     staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    retry: 1,
   });
 
-  const permissions = {
-    // Role checks - All public
-    isAdmin: true,
-    isManager: true,
-    isTechnician: true,
-    isViewer: true,
-    isSiteManager: true,
-    isDriver: false,
-
-    // Module permissions - All public
-    canViewCompliance: true,
-    canViewMaintenance: true,
-    canManageSites: true,
-    canViewReports: true,
-    canManageUsers: true,
-
-    // Data permissions - Edit - All public
-    canEditVehicles: true,
-    canEditMaintenance: true,
-    canEditSites: true,
-
-    // Data permissions - Delete - All public
-    canDeleteRecords: true,
-
-    // Data permissions - Export - All public
-    canExportData: true,
-
-    // Advanced features - All public
-    canGenerateAIReports: true,
-    canViewCosts: true,
-
-    user,
-    assignedSites: user?.assigned_sites || [],
-    assignedVehicles: user?.assigned_vehicles || [],
-    isLoading: userLoading,
-    error: userError
+  return {
+    permissions: permissionsData ?? DEFAULT_PERMISSIONS,
+    isLoading,
+    error,
   };
+}
+
+/**
+ * Get user-specific config (for backward compatibility)
+ * Now fetches from database instead of hardcoded config
+ */
+export function getUserSpecificConfig(email) {
+  // This function is now deprecated - use useUserPermissions hook instead
+  // Keeping for backward compatibility but returns null
+  // The actual permissions are fetched via React Query in components
+  return null;
+}
+
+/**
+ * Get domain config (for backward compatibility)
+ * Now fetches from database instead of hardcoded config
+ */
+export function getDomainConfig(email) {
+  // This function is now deprecated - use useUserPermissions hook instead
+  return null;
+}
+
+/**
+ * Get effective config (for backward compatibility)
+ */
+export function getEffectiveConfig(email) {
+  // This function is now deprecated - use useUserPermissions hook instead
+  return null;
+}
+
+/**
+ * Main permissions hook used throughout the app
+ */
+export function usePermissions() {
+  const { user: authUser, userProfile } = useAuth();
+  const userEmail = authUser?.email || userProfile?.email;
+
+  const { permissions: dbPermissions, isLoading: permissionsLoading } = useUserPermissions(userEmail);
+
+  const permissions = useMemo(() => {
+    const perms = dbPermissions || DEFAULT_PERMISSIONS;
+
+    return {
+      // Role checks based on user profile
+      isAdmin: userProfile?.role === 'admin' || userProfile?.role === 'super_admin',
+      isSuperAdmin: userProfile?.role === 'super_admin',
+      isManager: ['admin', 'manager', 'super_admin'].includes(userProfile?.role),
+      isTechnician: userProfile?.role === 'technician',
+      isViewer: userProfile?.role === 'viewer',
+      isSiteManager: userProfile?.role === 'site_manager',
+      isDriver: userProfile?.role === 'driver',
+
+      // Module permissions from database
+      canViewCompliance: perms.can_view_compliance ?? true,
+      canViewReports: perms.can_view_reports ?? true,
+      canManageSites: perms.can_manage_sites ?? true,
+      canManageUsers: perms.can_manage_users ?? false,
+      canExportData: perms.can_export_data ?? true,
+      canViewCosts: perms.can_view_costs ?? true,
+      canGenerateAIReports: perms.can_generate_ai_reports ?? true,
+
+      // Data edit permissions from database
+      canEditVehicles: perms.can_edit_vehicles ?? true,
+      canEditSites: perms.can_edit_sites ?? true,
+      canDeleteRecords: perms.can_delete_records ?? false,
+
+      // UI visibility from database
+      hideCostForecast: perms.hide_cost_forecast ?? false,
+      hideLeaderboard: perms.hide_leaderboard ?? false,
+      hideUsageCosts: perms.hide_usage_costs ?? false,
+
+      // Data restrictions from database
+      restrictedCustomer: perms.restricted_customer,
+      lockCustomerFilter: perms.lock_customer_filter ?? false,
+      showAllData: perms.show_all_data ?? true,
+      defaultSite: perms.default_site ?? 'all',
+
+      // Tab visibility from database
+      visibleTabs: perms.visible_tabs,
+      hiddenTabs: perms.hidden_tabs,
+
+      // User info
+      user: authUser,
+      userProfile,
+      userEmail,
+      assignedSites: userProfile?.assigned_sites || [],
+      assignedVehicles: userProfile?.assigned_vehicles || [],
+
+      // Loading state
+      isLoading: permissionsLoading,
+
+      // Raw permissions data
+      _raw: perms,
+    };
+  }, [dbPermissions, authUser, userProfile, permissionsLoading]);
 
   return permissions;
 }
 
-export function PermissionGuard({ children, require, fallback }) {
+/**
+ * Permission Guard component
+ * Conditionally renders children based on permission check
+ */
+export function PermissionGuard({ children, require, fallback = null }) {
   const permissions = usePermissions();
 
-  const hasPermission = typeof require === 'function' 
-    ? require(permissions) 
-    : permissions[require];
+  const hasPermission = useMemo(() => {
+    if (typeof require === 'function') {
+      return require(permissions);
+    }
+    return permissions[require] ?? true;
+  }, [permissions, require]);
+
+  if (permissions.isLoading) {
+    return fallback;
+  }
 
   if (!hasPermission) {
-    return fallback || <>{children}</>;
+    return fallback;
   }
 
   return <>{children}</>;
 }
 
-// Filter data based on user permissions
+/**
+ * Filter data based on user permissions
+ */
 export function useFilteredData(vehicles, sites) {
   const permissions = usePermissions();
 
-  // Check domain-based configuration
-  const domainConfig = getDomainConfig(permissions.user?.email);
-  if (domainConfig?.showAllData) {
+  return useMemo(() => {
+    // If showing all data, return everything
+    if (permissions.showAllData) {
+      return { filteredVehicles: vehicles, filteredSites: sites };
+    }
+
+    // Admin, manager, viewer - show all data unless restricted
+    if (!permissions.user || ['admin', 'manager', 'viewer', 'technician', 'super_admin'].includes(permissions.userProfile?.role)) {
+      return { filteredVehicles: vehicles, filteredSites: sites };
+    }
+
+    // Site manager - show assigned sites only
+    if (permissions.isSiteManager && permissions.assignedSites.length > 0) {
+      const filteredSites = sites.filter(s =>
+        permissions.assignedSites.includes(s.id)
+      );
+      const filteredVehicles = vehicles.filter(v =>
+        permissions.assignedSites.includes(v.site_id)
+      );
+      return { filteredVehicles, filteredSites };
+    }
+
+    // Driver - show assigned vehicles only
+    if (permissions.isDriver && permissions.assignedVehicles.length > 0) {
+      const filteredVehicles = vehicles.filter(v =>
+        permissions.assignedVehicles.includes(v.id)
+      );
+      return { filteredVehicles, filteredSites: [] };
+    }
+
     return { filteredVehicles: vehicles, filteredSites: sites };
-  }
-
-  // Public view, admin, manager - show all data
-  if (!permissions.user || ['admin', 'manager', 'viewer', 'technician'].includes(permissions.user?.role)) {
-    return { filteredVehicles: vehicles, filteredSites: sites };
-  }
-
-  // Site manager - show assigned sites only
-  if (permissions.isSiteManager) {
-    const filteredSites = sites.filter(s => 
-      permissions.assignedSites.includes(s.id)
-    );
-    const filteredVehicles = vehicles.filter(v => 
-      permissions.assignedSites.includes(v.site_id)
-    );
-    return { filteredVehicles, filteredSites };
-  }
-
-  // Driver - show assigned vehicles only
-  if (permissions.isDriver) {
-    const filteredVehicles = vehicles.filter(v => 
-      permissions.assignedVehicles.includes(v.id)
-    );
-    return { filteredVehicles, filteredSites: [] };
-  }
-
-  return { filteredVehicles: [], filteredSites: [] };
+  }, [vehicles, sites, permissions]);
 }
+
+/**
+ * Hook to get available tabs based on permissions
+ */
+export function useAvailableTabs(allTabs) {
+  const permissions = usePermissions();
+
+  return useMemo(() => {
+    if (permissions.visibleTabs && permissions.visibleTabs.length > 0) {
+      return allTabs.filter(tab => permissions.visibleTabs.includes(tab.value));
+    }
+
+    if (permissions.hiddenTabs && permissions.hiddenTabs.length > 0) {
+      return allTabs.filter(tab => !permissions.hiddenTabs.includes(tab.value));
+    }
+
+    return allTabs;
+  }, [allTabs, permissions.visibleTabs, permissions.hiddenTabs]);
+}
+
+export default PermissionGuard;
