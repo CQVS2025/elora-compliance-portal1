@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Truck, CheckCircle, Droplet, Users, Loader2, Trophy, ChevronRight, AlertTriangle, Settings } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import moment from 'moment';
 import { supabaseClient } from "@/api/supabaseClient";
 import { Link } from 'react-router-dom';
@@ -37,10 +37,14 @@ async function fetchSites() {
   }));
 }
 
-import BrandedHeader from '@/components/dashboard/BrandedHeader';
-import FilterSection from '@/components/dashboard/FilterSection';
-import StatsCard from '@/components/dashboard/StatsCard';
-import VehicleTable from '@/components/dashboard/VehicleTable';
+// Import Apple-style components
+import AppleHeader from '@/components/layout/AppleHeader';
+import AppleStatCard from '@/components/ui/AppleStatCard';
+import AppleFilterSection from '@/components/dashboard/AppleFilterSection';
+import AppleVehicleList from '@/components/dashboard/AppleVehicleList';
+import TabNav from '@/components/ui/TabNav';
+
+// Import existing components
 import WashAnalytics from '@/components/dashboard/WashAnalytics';
 import VehiclePerformanceChart from '@/components/dashboard/VehiclePerformanceChart';
 import SiteManagement from '@/components/sites/SiteManagement';
@@ -63,7 +67,6 @@ import CustomComplianceTargets from '@/components/compliance/CustomComplianceTar
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePermissions, useFilteredData, getUserSpecificConfig } from '@/components/auth/PermissionGuard';
 
-
 export default function Dashboard() {
   const permissions = usePermissions();
   const [isMobile, setIsMobile] = useState(false);
@@ -71,10 +74,8 @@ export default function Dashboard() {
   const [selectedSite, setSelectedSite] = useState('all');
   const [showCustomizer, setShowCustomizer] = useState(false);
 
-  // Get user-specific configuration
   const userConfig = getUserSpecificConfig(permissions.user?.email);
 
-  // Define and filter available tabs based on user permissions
   const availableTabs = useMemo(() => {
     const allTabs = [
       { value: 'compliance', label: 'Compliance' },
@@ -87,7 +88,6 @@ export default function Dashboard() {
       { value: 'users', label: 'Users' }
     ];
 
-    // Filter tabs based on user configuration
     if (userConfig?.visibleTabs) {
       return allTabs.filter(tab => userConfig.visibleTabs.includes(tab.value));
     } else if (userConfig?.hiddenTabs) {
@@ -105,7 +105,6 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('compliance');
 
-  // Detect mobile and redirect drivers to mobile view
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 768;
@@ -116,7 +115,6 @@ export default function Dashboard() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Ensure user can only access tabs they have permission for
   useEffect(() => {
     const allowedTabValues = availableTabs.map(tab => tab.value);
     if (!allowedTabValues.includes(activeTab) && allowedTabValues.length > 0) {
@@ -124,7 +122,6 @@ export default function Dashboard() {
     }
   }, [availableTabs, activeTab]);
 
-  // Update date range when period changes
   useEffect(() => {
     if (activePeriod === 'Today') {
       setDateRange({
@@ -151,19 +148,14 @@ export default function Dashboard() {
     staleTime: 30000,
   });
 
-  // Filter customers based on user-specific restrictions
   const filteredCustomers = useMemo(() => {
     if (!userConfig?.restrictedCustomer) return customers;
-
-    // Find customer by name match (case-insensitive, partial match)
     const restrictedCustomer = customers.find(c =>
       c.name && c.name.toUpperCase().includes(userConfig.restrictedCustomer.toUpperCase())
     );
-
     return restrictedCustomer ? [restrictedCustomer] : customers;
   }, [customers, userConfig]);
 
-  // Auto-select restricted customer when customers are loaded
   useEffect(() => {
     if (userConfig?.restrictedCustomer && filteredCustomers.length === 1) {
       setSelectedCustomer(filteredCustomers[0].id);
@@ -177,7 +169,6 @@ export default function Dashboard() {
     staleTime: 30000,
   });
 
-  // Filter sites by selected customer on the client side
   const allSites = useMemo(() => {
     if (selectedCustomer === 'all' || !selectedCustomer) return rawSites;
     return rawSites.filter(site => site.id === selectedCustomer || site.customer_ref === selectedCustomer);
@@ -195,7 +186,7 @@ export default function Dashboard() {
     staleTime: 30000,
   });
 
-  const { data: refills = [], isLoading: refillsLoading, error: refillsError } = useQuery({
+  const { data: refills = [] } = useQuery({
     queryKey: ['refills', selectedCustomer, selectedSite, dateRange.start, dateRange.end],
     queryFn: async () => {
       const response = await supabaseClient.elora.refills({
@@ -210,31 +201,26 @@ export default function Dashboard() {
     staleTime: 30000,
   });
 
-  // Reset site when customer changes
   useEffect(() => {
     setSelectedSite('all');
   }, [selectedCustomer]);
 
-  // Process dashboard data
   const processedData = useMemo(() => {
     if (!dashboardData?.rows || !Array.isArray(dashboardData.rows)) return { vehicles: [], scans: [] };
 
     const vehicleMap = new Map();
     const scansArray = [];
-
-    // Filter rows to only include the selected date range
     const startMoment = moment(dateRange.start);
     const endMoment = moment(dateRange.end);
-    
+
     dashboardData.rows.forEach(row => {
-      // Check if this row falls within the selected date range
       const rowDate = moment(`${row.year}-${String(row.month).padStart(2, '0')}-01`);
       if (!rowDate.isBetween(startMoment, endMoment, 'month', '[]')) {
-        return; // Skip rows outside the date range
+        return;
       }
-      
+
       const vehicleKey = row.vehicleRef;
-      
+
       if (!vehicleMap.has(vehicleKey)) {
         vehicleMap.set(vehicleKey, {
           id: row.vehicleRef,
@@ -253,8 +239,7 @@ export default function Dashboard() {
           existing.last_scan = row.lastScan;
         }
       }
-      
-      // Create scan records for compatibility
+
       if (row.totalScans > 0) {
         scansArray.push({
           vehicleRef: row.vehicleRef,
@@ -264,7 +249,7 @@ export default function Dashboard() {
         });
       }
     });
-    
+
     return {
       vehicles: Array.from(vehicleMap.values()),
       scans: scansArray
@@ -274,15 +259,12 @@ export default function Dashboard() {
   const enrichedVehicles = processedData.vehicles;
   const scans = processedData.scans;
 
-  // Apply permission-based filtering
-  const { filteredVehicles, filteredSites } = useFilteredData(enrichedVehicles, allSites);
+  const { filteredVehicles } = useFilteredData(enrichedVehicles, allSites);
 
-  // Generate chart data from dashboard API
   const washTrendsData = useMemo(() => {
     if (!dashboardData?.charts?.totalWashesByMonth?.length) {
-      // Fallback to scanning data
       if (!scans || !Array.isArray(scans) || scans.length === 0) return [];
-      
+
       const scansByDate = {};
       scans.forEach(scan => {
         const date = moment(scan.timestamp).format('MMM D');
@@ -293,7 +275,7 @@ export default function Dashboard() {
       const start = moment(dateRange.start);
       const end = moment(dateRange.end);
       const diff = end.diff(start, 'days');
-      
+
       for (let i = 0; i <= Math.min(diff, 30); i++) {
         const date = moment(start).add(i, 'days');
         const dateKey = date.format('MMM D');
@@ -304,15 +286,13 @@ export default function Dashboard() {
       }
       return days;
     }
-    
-    // Use API's pre-aggregated data
+
     return dashboardData.charts.totalWashesByMonth.map(item => ({
       date: `${item.month}/${item.year}`,
       washes: item.totalWashes || 0
     }));
   }, [dashboardData, scans, dateRange]);
 
-  // Calculate stats
   const stats = useMemo(() => {
     const vehicles = Array.isArray(filteredVehicles) ? filteredVehicles : [];
     const compliantCount = vehicles.filter(v => v && v.washes_completed >= v.target).length;
@@ -332,41 +312,53 @@ export default function Dashboard() {
   const isLoading = permissions.isLoading || customersLoading || sitesLoading || dashboardLoading;
   const hasError = customersError || sitesError || dashboardError;
 
-  // Redirect drivers to mobile view on mobile devices
   if (isMobile && permissions.isDriver) {
     return <MobileDashboard />;
   }
 
+  // Apple-style Loading State
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-[#7CB342] animate-spin mx-auto mb-4" />
-          <p className="text-slate-600">Loading dashboard...</p>
-        </div>
+      <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-emerald-500/10 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+          </div>
+          <p className="text-gray-500 dark:text-gray-400">Loading dashboard...</p>
+        </motion.div>
       </div>
     );
   }
 
+  // Apple-style Error State
   if (hasError) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6">
-          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">Failed to Load Dashboard</h2>
-          <p className="text-slate-600 mb-4">
-            {customersError ? 'Failed to load customers. ' : ''}
-            {sitesError ? 'Failed to load sites. ' : ''}
-            {dashboardError ? 'Failed to load dashboard data. ' : ''}
-            Please try refreshing the page.
+      <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center max-w-md mx-auto p-8"
+        >
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-red-100 dark:bg-red-500/10 flex items-center justify-center">
+            <AlertTriangle className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Failed to Load Dashboard
+          </h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-6">
+            We couldn't load the dashboard data. Please try again.
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="bg-[#7CB342] hover:bg-[#6BA032] text-white font-medium py-2 px-6 rounded-lg transition-colors"
+            className="h-11 px-6 rounded-full bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 active:scale-95 transition-all"
           >
             Refresh Page
           </button>
-        </div>
+        </motion.div>
       </div>
     );
   }
@@ -374,74 +366,100 @@ export default function Dashboard() {
   const statsConfig = [
     {
       icon: Truck,
-      iconBg: 'bg-slate-100 text-slate-600',
       value: stats.totalVehicles.toLocaleString(),
-      label: 'Current fleet size',
+      label: 'Total Vehicles',
+      accentColor: 'gray',
     },
     {
       icon: CheckCircle,
-      iconBg: 'bg-[#7CB342]/10 text-[#7CB342]',
       value: `${stats.complianceRate}%`,
-      label: 'Current compliance rate',
+      label: 'Compliance Rate',
+      accentColor: 'emerald',
+      trend: stats.complianceRate >= 80 ? 'up' : stats.complianceRate >= 60 ? 'neutral' : 'down',
+      trendValue: 'vs target 80%',
     },
     {
       icon: Droplet,
-      iconBg: 'bg-blue-100 text-blue-600',
       value: stats.monthlyWashes.toLocaleString(),
-      label: 'Total washes this month',
+      label: 'Total Washes',
+      accentColor: 'blue',
     },
     {
       icon: Users,
-      iconBg: 'bg-purple-100 text-purple-600',
       value: stats.activeDrivers.toLocaleString(),
-      label: 'Current active drivers',
+      label: 'Active Drivers',
+      accentColor: 'purple',
     },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <BrandedHeader />
-      
-      <main className="max-w-[1600px] mx-auto px-4 md:px-6 py-6 space-y-6">
-        {/* Filters and Customizer Button */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <FilterSection
-                customers={filteredCustomers}
-                sites={allSites}
-                selectedCustomer={selectedCustomer}
-                setSelectedCustomer={setSelectedCustomer}
-                selectedSite={selectedSite}
-                setSelectedSite={setSelectedSite}
-                dateRange={dateRange}
-                setDateRange={setDateRange}
-                activePeriod={activePeriod}
-                setActivePeriod={setActivePeriod}
-                lockCustomerFilter={userConfig?.lockCustomerFilter}
-                restrictedCustomerName={userConfig?.restrictedCustomer}
-              />
+    <div className="min-h-screen bg-gray-50 dark:bg-zinc-950">
+      {/* Apple-style Header */}
+      <AppleHeader />
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        {/* Page Title */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900 dark:text-white tracking-tight">
+                Fleet Compliance
+              </h1>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">
+                {filteredCustomers.length === 1 ? filteredCustomers[0].name : 'All Customers'}
+              </p>
             </div>
             <button
               onClick={() => setShowCustomizer(true)}
-              className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg border border-slate-200 transition-colors shadow-sm"
+              className="
+                w-10 h-10 rounded-full
+                bg-white/80 dark:bg-zinc-900/80
+                border border-gray-200/50 dark:border-zinc-800/50
+                backdrop-blur-xl
+                flex items-center justify-center
+                hover:bg-gray-100 dark:hover:bg-zinc-800
+                active:scale-95
+                transition-all
+              "
               title="Customize Dashboard"
             >
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Customize</span>
+              <Settings className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             </button>
           </div>
+        </motion.div>
+
+        {/* Filters */}
+        <div className="mb-8">
+          <AppleFilterSection
+            customers={filteredCustomers}
+            sites={allSites}
+            selectedCustomer={selectedCustomer}
+            setSelectedCustomer={setSelectedCustomer}
+            selectedSite={selectedSite}
+            setSelectedSite={setSelectedSite}
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            activePeriod={activePeriod}
+            setActivePeriod={setActivePeriod}
+            lockCustomerFilter={userConfig?.lockCustomerFilter}
+            restrictedCustomerName={userConfig?.restrictedCustomer}
+          />
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Hero Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           {statsConfig.map((stat, index) => (
-            <StatsCard key={index} {...stat} index={index} />
+            <AppleStatCard key={index} {...stat} index={index} />
           ))}
         </div>
 
-        {/* Activity Feed and Favorites Widgets */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Activity & Favorites */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <RecentActivityFeed
             customerRef={selectedCustomer}
             siteRef={selectedSite}
@@ -453,148 +471,169 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Cost Forecast - Hidden for restricted users */}
+        {/* Cost Forecast */}
         {!userConfig?.hideCostForecast && (
-          <CostForecast
-            scans={scans}
-            selectedCustomer={selectedCustomer}
-            selectedSite={selectedSite}
-          />
+          <div className="mb-8">
+            <CostForecast
+              scans={scans}
+              selectedCustomer={selectedCustomer}
+              selectedSite={selectedSite}
+            />
+          </div>
         )}
 
-        {/* Leaderboard Quick Link - Hidden for restricted users */}
+        {/* Leaderboard Link */}
         {!userConfig?.hideLeaderboard && (
           <Link to={`${createPageUrl('Leaderboard')}?customer=${selectedCustomer}&site=${selectedSite}`}>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-2xl p-6 text-white shadow-lg hover:shadow-xl transition-all cursor-pointer group"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="
+                backdrop-blur-xl bg-gradient-to-r from-purple-600 to-blue-600
+                rounded-2xl p-6 mb-8
+                shadow-xl shadow-purple-500/20
+                cursor-pointer group
+              "
             >
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
-                    <Trophy className="w-6 h-6" />
-                    Driver Leaderboard
-                  </h3>
-                  <p className="text-purple-100">
-                    See who's leading the pack this month! 🏆
-                  </p>
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                    <Trophy className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Driver Leaderboard</h3>
+                    <p className="text-purple-200">See who's leading the pack this month</p>
+                  </div>
                 </div>
-                <ChevronRight className="w-8 h-8 group-hover:translate-x-2 transition-transform" />
+                <ChevronRight className="w-6 h-6 text-white/70 group-hover:translate-x-1 transition-transform" />
               </div>
             </motion.div>
           </Link>
         )}
 
-        {/* Main Content Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-6xl gap-1" style={{ gridTemplateColumns: `repeat(${availableTabs.length}, minmax(0, 1fr))` }}>
-            {availableTabs.map(tab => (
-              <TabsTrigger key={tab.value} value={tab.value}>
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        {/* Tab Navigation - Apple Pill Style */}
+        <div className="mb-6">
+          <TabNav tabs={availableTabs} activeTab={activeTab} onChange={setActiveTab} />
+        </div>
 
-          <TabsContent value="compliance" className="space-y-6">
-            {/* Vehicle Table */}
-            <VehicleTable
-              vehicles={filteredVehicles}
-              scans={scans}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-            />
+        {/* Tab Content with Animations */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            {activeTab === 'compliance' && (
+              <div className="space-y-8">
+                {/* Apple-style Vehicle List */}
+                <AppleVehicleList
+                  vehicles={filteredVehicles}
+                  scans={scans}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                />
 
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <WashAnalytics
-                data={washTrendsData}
-                vehicles={filteredVehicles}
-                scans={scans}
-              />
-              <VehiclePerformanceChart vehicles={filteredVehicles} />
-            </div>
+                {/* Charts in Glass Cards */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-lg shadow-black/[0.03]">
+                    <WashAnalytics
+                      data={washTrendsData}
+                      vehicles={filteredVehicles}
+                      scans={scans}
+                    />
+                  </div>
+                  <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-lg shadow-black/[0.03]">
+                    <VehiclePerformanceChart vehicles={filteredVehicles} />
+                  </div>
+                </div>
 
-            {/* Custom Compliance Targets */}
-            {permissions.isAdmin && selectedCustomer !== 'all' && (
-              <CustomComplianceTargets
-                customerRef={selectedCustomer}
-                vehicles={enrichedVehicles}
-                sites={allSites}
+                {permissions.isAdmin && selectedCustomer !== 'all' && (
+                  <CustomComplianceTargets
+                    customerRef={selectedCustomer}
+                    vehicles={enrichedVehicles}
+                    sites={allSites}
+                  />
+                )}
+              </div>
+            )}
+
+            {activeTab === 'costs' && (
+              <UsageCosts
+                selectedCustomer={selectedCustomer}
+                selectedSite={selectedSite}
+                dateRange={dateRange}
               />
             )}
-          </TabsContent>
 
-          <TabsContent value="costs" className="mt-6">
-            <UsageCosts
-              selectedCustomer={selectedCustomer}
-              selectedSite={selectedSite}
-              dateRange={dateRange}
-            />
-          </TabsContent>
+            {activeTab === 'refills' && (
+              <RefillAnalytics
+                refills={refills}
+                scans={scans}
+                sites={allSites}
+                selectedCustomer={selectedCustomer}
+                selectedSite={selectedSite}
+              />
+            )}
 
-          <TabsContent value="refills" className="mt-6">
-            <RefillAnalytics 
-              refills={refills}
-              scans={scans}
-              sites={allSites}
-              selectedCustomer={selectedCustomer}
-              selectedSite={selectedSite}
-            />
-          </TabsContent>
+            {activeTab === 'devices' && (
+              <DeviceHealth
+                selectedCustomer={selectedCustomer}
+                selectedSite={selectedSite}
+              />
+            )}
 
-          <TabsContent value="devices" className="mt-6">
-            <DeviceHealth
-              selectedCustomer={selectedCustomer}
-              selectedSite={selectedSite}
-            />
-          </TabsContent>
+            {activeTab === 'sites' && (
+              <SiteManagement customers={customers} vehicles={enrichedVehicles} />
+            )}
 
-          <TabsContent value="sites" className="mt-6">
-            <SiteManagement customers={customers} vehicles={enrichedVehicles} />
-          </TabsContent>
+            {activeTab === 'reports' && (
+              <ReportsDashboard vehicles={filteredVehicles} scans={scans} />
+            )}
 
-          <TabsContent value="reports" className="mt-6">
-            <ReportsDashboard vehicles={filteredVehicles} scans={scans} />
-          </TabsContent>
+            {activeTab === 'email-reports' && (
+              <EmailReportSettings />
+            )}
 
-          <TabsContent value="email-reports" className="mt-6">
-            <EmailReportSettings />
-          </TabsContent>
-
-          <TabsContent value="users" className="mt-6">
-            <div className="space-y-6">
-              <Tabs defaultValue="roles" className="w-full">
-                <TabsList>
-                  <TabsTrigger value="roles">User Roles</TabsTrigger>
-                  <TabsTrigger value="multitenant">Multi-Tenant Config</TabsTrigger>
-                  <TabsTrigger value="preferences">User Preferences</TabsTrigger>
-                  <TabsTrigger value="digest">Email Digest</TabsTrigger>
-                </TabsList>
-                <TabsContent value="roles" className="mt-6">
-                  <RoleManagement vehicles={enrichedVehicles} sites={allSites} />
-                </TabsContent>
-                <TabsContent value="multitenant" className="mt-6">
-                  <MultiTenantConfig />
-                </TabsContent>
-                <TabsContent value="preferences" className="mt-6">
-                  <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                    <h3 className="text-lg font-semibold text-slate-800 mb-4">User Preferences</h3>
-                    <p className="text-sm text-slate-500">
-                      User preference options will be available here.
-                    </p>
-                  </div>
-                </TabsContent>
-                <TabsContent value="digest" className="mt-6">
-                  <EmailDigestPreferences />
-                </TabsContent>
-              </Tabs>
-            </div>
-          </TabsContent>
-        </Tabs>
+            {activeTab === 'users' && (
+              <div className="space-y-6">
+                <Tabs defaultValue="roles" className="w-full">
+                  <TabsList className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-xl p-1">
+                    <TabsTrigger value="roles" className="rounded-lg">User Roles</TabsTrigger>
+                    <TabsTrigger value="multitenant" className="rounded-lg">Multi-Tenant Config</TabsTrigger>
+                    <TabsTrigger value="preferences" className="rounded-lg">User Preferences</TabsTrigger>
+                    <TabsTrigger value="digest" className="rounded-lg">Email Digest</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="roles" className="mt-6">
+                    <RoleManagement vehicles={enrichedVehicles} sites={allSites} />
+                  </TabsContent>
+                  <TabsContent value="multitenant" className="mt-6">
+                    <MultiTenantConfig />
+                  </TabsContent>
+                  <TabsContent value="preferences" className="mt-6">
+                    <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">User Preferences</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        User preference options will be available here.
+                      </p>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="digest" className="mt-6">
+                    <EmailDigestPreferences />
+                  </TabsContent>
+                </Tabs>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
 
         {/* Wash Pattern Analytics */}
-        <WashPatternAnalytics scans={scans} />
+        <div className="mt-8">
+          <WashPatternAnalytics scans={scans} />
+        </div>
       </main>
 
       {/* Dashboard Customizer Modal */}
@@ -605,7 +644,7 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Onboarding Wizard - First Time User Experience */}
+      {/* Onboarding Wizard */}
       <OnboardingWizard
         userEmail={permissions.user?.email}
         userName="Rebekah Sharp"
