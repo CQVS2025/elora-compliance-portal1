@@ -259,14 +259,54 @@ export default function Dashboard() {
   const enrichedVehicles = processedData.vehicles;
   const scans = processedData.scans;
 
-  const { filteredVehicles } = useFilteredData(enrichedVehicles, allSites);
+  const { filteredVehicles: permissionFilteredVehicles } = useFilteredData(enrichedVehicles, allSites);
+
+  // Apply customer and site filters to vehicles (client-side filtering)
+  const filteredVehicles = useMemo(() => {
+    let result = permissionFilteredVehicles || [];
+
+    // Filter by customer (via site's customer_ref)
+    if (selectedCustomer && selectedCustomer !== 'all') {
+      const customerSiteIds = rawSites
+        .filter(s => s.customer_ref === selectedCustomer)
+        .map(s => s.id);
+      result = result.filter(v => customerSiteIds.includes(v.site_id));
+    }
+
+    // Filter by site
+    if (selectedSite && selectedSite !== 'all') {
+      result = result.filter(v => v.site_id === selectedSite);
+    }
+
+    return result;
+  }, [permissionFilteredVehicles, selectedCustomer, selectedSite, rawSites]);
+
+  // Apply customer and site filters to scans for consistent chart/analytics data
+  const filteredScans = useMemo(() => {
+    let result = scans || [];
+
+    // Filter by customer (via site's customer_ref)
+    if (selectedCustomer && selectedCustomer !== 'all') {
+      const customerSiteIds = rawSites
+        .filter(s => s.customer_ref === selectedCustomer)
+        .map(s => s.id);
+      result = result.filter(s => customerSiteIds.includes(s.siteRef));
+    }
+
+    // Filter by site
+    if (selectedSite && selectedSite !== 'all') {
+      result = result.filter(s => s.siteRef === selectedSite);
+    }
+
+    return result;
+  }, [scans, selectedCustomer, selectedSite, rawSites]);
 
   const washTrendsData = useMemo(() => {
     if (!dashboardData?.charts?.totalWashesByMonth?.length) {
-      if (!scans || !Array.isArray(scans) || scans.length === 0) return [];
+      if (!filteredScans || !Array.isArray(filteredScans) || filteredScans.length === 0) return [];
 
       const scansByDate = {};
-      scans.forEach(scan => {
+      filteredScans.forEach(scan => {
         const date = moment(scan.timestamp).format('MMM D');
         scansByDate[date] = (scansByDate[date] || 0) + 1;
       });
@@ -291,7 +331,7 @@ export default function Dashboard() {
       date: `${item.month}/${item.year}`,
       washes: item.totalWashes || 0
     }));
-  }, [dashboardData, scans, dateRange]);
+  }, [dashboardData, filteredScans, dateRange]);
 
   const stats = useMemo(() => {
     const vehicles = Array.isArray(filteredVehicles) ? filteredVehicles : [];
@@ -475,7 +515,7 @@ export default function Dashboard() {
         {!userConfig?.hideCostForecast && (
           <div className="mb-8">
             <CostForecast
-              scans={scans}
+              scans={filteredScans}
               selectedCustomer={selectedCustomer}
               selectedSite={selectedSite}
             />
@@ -532,7 +572,7 @@ export default function Dashboard() {
                 {/* Apple-style Vehicle List */}
                 <AppleVehicleList
                   vehicles={filteredVehicles}
-                  scans={scans}
+                  scans={filteredScans}
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
                 />
@@ -543,7 +583,7 @@ export default function Dashboard() {
                     <WashAnalytics
                       data={washTrendsData}
                       vehicles={filteredVehicles}
-                      scans={scans}
+                      scans={filteredScans}
                     />
                   </div>
                   <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-lg shadow-black/[0.03]">
@@ -572,7 +612,7 @@ export default function Dashboard() {
             {activeTab === 'refills' && (
               <RefillAnalytics
                 refills={refills}
-                scans={scans}
+                scans={filteredScans}
                 sites={allSites}
                 selectedCustomer={selectedCustomer}
                 selectedSite={selectedSite}
@@ -591,7 +631,7 @@ export default function Dashboard() {
             )}
 
             {activeTab === 'reports' && (
-              <ReportsDashboard vehicles={filteredVehicles} scans={scans} />
+              <ReportsDashboard vehicles={filteredVehicles} scans={filteredScans} />
             )}
 
             {activeTab === 'email-reports' && (
@@ -632,7 +672,7 @@ export default function Dashboard() {
 
         {/* Wash Pattern Analytics */}
         <div className="mt-8">
-          <WashPatternAnalytics scans={scans} />
+          <WashPatternAnalytics scans={filteredScans} />
         </div>
       </main>
 
