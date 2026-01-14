@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Settings, LogOut, User, Bell, Menu, X } from 'lucide-react';
+import { ChevronDown, Settings, LogOut, User, Bell, Menu, X, Shield } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
@@ -121,6 +121,7 @@ export default function AppleHeader() {
               displayName={displayName}
               email={user?.email}
               initials={initials}
+              userRole={userProfile?.role}
               onNavigate={navigate}
               onLogout={handleLogout}
             />
@@ -134,7 +135,9 @@ export default function AppleHeader() {
 /**
  * User Menu Dropdown
  */
-function UserMenu({ isOpen, setIsOpen, displayName, email, initials, onNavigate, onLogout }) {
+function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, onNavigate, onLogout }) {
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+
   return (
     <div className="relative">
       <motion.button
@@ -205,6 +208,21 @@ function UserMenu({ isOpen, setIsOpen, displayName, email, initials, onNavigate,
                   Settings
                 </MenuButton>
               </div>
+
+              {/* Admin Section - Only show for admin/super_admin */}
+              {isAdmin && (
+                <div className="p-2 border-t border-gray-100 dark:border-zinc-800">
+                  <MenuButton
+                    icon={Shield}
+                    onClick={() => {
+                      setIsOpen(false);
+                      onNavigate('/admin');
+                    }}
+                  >
+                    Admin Console
+                  </MenuButton>
+                </div>
+              )}
 
               {/* Logout */}
               <div className="p-2 border-t border-gray-100 dark:border-zinc-800">

@@ -76,6 +76,7 @@ export const supabaseClient = {
   admin: {
     createCompanyWithUser: (params) => callEdgeFunction('createCompanyWithUser', params),
     createHeidelbergUser: (params) => callEdgeFunction('createHeidelbergUser', params),
+    createUser: (params) => callEdgeFunction('createUser', params),
   },
 
   // Database Tables (direct access)
