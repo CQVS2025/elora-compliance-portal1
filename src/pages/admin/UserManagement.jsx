@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { supabaseClient } from '@/api/supabaseClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +25,8 @@ import {
   MoreVertical,
   Check,
   X,
-  Loader2
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -43,7 +45,7 @@ const ROLES = [
 
 export default function UserManagement() {
   const navigate = useNavigate();
-  const { userProfile } = useAuth();
+  const { userProfile, isLoadingAuth, authError, checkAuth } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -56,6 +58,7 @@ export default function UserManagement() {
 
   const [formData, setFormData] = useState({
     email: '',
+    password: '',
     full_name: '',
     phone: '',
     job_title: '',
@@ -99,33 +102,29 @@ export default function UserManagement() {
     enabled: isSuperAdmin,
   });
 
-  // Create user mutation
+  // Create user mutation - uses edge function with admin API
   const createUserMutation = useMutation({
     mutationFn: async (userData) => {
-      // Create auth user via admin API (requires service role in production)
-      // For now, we'll create just the profile
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .insert({
-          email: userData.email,
-          full_name: userData.full_name,
-          phone: userData.phone,
-          job_title: userData.job_title,
-          role: userData.role,
-          company_id: userData.company_id || userProfile.company_id,
-          is_active: true,
-        })
-        .select()
-        .single();
+      const response = await supabaseClient.admin.createUser({
+        email: userData.email,
+        password: userData.password,
+        full_name: userData.full_name,
+        phone: userData.phone,
+        job_title: userData.job_title,
+        role: userData.role,
+        company_id: userData.company_id || userProfile.company_id,
+      });
 
-      if (error) throw error;
-      return data;
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['adminUsers']);
       setShowCreateModal(false);
       resetForm();
-      toast({ title: 'User Created', description: 'User has been created successfully.' });
+      toast({ title: 'User Created', description: 'User has been created successfully with login credentials.' });
     },
     onError: (error) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -181,6 +180,7 @@ export default function UserManagement() {
   const resetForm = () => {
     setFormData({
       email: '',
+      password: '',
       full_name: '',
       phone: '',
       job_title: '',
@@ -216,6 +216,57 @@ export default function UserManagement() {
     const roleConfig = ROLES.find(r => r.value === role) || ROLES[3];
     return <Badge className={roleConfig.color}>{roleConfig.label}</Badge>;
   };
+
+  // Check admin access
+  const isAdmin = userProfile?.role === 'super_admin' || userProfile?.role === 'admin';
+
+  // Show loading while auth is being checked
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#7CB342] animate-spin" />
+      </div>
+    );
+  }
+
+  // Show timeout/connection error with retry option
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Connection Issue</h2>
+            <p className="text-slate-600 mb-4">
+              {authError.type === 'timeout'
+                ? 'The authentication check timed out. Please check your connection and try again.'
+                : authError.message || 'An error occurred while checking your credentials.'}
+            </p>
+            <div className="flex gap-2 justify-center">
+              <Button variant="outline" onClick={() => navigate('/admin')}>Return to Admin</Button>
+              <Button onClick={() => checkAuth()}>Retry</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Redirect non-admins
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Access Denied</h2>
+            <p className="text-slate-600 mb-4">You don't have permission to manage users.</p>
+            <Button onClick={() => navigate('/admin')}>Return to Admin</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -400,14 +451,26 @@ export default function UserManagement() {
             <DialogTitle>Create New User</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Email *</Label>
-              <Input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="user@company.com"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Email *</Label>
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="user@company.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Password *</Label>
+                <Input
+                  type="text"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Min 6 characters"
+                />
+                <p className="text-xs text-slate-500">Save this password - user will need it to log in</p>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Full Name</Label>
@@ -475,7 +538,7 @@ export default function UserManagement() {
             <Button
               className="bg-[#7CB342] hover:bg-[#689F38]"
               onClick={() => createUserMutation.mutate(formData)}
-              disabled={createUserMutation.isPending || !formData.email}
+              disabled={createUserMutation.isPending || !formData.email || !formData.password || formData.password.length < 6}
             >
               {createUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create User'}
             </Button>
