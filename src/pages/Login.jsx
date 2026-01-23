@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Truck, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getUserFriendlyError } from '@/utils/errorMessages';
 
 // Default branding
 const DEFAULT_BRANDING = {
@@ -25,7 +26,7 @@ const DEFAULT_BRANDING = {
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, resetPassword } = useAuth();
+  const { login, resetPassword, authError } = useAuth();
   const { toast } = useToast();
 
   const [email, setEmail] = useState('');
@@ -72,14 +73,25 @@ export default function Login() {
       if (result.success) {
         toast({
           title: "Welcome back!",
-          description: "You have successfully logged in.",
+          description: "Logging you in...",
         });
         navigate('/');
       } else {
-        setError(result.error || 'Invalid email or password');
+        // Check for deactivated account error specifically
+        const errorMessage = result.error || authError?.message || 'Invalid email or password';
+        setError(getUserFriendlyError(errorMessage));
+        
+        // Show special toast for deactivated accounts
+        if (errorMessage.toLowerCase().includes('deactivated') || authError?.type === 'account_deactivated') {
+          toast({
+            title: "Account Deactivated",
+            description: "Your account has been deactivated. Please contact your administrator.",
+            variant: "destructive",
+          });
+        }
       }
     } catch (err) {
-      setError('An unexpected error occurred. Please try again.');
+      setError(getUserFriendlyError(err, 'logging in'));
     } finally {
       setIsLoading(false);
     }
@@ -88,7 +100,7 @@ export default function Login() {
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if (!email) {
-      setError('Please enter your email address');
+      setError('Please enter your email address first.');
       return;
     }
 
@@ -100,15 +112,15 @@ export default function Login() {
 
       if (result.success) {
         toast({
-          title: "Password Reset Email Sent",
-          description: "Check your email for a link to reset your password.",
+          title: "Email Sent",
+          description: "Check your inbox for password reset instructions.",
         });
         setShowForgotPassword(false);
       } else {
-        setError(result.error || 'Failed to send reset email');
+        setError(getUserFriendlyError(result.error || 'Failed to send reset email'));
       }
     } catch (err) {
-      setError('An unexpected error occurred. Please try again.');
+      setError(getUserFriendlyError(err, 'sending reset email'));
     } finally {
       setIsLoading(false);
     }

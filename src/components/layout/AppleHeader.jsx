@@ -122,6 +122,7 @@ export default function AppleHeader() {
               email={user?.email}
               initials={initials}
               userRole={userProfile?.role}
+              userProfile={userProfile}
               onNavigate={navigate}
               onLogout={handleLogout}
             />
@@ -135,8 +136,19 @@ export default function AppleHeader() {
 /**
  * User Menu Dropdown
  */
-function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, onNavigate, onLogout }) {
-  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, userProfile, onNavigate, onLogout }) {
+  // Check if user has admin access - check both userRole prop and userProfile object
+  const role = userRole || userProfile?.role;
+  const isAdmin = role === 'admin' || role === 'super_admin';
+  
+  // Debug log to see what role is being passed
+  console.log('UserMenu Debug:', { 
+    userRole, 
+    userProfile, 
+    role, 
+    isAdmin,
+    profileRole: userProfile?.role 
+  });
 
   return (
     <div className="relative">
@@ -220,7 +232,21 @@ function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, o
                     }}
                   >
                     Admin Console
+                    {role === 'super_admin' && (
+                      <span className="ml-auto text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                        SUPER
+                      </span>
+                    )}
                   </MenuButton>
+                </div>
+              )}
+              
+              {/* Debug info - remove after testing */}
+              {!userProfile && (
+                <div className="p-2 border-t border-gray-100 dark:border-zinc-800">
+                  <div className="px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                    Profile loading...
+                  </div>
                 </div>
               )}
 

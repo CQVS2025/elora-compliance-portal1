@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Users,
   ArrowLeft,
@@ -26,7 +27,8 @@ import {
   Check,
   X,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Globe
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -35,26 +37,35 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { formatErrorForToast, formatSuccessForToast } from '@/utils/errorMessages';
 
 const ROLES = [
   { value: 'super_admin', label: 'Super Admin', color: 'bg-red-100 text-red-800' },
   { value: 'admin', label: 'Admin', color: 'bg-purple-100 text-purple-800' },
   { value: 'manager', label: 'Manager', color: 'bg-blue-100 text-blue-800' },
+  { value: 'technician', label: 'Technician', color: 'bg-orange-100 text-orange-800' },
+  { value: 'site_manager', label: 'Site Manager', color: 'bg-teal-100 text-teal-800' },
   { value: 'user', label: 'User', color: 'bg-slate-100 text-slate-800' },
+  { value: 'driver', label: 'Driver', color: 'bg-green-100 text-green-800' },
+  { value: 'viewer', label: 'Viewer', color: 'bg-gray-100 text-gray-800' },
 ];
 
 export default function UserManagement() {
   const navigate = useNavigate();
-  const { userProfile, isLoadingAuth, authError, checkAuth } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { userProfile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [companyFilter, setCompanyFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+
+  // Get company from URL parameter (if coming from company management page)
+  const urlCompanyId = searchParams.get('company');
+  const [selectedCompanyTab, setSelectedCompanyTab] = useState(urlCompanyId || 'all');
 
   const [formData, setFormData] = useState({
     email: '',
@@ -68,6 +79,20 @@ export default function UserManagement() {
 
   const isSuperAdmin = userProfile?.role === 'super_admin';
 
+  // Update selected company tab when URL changes
+  useEffect(() => {
+    if (urlCompanyId) {
+      setSelectedCompanyTab(urlCompanyId);
+    }
+  }, [urlCompanyId]);
+
+  // Set company_id from selected tab when modal opens
+  useEffect(() => {
+    if (showCreateModal && selectedCompanyTab !== 'all') {
+      setFormData(prev => ({ ...prev, company_id: selectedCompanyTab }));
+    }
+  }, [showCreateModal, selectedCompanyTab]);
+
   // Fetch users
   const { data: users = [], isLoading: loadingUsers } = useQuery({
     queryKey: ['adminUsers'],
@@ -77,7 +102,7 @@ export default function UserManagement() {
         .select('*, companies(name)')
         .order('created_at', { ascending: false });
 
-      if (!isSuperAdmin) {
+      if (!isSuperAdmin && userProfile?.company_id) {
         query = query.eq('company_id', userProfile.company_id);
       }
 
@@ -87,47 +112,99 @@ export default function UserManagement() {
     },
   });
 
-  // Fetch companies for dropdown
+  // Fetch companies with user counts for tabs
   const { data: companies = [] } = useQuery({
-    queryKey: ['adminCompanies'],
+    queryKey: ['adminCompaniesWithCounts'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: companiesData, error: companiesError } = await supabase
         .from('companies')
-        .select('id, name')
+        .select('id, name, logo_url, primary_color')
         .eq('is_active', true)
         .order('name');
-      if (error) throw error;
-      return data;
+      
+      if (companiesError) throw companiesError;
+
+      // Fetch users directly to get accurate counts
+      let userQuery = supabase
+        .from('user_profiles')
+        .select('company_id');
+
+      if (!isSuperAdmin && userProfile?.company_id) {
+        userQuery = userQuery.eq('company_id', userProfile.company_id);
+      }
+
+      const { data: allUsers, error: usersError } = await userQuery;
+      if (usersError) throw usersError;
+
+      // Get user counts per company
+      const userCounts = {};
+      allUsers?.forEach(u => {
+        if (u.company_id) {
+          userCounts[u.company_id] = (userCounts[u.company_id] || 0) + 1;
+        }
+      });
+
+      return companiesData.map(c => ({
+        ...c,
+        userCount: userCounts[c.id] || 0
+      }));
     },
     enabled: isSuperAdmin,
+    staleTime: 0, // Always refetch when invalidated
   });
 
   // Create user mutation - uses edge function with admin API
   const createUserMutation = useMutation({
     mutationFn: async (userData) => {
-      const response = await supabaseClient.admin.createUser({
-        email: userData.email,
-        password: userData.password,
-        full_name: userData.full_name,
-        phone: userData.phone,
-        job_title: userData.job_title,
-        role: userData.role,
-        company_id: userData.company_id || userProfile.company_id,
-      });
-
-      if (response.error) {
-        throw new Error(response.error);
+      // Determine company_id: from form, selected tab, or user's company
+      const companyId = userData.company_id || 
+                        (selectedCompanyTab !== 'all' ? selectedCompanyTab : null) || 
+                        userProfile?.company_id;
+      
+      if (!companyId) {
+        throw new Error('Company ID is required. Please select a company.');
       }
-      return response;
+
+      try {
+        const response = await supabaseClient.admin.createUser({
+          email: userData.email,
+          password: userData.password,
+          full_name: userData.full_name,
+          phone: userData.phone,
+          job_title: userData.job_title,
+          role: userData.role,
+          company_id: companyId,
+        });
+
+        // Edge function returns { success, message, user, profile } on success
+        // or { error, details } on error
+        if (response?.error) {
+          throw new Error(response.error);
+        }
+
+        if (!response?.success) {
+          throw new Error(response?.message || 'Failed to create user');
+        }
+
+        return response;
+      } catch (error) {
+        // Handle network errors or edge function errors
+        const errorMessage = error?.message || error?.error || 'Failed to send a request to the Edge Function';
+        throw new Error(errorMessage);
+      }
     },
     onSuccess: () => {
+      // Invalidate and refetch both user and company queries
+      // Company query needs refresh because user counts change when new user is created
       queryClient.invalidateQueries(['adminUsers']);
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setShowCreateModal(false);
       resetForm();
-      toast({ title: 'User Created', description: 'User has been created successfully with login credentials.' });
+      toast(formatSuccessForToast('create', 'user'));
     },
     onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast(formatErrorForToast(error, 'creating user'));
     },
   });
 
@@ -152,13 +229,17 @@ export default function UserManagement() {
       return data;
     },
     onSuccess: () => {
+      // Invalidate and refetch both user and company queries
+      // Company query needs refresh because user counts change when company_id changes
       queryClient.invalidateQueries(['adminUsers']);
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setShowEditModal(false);
       setSelectedUser(null);
-      toast({ title: 'User Updated', description: 'User has been updated successfully.' });
+      toast(formatSuccessForToast('update', 'user'));
     },
     onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast(formatErrorForToast(error, 'updating user'));
     },
   });
 
@@ -171,9 +252,13 @@ export default function UserManagement() {
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries(['adminUsers']);
-      toast({ title: 'Status Updated', description: 'User status has been updated.' });
+      const action = variables.is_active ? 'activate' : 'deactivate';
+      toast(formatSuccessForToast(action, 'user'));
+    },
+    onError: (error) => {
+      toast(formatErrorForToast(error, 'updating user status'));
     },
   });
 
@@ -185,7 +270,7 @@ export default function UserManagement() {
       phone: '',
       job_title: '',
       role: 'user',
-      company_id: '',
+      company_id: selectedCompanyTab !== 'all' ? selectedCompanyTab : '',
     });
   };
 
@@ -202,71 +287,27 @@ export default function UserManagement() {
     setShowEditModal(true);
   };
 
-  // Filter users
+  // Filter users based on selected company tab, search, and role
   const filteredUsers = users.filter(user => {
     const matchesSearch = !searchQuery ||
       user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-    const matchesCompany = companyFilter === 'all' || user.company_id === companyFilter;
+    const matchesCompany = selectedCompanyTab === 'all' || user.company_id === selectedCompanyTab;
     return matchesSearch && matchesRole && matchesCompany;
   });
 
   const getRoleBadge = (role) => {
-    const roleConfig = ROLES.find(r => r.value === role) || ROLES[3];
+    const roleConfig = ROLES.find(r => r.value === role) || { 
+      value: role, 
+      label: role?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown', 
+      color: 'bg-gray-100 text-gray-800' 
+    };
     return <Badge className={roleConfig.color}>{roleConfig.label}</Badge>;
   };
 
-  // Check admin access
-  const isAdmin = userProfile?.role === 'super_admin' || userProfile?.role === 'admin';
-
-  // Show loading while auth is being checked
-  if (isLoadingAuth) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-[#7CB342] animate-spin" />
-      </div>
-    );
-  }
-
-  // Show timeout/connection error with retry option
-  if (authError) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Connection Issue</h2>
-            <p className="text-slate-600 mb-4">
-              {authError.type === 'timeout'
-                ? 'The authentication check timed out. Please check your connection and try again.'
-                : authError.message || 'An error occurred while checking your credentials.'}
-            </p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={() => navigate('/admin')}>Return to Admin</Button>
-              <Button onClick={() => checkAuth()}>Retry</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Redirect non-admins
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Access Denied</h2>
-            <p className="text-slate-600 mb-4">You don't have permission to manage users.</p>
-            <Button onClick={() => navigate('/admin')}>Return to Admin</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // Note: Access control is handled by ProtectedRoute wrapper in App.jsx
+  // This component will only render if user has admin or super_admin role
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -295,6 +336,52 @@ export default function UserManagement() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Company Tabs - Only for Super Admin */}
+        {isSuperAdmin && (
+          <Card className="mb-6">
+            <CardContent className="p-0">
+              <Tabs value={selectedCompanyTab} onValueChange={setSelectedCompanyTab}>
+                <div className="border-b px-4 pt-4">
+                  <TabsList className="h-auto p-0 bg-transparent border-none">
+                    <TabsTrigger
+                      value="all"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-[#7CB342] rounded-none px-4 py-3"
+                    >
+                      <Globe className="w-4 h-4 mr-2" />
+                      All Users
+                      <Badge className="ml-2 bg-slate-200 text-slate-700">{users.length}</Badge>
+                    </TabsTrigger>
+                    {companies.map(company => (
+                      <TabsTrigger
+                        key={company.id}
+                        value={company.id}
+                        className="data-[state=active]:border-b-2 data-[state=active]:border-[#7CB342] rounded-none px-4 py-3"
+                      >
+                        {company.logo_url ? (
+                          <img
+                            src={company.logo_url}
+                            alt={company.name}
+                            className="w-5 h-5 object-contain mr-2"
+                          />
+                        ) : (
+                          <div
+                            className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold mr-2"
+                            style={{ backgroundColor: company.primary_color || '#7CB342' }}
+                          >
+                            {company.name?.charAt(0)}
+                          </div>
+                        )}
+                        {company.name}
+                        <Badge className="ml-2 bg-slate-200 text-slate-700">{company.userCount}</Badge>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </div>
+              </Tabs>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Filters */}
         <Card className="mb-6">
           <CardContent className="p-4">
@@ -320,20 +407,6 @@ export default function UserManagement() {
                   ))}
                 </SelectContent>
               </Select>
-
-              {isSuperAdmin && (
-                <Select value={companyFilter} onValueChange={setCompanyFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="All Companies" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Companies</SelectItem>
-                    {companies.map(company => (
-                      <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
 
               <Button
                 className="bg-[#7CB342] hover:bg-[#689F38]"
@@ -449,6 +522,13 @@ export default function UserManagement() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create New User</DialogTitle>
+            {selectedCompanyTab !== 'all' && companies.find(c => c.id === selectedCompanyTab) && (
+              <p className="text-sm text-slate-500 mt-1">
+                Creating user for: <span className="font-medium text-slate-700">
+                  {companies.find(c => c.id === selectedCompanyTab)?.name}
+                </span>
+              </p>
+            )}
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
@@ -516,7 +596,7 @@ export default function UserManagement() {
             </div>
             {isSuperAdmin && (
               <div className="space-y-2">
-                <Label>Company</Label>
+                <Label>Company *</Label>
                 <Select
                   value={formData.company_id}
                   onValueChange={(value) => setFormData({ ...formData, company_id: value })}
@@ -530,6 +610,11 @@ export default function UserManagement() {
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedCompanyTab !== 'all' && formData.company_id === selectedCompanyTab && (
+                  <p className="text-xs text-slate-500">
+                    Pre-filled from selected company tab
+                  </p>
+                )}
               </div>
             )}
           </div>

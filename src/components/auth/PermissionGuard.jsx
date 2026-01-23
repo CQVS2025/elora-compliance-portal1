@@ -2,6 +2,7 @@ import React, { createContext, useContext, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabaseClient } from "@/api/supabaseClient";
 import { useAuth } from '@/lib/AuthContext';
+import { getAccessibleTabs } from '@/lib/permissions';
 
 /**
  * Database-Driven Permission System
@@ -237,11 +238,14 @@ export function useFilteredData(vehicles, sites) {
 
 /**
  * Hook to get available tabs based on permissions
+ * Uses role-based filtering from permissions.js as fallback
  */
 export function useAvailableTabs(allTabs) {
   const permissions = usePermissions();
+  const { userProfile } = useAuth();
 
   return useMemo(() => {
+    // First, check database-driven permissions (if set)
     if (permissions.visibleTabs && permissions.visibleTabs.length > 0) {
       return allTabs.filter(tab => permissions.visibleTabs.includes(tab.value));
     }
@@ -250,8 +254,17 @@ export function useAvailableTabs(allTabs) {
       return allTabs.filter(tab => !permissions.hiddenTabs.includes(tab.value));
     }
 
+    // Fallback to role-based filtering from permissions.js
+    if (userProfile) {
+      const roleBasedTabs = getAccessibleTabs(userProfile);
+      if (roleBasedTabs && roleBasedTabs.length > 0) {
+        return allTabs.filter(tab => roleBasedTabs.includes(tab.value));
+      }
+    }
+
+    // Default: show all tabs if no permissions set
     return allTabs;
-  }, [allTabs, permissions.visibleTabs, permissions.hiddenTabs]);
+  }, [allTabs, permissions.visibleTabs, permissions.hiddenTabs, userProfile]);
 }
 
 export default PermissionGuard;

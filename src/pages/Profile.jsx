@@ -17,6 +17,7 @@ import {
   Mail
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { formatErrorForToast, formatSuccessForToast, getUserFriendlyError } from '@/utils/errorMessages';
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -55,11 +56,7 @@ export default function Profile() {
 
   const handleSaveProfile = async () => {
     if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to update your profile.",
-        variant: "destructive",
-      });
+      toast(formatErrorForToast('You must be logged in', 'updating profile'));
       return;
     }
 
@@ -83,8 +80,8 @@ export default function Profile() {
         if (error.code === 'PGRST116' || (data && data.length === 0)) {
           console.log('Profile not found, user may need to be added to a company first');
           toast({
-            title: "Profile Not Found",
-            description: "Your profile hasn't been set up yet. Please contact your administrator.",
+            title: "Profile Not Set Up",
+            description: "Please contact your administrator to set up your profile.",
             variant: "destructive",
           });
         } else {
@@ -92,25 +89,18 @@ export default function Profile() {
         }
       } else if (!data || data.length === 0) {
         toast({
-          title: "Profile Not Found",
-          description: "Your profile hasn't been set up yet. Please contact your administrator.",
+          title: "Profile Not Set Up",
+          description: "Please contact your administrator to set up your profile.",
           variant: "destructive",
         });
       } else {
-        toast({
-          title: "Profile Updated",
-          description: "Your profile has been saved successfully.",
-        });
+        toast(formatSuccessForToast('save', 'profile'));
         setIsEditing(false);
         await checkAuth(); // Refresh user data
       }
     } catch (error) {
       console.error('Error updating profile:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update profile. Please try again.",
-        variant: "destructive",
-      });
+      toast(formatErrorForToast(error, 'updating profile'));
     } finally {
       setIsSaving(false);
     }
@@ -119,8 +109,8 @@ export default function Profile() {
   const handleChangePassword = async () => {
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast({
-        title: "Error",
-        description: "New passwords do not match.",
+        title: "Passwords Don't Match",
+        description: "Please make sure both passwords are the same.",
         variant: "destructive",
       });
       return;
@@ -128,8 +118,8 @@ export default function Profile() {
 
     if (passwordData.newPassword.length < 8) {
       toast({
-        title: "Error",
-        description: "Password must be at least 8 characters long.",
+        title: "Password Too Short",
+        description: "Please use at least 8 characters.",
         variant: "destructive",
       });
       return;
@@ -146,7 +136,7 @@ export default function Profile() {
 
       toast({
         title: "Password Changed",
-        description: "Your password has been updated successfully.",
+        description: "Your new password is now active.",
       });
 
       setIsChangingPassword(false);
@@ -156,11 +146,7 @@ export default function Profile() {
       });
     } catch (error) {
       console.error('Error changing password:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to change password. Please try again.",
-        variant: "destructive",
-      });
+      toast(formatErrorForToast(error, 'changing password'));
     } finally {
       setIsSaving(false);
     }

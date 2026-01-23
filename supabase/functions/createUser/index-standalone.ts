@@ -1,5 +1,39 @@
-import { corsHeaders, handleCors } from '../_shared/cors.ts';
-import { createSupabaseAdminClient } from '../_shared/supabase.ts';
+// Standalone version of createUser edge function
+// This includes all dependencies inline for easy deployment via Supabase Dashboard
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// CORS Headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': [
+    'authorization',
+    'x-client-info',
+    'apikey',
+    'content-type',
+    'x-supabase-auth',
+    'x-supabase-authorization',
+  ].join(', '),
+};
+
+function handleCors(req: Request) {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { status: 204, headers: corsHeaders });
+  }
+}
+
+function createSupabaseAdminClient() {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
 
 interface CreateUserRequest {
   email: string;
@@ -147,3 +181,4 @@ Deno.serve(async (req) => {
     });
   }
 });
+
