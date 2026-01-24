@@ -518,7 +518,10 @@ export default function UserManagement() {
       </div>
 
       {/* Create User Modal */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+      <Dialog open={showCreateModal} onOpenChange={(open) => {
+        setShowCreateModal(open);
+        if (!open) resetForm(); // Clear form when closing
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create New User</DialogTitle>
@@ -619,7 +622,10 @@ export default function UserManagement() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateModal(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => {
+              setShowCreateModal(false);
+              resetForm();
+            }}>Cancel</Button>
             <Button
               className="bg-[#7CB342] hover:bg-[#689F38]"
               onClick={() => createUserMutation.mutate(formData)}
@@ -632,7 +638,13 @@ export default function UserManagement() {
       </Dialog>
 
       {/* Edit User Modal */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+      <Dialog open={showEditModal} onOpenChange={(open) => {
+        setShowEditModal(open);
+        if (!open) {
+          resetForm(); // Clear form when closing
+          setSelectedUser(null); // Clear selected user
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
@@ -701,7 +713,11 @@ export default function UserManagement() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => {
+              setShowEditModal(false);
+              resetForm();
+              setSelectedUser(null);
+            }}>Cancel</Button>
             <Button
               className="bg-[#7CB342] hover:bg-[#689F38]"
               onClick={() => updateUserMutation.mutate({ id: selectedUser.id, ...formData })}

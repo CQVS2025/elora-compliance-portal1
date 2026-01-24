@@ -48,23 +48,28 @@ const PermissionContext = createContext(null);
  * Hook to fetch and use user permissions from database
  */
 export function useUserPermissions(email) {
+  // TEMPORARILY DISABLED: Edge function has CORS issues
+  // Will use default permissions until edge function is fixed
   const { data: permissionsData, isLoading, error } = useQuery({
     queryKey: ['userPermissions', email],
     queryFn: async () => {
-      if (!email) return DEFAULT_PERMISSIONS;
-
-      try {
-        const response = await supabaseClient.permissions.get(email);
-        return response?.data ?? DEFAULT_PERMISSIONS;
-      } catch (err) {
-        console.warn('Failed to fetch permissions, using defaults:', err);
-        return DEFAULT_PERMISSIONS;
-      }
+      // Temporarily return defaults without calling edge function
+      return DEFAULT_PERMISSIONS;
+      
+      // Original code (disabled):
+      // if (!email) return DEFAULT_PERMISSIONS;
+      // try {
+      //   const response = await supabaseClient.permissions.get(email);
+      //   return response?.data ?? DEFAULT_PERMISSIONS;
+      // } catch (err) {
+      //   console.warn('Failed to fetch permissions, using defaults:', err);
+      //   return DEFAULT_PERMISSIONS;
+      // }
     },
     enabled: !!email,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
-    retry: 1,
+    retry: 0, // Don't retry since we're not calling the API
   });
 
   return {

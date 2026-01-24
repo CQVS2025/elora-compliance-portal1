@@ -31,6 +31,8 @@ UTIL_FUNCTIONS=(
   "elora_delete_compliance_target"
   "elora_get_digest_preferences"
   "elora_save_digest_preferences"
+  "elora_get_permissions"
+  "elora_save_permissions"
   "checkNotifications"
   "sendEmailReport"
   "sendScheduledReports"

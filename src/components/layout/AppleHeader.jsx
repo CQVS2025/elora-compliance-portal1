@@ -36,8 +36,11 @@ export default function AppleHeader() {
         .from('client_branding')
         .select('*')
         .eq('client_email_domain', emailDomain)
-        .single();
-      if (error) return null;
+        .maybeSingle(); // Use maybeSingle() instead of single() to handle 0 rows gracefully
+      if (error) {
+        console.warn('Error fetching client branding:', error);
+        return null;
+      }
       return data;
     },
     enabled: !!user?.email,

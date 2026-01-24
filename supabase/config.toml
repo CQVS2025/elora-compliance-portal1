@@ -56,21 +56,23 @@ double_confirm_changes = true
 enable_confirmations = false
 
 # Email templates
-[auth.email.template.invite]
-subject = "You have been invited to ELORA Fleet Compliance Portal"
-content_path = "./supabase/templates/invite.html"
+# Note: Template paths commented out for production deployment
+# Uncomment and create template files if needed for local development
+# [auth.email.template.invite]
+# subject = "You have been invited to ELORA Fleet Compliance Portal"
+# content_path = "./supabase/templates/invite.html"
 
-[auth.email.template.confirmation]
-subject = "Confirm your email for ELORA Fleet Compliance Portal"
-content_path = "./supabase/templates/confirmation.html"
+# [auth.email.template.confirmation]
+# subject = "Confirm your email for ELORA Fleet Compliance Portal"
+# content_path = "./supabase/templates/confirmation.html"
 
-[auth.email.template.recovery]
-subject = "Reset your password for ELORA Fleet Compliance Portal"
-content_path = "./supabase/templates/recovery.html"
+# [auth.email.template.recovery]
+# subject = "Reset your password for ELORA Fleet Compliance Portal"
+# content_path = "./supabase/templates/recovery.html"
 
-[auth.email.template.magic_link]
-subject = "Your magic link for ELORA Fleet Compliance Portal"
-content_path = "./supabase/templates/magic_link.html"
+# [auth.email.template.magic_link]
+# subject = "Your magic link for ELORA Fleet Compliance Portal"
+# content_path = "./supabase/templates/magic_link.html"
 
 # External OAuth providers (can be enabled later)
 [auth.external.apple]
