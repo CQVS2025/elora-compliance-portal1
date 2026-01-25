@@ -124,10 +124,10 @@ export function usePermissions() {
       isAdmin: userProfile?.role === 'admin' || userProfile?.role === 'super_admin',
       isSuperAdmin: userProfile?.role === 'super_admin',
       isManager: ['admin', 'manager', 'super_admin'].includes(userProfile?.role),
-      isTechnician: userProfile?.role === 'technician',
       isViewer: userProfile?.role === 'viewer',
-      isSiteManager: userProfile?.role === 'site_manager',
+      isBatcher: userProfile?.role === 'batcher',
       isDriver: userProfile?.role === 'driver',
+      isUser: userProfile?.role === 'user',
 
       // Module permissions from database
       canViewCompliance: perms.can_view_compliance ?? true,

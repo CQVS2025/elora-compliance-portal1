@@ -11,7 +11,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
-import ProtectedRoute, { AdminRoute, SuperAdminRoute, AuthenticatedRoute } from '@/components/auth/ProtectedRoute';
+import ProtectedRoute, { AdminRoute, SuperAdminRoute, AuthenticatedRoute, PublicRoute } from '@/components/auth/ProtectedRoute';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -65,9 +65,17 @@ const AuthenticatedApp = () => {
     <>
       <OnboardingWizard />
       <Routes>
-        {/* Public route - Login */}
-        <Route path="/Login" element={<Pages.Login />} />
-        <Route path="/login" element={<Pages.Login />} />
+        {/* Public routes - Only accessible when NOT authenticated */}
+        <Route path="/Login" element={
+          <PublicRoute>
+            <Pages.Login />
+          </PublicRoute>
+        } />
+        <Route path="/login" element={
+          <PublicRoute>
+            <Pages.Login />
+          </PublicRoute>
+        } />
 
         {/* Protected route - Main Dashboard (requires authentication) */}
         <Route path="/" element={

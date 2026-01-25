@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
@@ -38,14 +38,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { formatErrorForToast, formatSuccessForToast } from '@/utils/errorMessages';
+import DataPagination from '@/components/ui/DataPagination';
 
 const ROLES = [
   { value: 'super_admin', label: 'Super Admin', color: 'bg-red-100 text-red-800' },
   { value: 'admin', label: 'Admin', color: 'bg-purple-100 text-purple-800' },
   { value: 'manager', label: 'Manager', color: 'bg-blue-100 text-blue-800' },
-  { value: 'technician', label: 'Technician', color: 'bg-orange-100 text-orange-800' },
-  { value: 'site_manager', label: 'Site Manager', color: 'bg-teal-100 text-teal-800' },
   { value: 'user', label: 'User', color: 'bg-slate-100 text-slate-800' },
+  { value: 'batcher', label: 'Batcher', color: 'bg-teal-100 text-teal-800' },
   { value: 'driver', label: 'Driver', color: 'bg-green-100 text-green-800' },
   { value: 'viewer', label: 'Viewer', color: 'bg-gray-100 text-gray-800' },
 ];
@@ -62,6 +62,8 @@ export default function UserManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   // Get company from URL parameter (if coming from company management page)
   const urlCompanyId = searchParams.get('company');
@@ -179,7 +181,11 @@ export default function UserManagement() {
         // Edge function returns { success, message, user, profile } on success
         // or { error, details } on error
         if (response?.error) {
-          throw new Error(response.error);
+          // Extract the actual error message from the API response
+          const errorMsg = typeof response.error === 'string' 
+            ? response.error 
+            : response.error?.message || response.error;
+          throw new Error(errorMsg);
         }
 
         if (!response?.success) {
@@ -189,7 +195,24 @@ export default function UserManagement() {
         return response;
       } catch (error) {
         // Handle network errors or edge function errors
-        const errorMessage = error?.message || error?.error || 'Failed to send a request to the Edge Function';
+        // Extract error message from various possible formats
+        let errorMessage = 'Failed to create user';
+        
+        // The error should already be properly extracted by callEdgeFunction,
+        // but we'll do a final check here to ensure we get the message
+        if (error instanceof Error && error.message) {
+          errorMessage = error.message;
+        } else if (error?.message) {
+          errorMessage = error.message;
+        } else if (error?.error) {
+          errorMessage = typeof error.error === 'string' ? error.error : error.error?.message || errorMessage;
+        } else if (typeof error === 'string') {
+          errorMessage = error;
+        }
+        
+        // Log the full error for debugging
+        console.error('Create user error:', error);
+        
         throw new Error(errorMessage);
       }
     },
@@ -288,14 +311,30 @@ export default function UserManagement() {
   };
 
   // Filter users based on selected company tab, search, and role
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = !searchQuery ||
-      user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-    const matchesCompany = selectedCompanyTab === 'all' || user.company_id === selectedCompanyTab;
-    return matchesSearch && matchesRole && matchesCompany;
-  });
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => {
+      const matchesSearch = !searchQuery ||
+        user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+      const matchesCompany = selectedCompanyTab === 'all' || user.company_id === selectedCompanyTab;
+      return matchesSearch && matchesRole && matchesCompany;
+    });
+  }, [users, searchQuery, roleFilter, selectedCompanyTab]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const paginatedUsers = useMemo(() => {
+    return filteredUsers.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+  }, [filteredUsers, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, roleFilter, selectedCompanyTab]);
 
   const getRoleBadge = (role) => {
     const roleConfig = ROLES.find(r => r.value === role) || { 
@@ -434,21 +473,22 @@ export default function UserManagement() {
                 No users found matching your criteria.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4 font-medium text-slate-600">User</th>
-                      <th className="text-left py-3 px-4 font-medium text-slate-600">Role</th>
-                      {isSuperAdmin && (
-                        <th className="text-left py-3 px-4 font-medium text-slate-600">Company</th>
-                      )}
-                      <th className="text-left py-3 px-4 font-medium text-slate-600">Status</th>
-                      <th className="text-right py-3 px-4 font-medium text-slate-600">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.map(user => (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-4 font-medium text-slate-600">User</th>
+                        <th className="text-left py-3 px-4 font-medium text-slate-600">Role</th>
+                        {isSuperAdmin && (
+                          <th className="text-left py-3 px-4 font-medium text-slate-600">Company</th>
+                        )}
+                        <th className="text-left py-3 px-4 font-medium text-slate-600">Status</th>
+                        <th className="text-right py-3 px-4 font-medium text-slate-600">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedUsers.map(user => (
                       <tr key={user.id} className="border-b hover:bg-slate-50">
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
@@ -508,10 +548,23 @@ export default function UserManagement() {
                           </DropdownMenu>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <DataPagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={filteredUsers.length}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={setCurrentPage}
+                    className="mt-4"
+                  />
+                )}
+              </>
             )}
           </CardContent>
         </Card>

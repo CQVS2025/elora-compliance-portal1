@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import DataPagination from '@/components/ui/DataPagination';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -43,6 +44,8 @@ export default function ReportsDashboard({ vehicles, scans }) {
   const [dateFilter, setDateFilter] = useState('30');
   const [siteFilter, setSiteFilter] = useState('all');
   const [drillDownModal, setDrillDownModal] = useState({ open: false, type: null, data: null });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   // AI Report Generation States
   const [showAIReportBuilder, setShowAIReportBuilder] = useState(false);
@@ -642,7 +645,9 @@ Highlight best and worst performers with specific metrics.`;
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {predictiveMaintenance.slice(0, 5).map((prediction, idx) => (
+              {predictiveMaintenance
+                .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                .map((prediction, idx) => (
                 <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border border-purple-200">
                   <div className="flex items-center gap-3">
                     <Wrench className="w-4 h-4 text-purple-600" />
@@ -663,6 +668,18 @@ Highlight best and worst performers with specific metrics.`;
                 </div>
               ))}
             </div>
+            
+            {/* Pagination */}
+            {Math.ceil(predictiveMaintenance.length / itemsPerPage) > 1 && (
+              <DataPagination
+                currentPage={currentPage}
+                totalPages={Math.ceil(predictiveMaintenance.length / itemsPerPage)}
+                totalItems={predictiveMaintenance.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+                className="mt-4"
+              />
+            )}
           </CardContent>
         </Card>
       )}

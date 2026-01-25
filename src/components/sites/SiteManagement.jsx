@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from "@/api/supabaseClient";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Search, Plus, MapPin, Phone, Mail, Building2, Edit, Trash2, AlertCircle
 import SiteModal from './SiteModal';
 import AssignVehiclesModal from './AssignVehiclesModal';
 import { motion, AnimatePresence } from 'framer-motion';
+import DataPagination from '@/components/ui/DataPagination';
 
 export default function SiteManagement({ customers, vehicles }) {
   const queryClient = useQueryClient();
@@ -16,23 +17,44 @@ export default function SiteManagement({ customers, vehicles }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
 
-  const { data: sites = [], isLoading } = useQuery({
+  const { data: sites = [], isLoading, error: sitesError } = useQuery({
     queryKey: ['sites'],
     queryFn: async () => {
-      const { data, error } = await supabaseClient.tables.sites
-        .select('*')
-        .order('created_date', { ascending: false })
-        .limit(1000);
-      return data || [];
-    }
+      try {
+        const response = await supabaseClient.elora.sites({});
+        const data = response?.data ?? response ?? [];
+        // Map the API response to match the component's expected format
+        return data.map(s => ({
+          id: s.ref,
+          name: s.siteName || s.name || 'Unnamed Site',
+          customer_ref: s.customerRef,
+          customer_name: customers?.find(c => c.id === s.customerRef)?.name || s.customerName,
+          address: s.address || '',
+          city: s.city || '',
+          state: s.state || '',
+          postal_code: s.postalCode || s.postal_code || '',
+          contact_name: s.contactName || s.contact_name || '',
+          contact_phone: s.contactPhone || s.contact_phone || '',
+          contact_email: s.contactEmail || s.contact_email || '',
+          status: s.status || 'active',
+        }));
+      } catch (error) {
+        console.error('Error fetching sites:', error);
+        throw error;
+      }
+    },
+    retry: 1,
+    staleTime: 30000,
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (siteId) => {
-      await supabaseClient.tables.sites
-        .delete()
-        .eq('id', siteId);
+      // Note: Sites are managed via Elora API, deletion may need to be handled differently
+      // For now, we'll just invalidate the cache
+      console.warn('Site deletion via Elora API not yet implemented');
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['sites']);
@@ -64,11 +86,27 @@ export default function SiteManagement({ customers, vehicles }) {
     return vehicles?.filter(v => v.site_id === siteId) || [];
   };
 
-  const filteredSites = sites.filter(site =>
-    site.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (site.customer_name && site.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (site.city && site.city.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredSites = useMemo(() => {
+    return (sites || []).filter(site =>
+      site.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (site.customer_name && site.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (site.city && site.city.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [sites, searchQuery]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
+  const paginatedSites = useMemo(() => {
+    return filteredSites.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+  }, [filteredSites, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when search changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -82,6 +120,37 @@ export default function SiteManagement({ customers, vehicles }) {
         return 'bg-slate-500 text-white';
     }
   };
+
+  // Show error state if sites failed to load
+  if (sitesError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4 bg-white rounded-2xl border border-red-100">
+        <div className="w-24 h-24 mb-6 rounded-full bg-red-100 flex items-center justify-center">
+          <AlertCircle className="w-12 h-12 text-red-500" />
+        </div>
+        <h3 className="text-xl font-bold text-slate-800 mb-2">Failed to Load Sites</h3>
+        <p className="text-slate-600 text-center max-w-md mb-6">
+          {sitesError?.message || 'An error occurred while loading sites. Please try again.'}
+        </p>
+        <Button 
+          onClick={() => queryClient.invalidateQueries(['sites'])} 
+          className="bg-[#7CB342] hover:bg-[#689F38]"
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4">
+        <div className="w-12 h-12 border-4 border-[#7CB342] border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-600">Loading sites...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -117,7 +186,7 @@ export default function SiteManagement({ customers, vehicles }) {
                 <Building2 className="w-5 h-5 text-[#7CB342]" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">{sites.length}</p>
+                <p className="text-2xl font-bold text-slate-800">{sites?.length || 0}</p>
                 <p className="text-sm text-slate-600">Total Sites</p>
               </div>
             </div>
@@ -132,7 +201,7 @@ export default function SiteManagement({ customers, vehicles }) {
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-800">
-                  {sites.filter(s => s.status === 'active').length}
+                  {(sites || []).filter(s => s.status === 'active').length}
                 </p>
                 <p className="text-sm text-slate-600">Active Sites</p>
               </div>
@@ -148,7 +217,7 @@ export default function SiteManagement({ customers, vehicles }) {
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-800">
-                  {sites.filter(s => s.status === 'maintenance').length}
+                  {(sites || []).filter(s => s.status === 'maintenance').length}
                 </p>
                 <p className="text-sm text-slate-600">In Maintenance</p>
               </div>
@@ -160,7 +229,7 @@ export default function SiteManagement({ customers, vehicles }) {
       {/* Site Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <AnimatePresence>
-          {filteredSites.map((site, index) => (
+          {paginatedSites.map((site, index) => (
             <motion.div
               key={site.id}
               initial={{ opacity: 0, y: 20 }}
@@ -252,6 +321,17 @@ export default function SiteManagement({ customers, vehicles }) {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <DataPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredSites.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
+      )}
 
       {filteredSites.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 px-4 bg-white rounded-2xl border border-slate-100">

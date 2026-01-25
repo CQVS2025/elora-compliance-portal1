@@ -143,6 +143,7 @@ function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, u
   // Check if user has admin access - check both userRole prop and userProfile object
   const role = userRole || userProfile?.role;
   const isAdmin = role === 'admin' || role === 'super_admin';
+  const [avatarError, setAvatarError] = React.useState(false);
   
   // Debug log to see what role is being passed
   console.log('UserMenu Debug:', { 
@@ -152,6 +153,11 @@ function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, u
     isAdmin,
     profileRole: userProfile?.role 
   });
+
+  // Reset avatar error when profile changes
+  React.useEffect(() => {
+    setAvatarError(false);
+  }, [userProfile?.avatar_url]);
 
   return (
     <div className="relative">
@@ -164,9 +170,21 @@ function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, u
           transition-colors
         "
       >
-        <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
-          <span className="text-white font-semibold text-sm">{initials}</span>
-        </div>
+        {userProfile?.avatar_url && !avatarError ? (
+          <div className="w-8 h-8 rounded-full overflow-hidden shadow-sm border border-gray-200 dark:border-zinc-700">
+            <img
+              key={userProfile.avatar_url}
+              src={userProfile.avatar_url}
+              alt="Profile avatar"
+              className="w-full h-full object-cover"
+              onError={() => setAvatarError(true)}
+            />
+          </div>
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+            <span className="text-white font-semibold text-sm">{initials}</span>
+          </div>
+        )}
         <span className="text-sm font-medium text-gray-900 dark:text-white hidden md:block">
           {displayName}
         </span>

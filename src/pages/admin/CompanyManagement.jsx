@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import DataPagination from '@/components/ui/DataPagination';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Building2,
@@ -54,6 +55,8 @@ export default function CompanyManagement() {
   const [quickSetupStep, setQuickSetupStep] = useState(1);
   const [quickSetupResult, setQuickSetupResult] = useState(null);
   const [selectedCompany, setSelectedCompany] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -347,11 +350,27 @@ export default function CompanyManagement() {
     );
   }
 
-  const filteredCompanies = companies.filter(company =>
-    !searchQuery ||
-    company.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    company.email_domain?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredCompanies = useMemo(() => {
+    return companies.filter(company =>
+      !searchQuery ||
+      company.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      company.email_domain?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [companies, searchQuery]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredCompanies.length / itemsPerPage);
+  const paginatedCompanies = useMemo(() => {
+    return filteredCompanies.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+  }, [filteredCompanies, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -421,8 +440,9 @@ export default function CompanyManagement() {
             No companies found.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCompanies.map(company => (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {paginatedCompanies.map(company => (
               <Card key={company.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
@@ -538,8 +558,21 @@ export default function CompanyManagement() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
+              ))}
+            </div>
+            
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <DataPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredCompanies.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+                className="mt-6"
+              />
+            )}
+          </>
         )}
       </div>
 

@@ -10,9 +10,8 @@ export const ROLE_HIERARCHY = {
   super_admin: 100,
   admin: 80,
   manager: 60,
-  technician: 40,
-  site_manager: 40,
   user: 20,
+  batcher: 15,
   driver: 10,
   viewer: 5,
 };
@@ -40,23 +39,17 @@ export const ROLE_CONFIG = {
     description: 'Fleet manager with team oversight',
     icon: '👔',
   },
-  technician: {
-    label: 'Technician',
-    color: 'bg-orange-100 text-orange-800',
-    description: 'Technical staff with device and maintenance access',
-    icon: '🔧',
-  },
-  site_manager: {
-    label: 'Site Manager',
-    color: 'bg-teal-100 text-teal-800',
-    description: 'Manages specific sites and their vehicles',
-    icon: '🏢',
-  },
   user: {
     label: 'User',
     color: 'bg-slate-100 text-slate-800',
     description: 'Standard user with dashboard access',
     icon: '👤',
+  },
+  batcher: {
+    label: 'Batcher',
+    color: 'bg-teal-100 text-teal-800',
+    description: 'Manages a single assigned site',
+    icon: '🏢',
   },
   driver: {
     label: 'Driver',
@@ -199,39 +192,39 @@ export function getAccessibleTabs(userProfile) {
 
   const role = userProfile.role;
 
-  // Super admin and admin see all tabs
-  if (isAdmin(userProfile)) {
+  // Super admin sees all tabs
+  if (role === 'super_admin') {
     return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'users'];
   }
 
-  // Manager sees most tabs
+  // Admin sees all tabs except users
+  if (role === 'admin') {
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
+  }
+
+  // Manager sees most tabs (limited to assigned sites)
   if (role === 'manager') {
     return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
   }
 
-  // Technician sees technical tabs
-  if (role === 'technician') {
-    return ['compliance', 'devices', 'refills', 'reports'];
-  }
-
-  // Site manager sees site-related tabs
-  if (role === 'site_manager') {
-    return ['compliance', 'sites', 'reports'];
-  }
-
-  // Regular user sees standard tabs
+  // User (demo) sees same as admin but limited to assigned company/companies
   if (role === 'user') {
-    return ['compliance', 'costs', 'sites', 'reports'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
   }
 
-  // Driver sees minimal tabs
+  // Batcher sees same as admin but locked to a single assigned site
+  if (role === 'batcher') {
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
+  }
+
+  // Driver sees only compliance (assigned vehicles only)
   if (role === 'driver') {
     return ['compliance'];
   }
 
   // Viewer sees read-only tabs
   if (role === 'viewer') {
-    return ['compliance', 'reports'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
   }
 
   return ['compliance'];
@@ -295,39 +288,34 @@ export function getRolePermissions(role) {
       'Full company access',
     ],
     manager: [
-      'View all company data',
+      'View assigned sites data',
       'Manage compliance targets',
       'Run reports',
       'Export data',
       'Manage team members',
     ],
-    technician: [
-      'View device health',
-      'Manage refills',
-      'View technical reports',
-      'Update maintenance records',
-    ],
-    site_manager: [
-      'View assigned sites',
-      'Manage site vehicles',
-      'Run site reports',
-      'View compliance data',
-    ],
     user: [
-      'View dashboard',
+      'View assigned company/companies data',
       'View compliance data',
       'View costs',
       'Run reports',
       'View sites',
     ],
+    batcher: [
+      'View single assigned site',
+      'Manage site vehicles',
+      'Run site reports',
+      'View compliance data',
+      'Locked to one site',
+    ],
     driver: [
-      'View assigned vehicles',
+      'View assigned vehicles only',
       'View compliance status',
-      'Limited dashboard access',
+      'Limited to compliance tab',
     ],
     viewer: [
       'Read-only dashboard access',
-      'View reports',
+      'View all tabs (read-only)',
       'No editing capabilities',
     ],
   };

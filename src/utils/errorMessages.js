@@ -12,6 +12,8 @@
 export function getUserFriendlyError(error, context = '') {
   const errorMessage = typeof error === 'string' ? error : error?.message || 'Something went wrong';
   const lowerError = errorMessage.toLowerCase();
+  
+  console.log('getUserFriendlyError called with:', { errorMessage, lowerError, context });
 
   // Database/Connection errors
   if (lowerError.includes('timeout') || lowerError.includes('timed out')) {
@@ -47,8 +49,20 @@ export function getUserFriendlyError(error, context = '') {
     return 'Password is too weak. Please use at least 6 characters.';
   }
 
-  if (lowerError.includes('already registered') || lowerError.includes('already exists')) {
-    return 'This email is already registered. Please use a different email.';
+  // Check for already registered/exists email
+  const hasAlreadyRegistered = lowerError.includes('already registered');
+  const hasAlreadyExists = lowerError.includes('already exists');
+  const hasUserWithEmail = lowerError.includes('user with email');
+  console.log('Email duplicate checks:', { hasAlreadyRegistered, hasAlreadyExists, hasUserWithEmail });
+  
+  if (hasAlreadyRegistered || hasAlreadyExists || hasUserWithEmail) {
+    // Extract email from error message if present for better UX
+    const emailMatch = errorMessage.match(/["']([^"']+@[^"']+)["']/);
+    console.log('Email already registered check matched!', { emailMatch });
+    if (emailMatch) {
+      return `The email ${emailMatch[1]} is already registered. Please use a different email address.`;
+    }
+    return 'This email is already registered. Please use a different email address.';
   }
 
   // Permission errors
@@ -98,7 +112,7 @@ export function getUserFriendlyError(error, context = '') {
 
   // Generic fallback with context
   if (context) {
-    return `Unable to complete ${context}. Please try again or contact support.`;
+    return `Unable to complete ${errorMessage}. Please try again or contact support.`;
   }
 
   // Last resort - return a generic friendly message

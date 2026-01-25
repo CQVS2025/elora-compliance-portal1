@@ -2,14 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
-import { Mail, Send, Clock, CheckCircle, Settings, Loader2, FileDown } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { Mail, Send, Clock, CheckCircle, Settings, Loader2, FileDown, Bell } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Chart } from 'chart.js/auto';
+import { useToast } from '@/hooks/use-toast';
 
 export default function EmailReportSettings() {
   const queryClient = useQueryClient();
   const { user: currentUser, isLoading: userLoading } = useAuth();
+  const { toast } = useToast();
   const [userError, setUserError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -18,6 +21,7 @@ export default function EmailReportSettings() {
   const [successMessage, setSuccessMessage] = useState('');
   const [pdfHtml, setPdfHtml] = useState('');
   const pdfContainerRef = useRef(null);
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true);
 
   // Fetch user's email report preferences
   const { data: preferences, isLoading } = useQuery({
@@ -81,6 +85,59 @@ export default function EmailReportSettings() {
       });
     }
   }, [preferences]);
+
+  // Load email notifications setting
+  useEffect(() => {
+    const loadEmailNotifications = async () => {
+      if (!currentUser?.id) return;
+      
+      try {
+        const { data } = await supabase
+          .from('notification_preferences')
+          .select('email_notifications_enabled')
+          .eq('user_id', currentUser.id)
+          .single();
+        
+        if (data) {
+          setEmailNotificationsEnabled(data.email_notifications_enabled ?? true);
+        }
+      } catch (error) {
+        console.error('Error loading email notifications:', error);
+      }
+    };
+
+    loadEmailNotifications();
+  }, [currentUser]);
+
+  // Save email notifications setting
+  const saveEmailNotifications = async (enabled) => {
+    if (!currentUser?.id) return;
+
+    try {
+      await supabase
+        .from('notification_preferences')
+        .upsert({
+          user_id: currentUser.id,
+          user_email: currentUser.email,
+          email_notifications_enabled: enabled,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_email'
+        });
+
+      toast({
+        title: "Settings Updated",
+        description: `Email notifications ${enabled ? 'enabled' : 'disabled'} successfully.`,
+      });
+    } catch (error) {
+      console.error('Error saving email notifications:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update email notifications. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Available report types
   const reportTypes = [
@@ -1016,6 +1073,33 @@ export default function EmailReportSettings() {
           <p className="text-green-800 font-medium">{successMessage}</p>
         </div>
       )}
+
+      {/* Email Notifications Toggle */}
+      <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-emerald-50 rounded-lg">
+              <Bell className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">Email Notifications</h2>
+              <p className="text-sm text-slate-600">Receive email notifications for important updates</p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={emailNotificationsEnabled}
+              onChange={(e) => {
+                setEmailNotificationsEnabled(e.target.checked);
+                saveEmailNotifications(e.target.checked);
+              }}
+              className="sr-only peer"
+            />
+            <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500"></div>
+          </label>
+        </div>
+      </div>
 
       {/* Enable/Disable Toggle */}
       <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">

@@ -16,9 +16,12 @@ import {
 } from 'lucide-react';
 import moment from 'moment';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import DataPagination from '@/components/ui/DataPagination';
 
 export default function DeviceHealth({ selectedCustomer, selectedSite }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
 
   const { data: allDevices = [], isLoading } = useQuery({
     queryKey: ['devices'],
@@ -79,6 +82,20 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
       d.deviceRef?.toLowerCase().includes(query)
     );
   }, [devices, searchQuery]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredDevices.length / itemsPerPage);
+  const paginatedDevices = useMemo(() => {
+    return filteredDevices.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+  }, [filteredDevices, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when search changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   // Device status by site
   const devicesBySite = useMemo(() => {
@@ -267,7 +284,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {filteredDevices.map((device, idx) => {
+            {paginatedDevices.map((device, idx) => {
               const status = getDeviceStatus(device);
               const StatusIcon = status.icon;
 
@@ -311,6 +328,18 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
               );
             })}
           </div>
+          
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <DataPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filteredDevices.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              className="mt-4"
+            />
+          )}
         </CardContent>
       </Card>
     </div>

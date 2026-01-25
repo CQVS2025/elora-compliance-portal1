@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import DataPagination from '@/components/ui/DataPagination';
 import { 
   AlertTriangle, 
   Droplet, 
@@ -48,6 +49,8 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
   const [dateTo, setDateTo] = useState(moment().format('YYYY-MM-DD'));
   const [customerFilter, setCustomerFilter] = useState('all');
   const [siteFilter, setSiteFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   // Get unique values for filters
   const uniqueCustomers = useMemo(() => {
     const customers = new Set(refills?.map(r => r.customer) || []);
@@ -680,7 +683,9 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {analysis.predictions.slice(0, 8).map((pred, idx) => (
+            {analysis.predictions
+              .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+              .map((pred, idx) => (
               <div 
                 key={idx} 
                 className={`p-4 rounded-lg border-2 ${getUrgencyColor(pred.urgency)}`}
@@ -782,6 +787,18 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
               </div>
             ))}
           </div>
+          
+          {/* Pagination */}
+          {Math.ceil(analysis.predictions.length / itemsPerPage) > 1 && (
+            <DataPagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(analysis.predictions.length / itemsPerPage)}
+              totalItems={analysis.predictions.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              className="mt-4"
+            />
+          )}
         </CardContent>
       </Card>
 
