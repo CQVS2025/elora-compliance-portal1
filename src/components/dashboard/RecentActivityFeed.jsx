@@ -16,17 +16,22 @@ const ACTIVITY_ICONS = {
 };
 
 async function fetchRecentActivity({ customerRef, siteRef, limit = 20 } = {}) {
-  try {
-    const response = await supabaseClient.elora.recentActivity( {
-      customerRef,
-      siteRef,
-      limit
-    });
-    return response?.data ?? response ?? [];
-  } catch (error) {
-    console.error('Error fetching recent activity:', error);
-    return [];
-  }
+  // TEMPORARILY DISABLED: Edge function has CORS issues
+  // Return empty array until edge function is fixed
+  return [];
+  
+  // Original code (disabled):
+  // try {
+  //   const response = await supabaseClient.elora.recentActivity( {
+  //     customerRef,
+  //     siteRef,
+  //     limit
+  //   });
+  //   return response?.data ?? response ?? [];
+  // } catch (error) {
+  //   console.error('Error fetching recent activity:', error);
+  //   return [];
+  // }
 }
 
 export default function RecentActivityFeed({ customerRef, siteRef, className = '' }) {

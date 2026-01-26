@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import DataPagination from '@/components/ui/DataPagination';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Building2,
@@ -39,10 +40,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
+import { formatErrorForToast, formatSuccessForToast } from '@/utils/errorMessages';
 
 export default function CompanyManagement() {
   const navigate = useNavigate();
-  const { userProfile, isLoadingAuth, authError, checkAuth } = useAuth();
+  const { userProfile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -53,6 +55,8 @@ export default function CompanyManagement() {
   const [quickSetupStep, setQuickSetupStep] = useState(1);
   const [quickSetupResult, setQuickSetupResult] = useState(null);
   const [selectedCompany, setSelectedCompany] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -113,8 +117,8 @@ export default function CompanyManagement() {
       }));
     },
     retry: 1,
-    staleTime: 30000,
-    enabled: isSuperAdmin && !isLoadingAuth,
+    staleTime: 0, // Always refetch when invalidated
+    enabled: isSuperAdmin,
   });
 
   // Create company mutation
@@ -154,13 +158,17 @@ export default function CompanyManagement() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['adminCompaniesDetail']);
+      // Invalidate and refetch company queries
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesDetail'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setShowCreateModal(false);
       resetForm();
-      toast({ title: 'Company Created', description: 'Company has been created successfully.' });
+      toast(formatSuccessForToast('create', 'company'));
     },
     onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast(formatErrorForToast(error, 'creating company'));
     },
   });
 
@@ -204,13 +212,17 @@ export default function CompanyManagement() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['adminCompaniesDetail']);
+      // Invalidate and refetch company queries
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesDetail'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setShowEditModal(false);
       setSelectedCompany(null);
-      toast({ title: 'Company Updated', description: 'Company has been updated successfully.' });
+      toast(formatSuccessForToast('update', 'company'));
     },
     onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast(formatErrorForToast(error, 'updating company'));
     },
   });
 
@@ -223,9 +235,17 @@ export default function CompanyManagement() {
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['adminCompaniesDetail']);
-      toast({ title: 'Status Updated', description: 'Company status has been updated.' });
+    onSuccess: (_, variables) => {
+      // Invalidate and refetch company queries
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesDetail'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
+      const action = variables.is_active ? 'activate' : 'deactivate';
+      toast(formatSuccessForToast(action, 'company'));
+    },
+    onError: (error) => {
+      toast(formatErrorForToast(error, 'updating company status'));
     },
   });
 
@@ -239,20 +259,20 @@ export default function CompanyManagement() {
       return response.data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries(['adminCompaniesDetail']);
+      // Invalidate and refetch company queries
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesDetail'] });
+      queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setQuickSetupResult(data);
       setQuickSetupStep(3); // Move to success step
       toast({
-        title: 'Company Created!',
-        description: `${data.company.name} is ready with admin user.`
+        title: 'All Set!',
+        description: `${data.company.name} is ready to use.`
       });
     },
     onError: (error) => {
-      toast({
-        title: 'Setup Failed',
-        description: error.message,
-        variant: 'destructive'
-      });
+      toast(formatErrorForToast(error, 'setting up company'));
     },
   });
 
@@ -282,7 +302,7 @@ export default function CompanyManagement() {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    toast({ title: 'Copied!', description: 'Copied to clipboard.' });
+    toast(formatSuccessForToast('copy', ''));
   };
 
   const resetForm = () => {
@@ -311,53 +331,8 @@ export default function CompanyManagement() {
     setShowEditModal(true);
   };
 
-  // Show loading while auth is being checked
-  if (isLoadingAuth) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-[#7CB342] animate-spin" />
-      </div>
-    );
-  }
-
-  // Show timeout/connection error with retry option
-  if (authError) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Connection Issue</h2>
-            <p className="text-slate-600 mb-4">
-              {authError.type === 'timeout'
-                ? 'The authentication check timed out. Please check your connection and try again.'
-                : authError.message || 'An error occurred while checking your credentials.'}
-            </p>
-            <div className="flex gap-2 justify-center">
-              <Button variant="outline" onClick={() => navigate('/admin')}>Return to Admin</Button>
-              <Button onClick={() => checkAuth()}>Retry</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Redirect non-super-admins (only after auth has loaded)
-  if (!isSuperAdmin) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <Building2 className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Access Denied</h2>
-            <p className="text-slate-600 mb-4">Only Super Admins can manage companies.</p>
-            <Button onClick={() => navigate('/admin')}>Return to Admin</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // Note: Access control is handled by SuperAdminRoute wrapper in App.jsx
+  // This component will only render if user has super_admin role
 
   // Show error if query failed
   if (queryError) {
@@ -375,11 +350,27 @@ export default function CompanyManagement() {
     );
   }
 
-  const filteredCompanies = companies.filter(company =>
-    !searchQuery ||
-    company.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    company.email_domain?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredCompanies = useMemo(() => {
+    return companies.filter(company =>
+      !searchQuery ||
+      company.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      company.email_domain?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [companies, searchQuery]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredCompanies.length / itemsPerPage);
+  const paginatedCompanies = useMemo(() => {
+    return filteredCompanies.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+  }, [filteredCompanies, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -449,8 +440,9 @@ export default function CompanyManagement() {
             No companies found.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCompanies.map(company => (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {paginatedCompanies.map(company => (
               <Card key={company.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
@@ -515,13 +507,17 @@ export default function CompanyManagement() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500 flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between hover:bg-slate-50"
+                      onClick={() => navigate(`/admin/users?company=${company.id}`)}
+                    >
+                      <span className="flex items-center gap-2">
                         <Users className="w-4 h-4" />
-                        Users
+                        View Users
                       </span>
-                      <span className="font-medium">{company.userCount}</span>
-                    </div>
+                      <Badge className="bg-[#7CB342] text-white">{company.userCount}</Badge>
+                    </Button>
 
                     {company.elora_customer_ref && (
                       <div className="flex items-center justify-between text-sm">
@@ -562,8 +558,21 @@ export default function CompanyManagement() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
+              ))}
+            </div>
+            
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <DataPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredCompanies.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+                className="mt-6"
+              />
+            )}
+          </>
         )}
       </div>
 

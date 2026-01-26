@@ -1,3 +1,4 @@
+import React from 'react';
 import './App.css'
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -10,6 +11,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
+import ProtectedRoute, { AdminRoute, SuperAdminRoute, AuthenticatedRoute, PublicRoute } from '@/components/auth/ProtectedRoute';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -58,45 +60,174 @@ const AuthenticatedApp = () => {
     }
   }
 
-  // Render the main app
+  // Render the main app with route protection
   return (
     <>
       <OnboardingWizard />
       <Routes>
-        <Route path="/" element={
-          <LayoutWrapper currentPageName={mainPageKey}>
-            <MainPage />
-          </LayoutWrapper>
+        {/* Public routes - Only accessible when NOT authenticated */}
+        <Route path="/Login" element={
+          <PublicRoute>
+            <Pages.Login />
+          </PublicRoute>
         } />
-        {Object.entries(Pages).map(([path, Page]) => (
-          <Route
-            key={path}
-            path={`/${path}`}
-            element={
-              <LayoutWrapper currentPageName={path}>
-                <Page />
-              </LayoutWrapper>
-            }
-          />
-        ))}
-        {/* Add lowercase routes for common pages to handle case-sensitivity on Vercel */}
-        {Object.entries(Pages).map(([path, Page]) => {
-          const lowerPath = path.toLowerCase();
-          if (lowerPath !== path) {
-            return (
-              <Route
-                key={`${path}-lower`}
-                path={`/${lowerPath}`}
-                element={
-                  <LayoutWrapper currentPageName={path}>
-                    <Page />
-                  </LayoutWrapper>
-                }
-              />
-            );
-          }
-          return null;
-        })}
+        <Route path="/login" element={
+          <PublicRoute>
+            <Pages.Login />
+          </PublicRoute>
+        } />
+
+        {/* Protected route - Main Dashboard (requires authentication) */}
+        <Route path="/" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName={mainPageKey}>
+              <MainPage />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        {/* Admin routes - require admin or super_admin role */}
+        <Route path="/admin" element={
+          <AdminRoute>
+            <Pages.admin />
+          </AdminRoute>
+        } />
+        <Route path="/admin/users" element={
+          <AdminRoute>
+            {React.createElement(Pages['admin/users'])}
+          </AdminRoute>
+        } />
+        
+        {/* Super Admin only route - Company Management */}
+        <Route path="/admin/companies" element={
+          <SuperAdminRoute>
+            {React.createElement(Pages['admin/companies'])}
+          </SuperAdminRoute>
+        } />
+
+        {/* Protected authenticated routes */}
+        <Route path="/Dashboard" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="Dashboard">
+              <Pages.Dashboard />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/dashboard" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="Dashboard">
+              <Pages.Dashboard />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        <Route path="/Home" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="Home">
+              <Pages.Home />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        <Route path="/Leaderboard" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="Leaderboard">
+              <Pages.Leaderboard />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/leaderboard" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="Leaderboard">
+              <Pages.Leaderboard />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        <Route path="/MobileDashboard" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="MobileDashboard">
+              <Pages.MobileDashboard />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        <Route path="/NotificationSettings" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="NotificationSettings">
+              <Pages.NotificationSettings />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/notification-settings" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="NotificationSettings">
+              <Pages.NotificationSettings />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        <Route path="/SiteAnalytics" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="SiteAnalytics">
+              <Pages.SiteAnalytics />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/site-analytics" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="SiteAnalytics">
+              <Pages.SiteAnalytics />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        <Route path="/EmailReportSettings" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="EmailReportSettings">
+              <Pages.EmailReportSettings />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/email-report-settings" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="EmailReportSettings">
+              <Pages.EmailReportSettings />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        <Route path="/Profile" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="Profile">
+              <Pages.Profile />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/profile" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="Profile">
+              <Pages.Profile />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        <Route path="/Settings" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="Settings">
+              <Pages.Settings />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/settings" element={
+          <AuthenticatedRoute>
+            <LayoutWrapper currentPageName="Settings">
+              <Pages.Settings />
+            </LayoutWrapper>
+          </AuthenticatedRoute>
+        } />
+
+        {/* 404 - Page Not Found */}
         <Route path="*" element={<PageNotFound />} />
       </Routes>
     </>

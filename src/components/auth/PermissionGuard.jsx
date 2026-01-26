@@ -2,6 +2,7 @@ import React, { createContext, useContext, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabaseClient } from "@/api/supabaseClient";
 import { useAuth } from '@/lib/AuthContext';
+import { getAccessibleTabs } from '@/lib/permissions';
 
 /**
  * Database-Driven Permission System
@@ -47,23 +48,28 @@ const PermissionContext = createContext(null);
  * Hook to fetch and use user permissions from database
  */
 export function useUserPermissions(email) {
+  // TEMPORARILY DISABLED: Edge function has CORS issues
+  // Will use default permissions until edge function is fixed
   const { data: permissionsData, isLoading, error } = useQuery({
     queryKey: ['userPermissions', email],
     queryFn: async () => {
-      if (!email) return DEFAULT_PERMISSIONS;
-
-      try {
-        const response = await supabaseClient.permissions.get(email);
-        return response?.data ?? DEFAULT_PERMISSIONS;
-      } catch (err) {
-        console.warn('Failed to fetch permissions, using defaults:', err);
-        return DEFAULT_PERMISSIONS;
-      }
+      // Temporarily return defaults without calling edge function
+      return DEFAULT_PERMISSIONS;
+      
+      // Original code (disabled):
+      // if (!email) return DEFAULT_PERMISSIONS;
+      // try {
+      //   const response = await supabaseClient.permissions.get(email);
+      //   return response?.data ?? DEFAULT_PERMISSIONS;
+      // } catch (err) {
+      //   console.warn('Failed to fetch permissions, using defaults:', err);
+      //   return DEFAULT_PERMISSIONS;
+      // }
     },
     enabled: !!email,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
-    retry: 1,
+    retry: 0, // Don't retry since we're not calling the API
   });
 
   return {
@@ -118,10 +124,10 @@ export function usePermissions() {
       isAdmin: userProfile?.role === 'admin' || userProfile?.role === 'super_admin',
       isSuperAdmin: userProfile?.role === 'super_admin',
       isManager: ['admin', 'manager', 'super_admin'].includes(userProfile?.role),
-      isTechnician: userProfile?.role === 'technician',
       isViewer: userProfile?.role === 'viewer',
-      isSiteManager: userProfile?.role === 'site_manager',
+      isBatcher: userProfile?.role === 'batcher',
       isDriver: userProfile?.role === 'driver',
+      isUser: userProfile?.role === 'user',
 
       // Module permissions from database
       canViewCompliance: perms.can_view_compliance ?? true,
@@ -237,11 +243,14 @@ export function useFilteredData(vehicles, sites) {
 
 /**
  * Hook to get available tabs based on permissions
+ * Uses role-based filtering from permissions.js as fallback
  */
 export function useAvailableTabs(allTabs) {
   const permissions = usePermissions();
+  const { userProfile } = useAuth();
 
   return useMemo(() => {
+    // First, check database-driven permissions (if set)
     if (permissions.visibleTabs && permissions.visibleTabs.length > 0) {
       return allTabs.filter(tab => permissions.visibleTabs.includes(tab.value));
     }
@@ -250,8 +259,17 @@ export function useAvailableTabs(allTabs) {
       return allTabs.filter(tab => !permissions.hiddenTabs.includes(tab.value));
     }
 
+    // Fallback to role-based filtering from permissions.js
+    if (userProfile) {
+      const roleBasedTabs = getAccessibleTabs(userProfile);
+      if (roleBasedTabs && roleBasedTabs.length > 0) {
+        return allTabs.filter(tab => roleBasedTabs.includes(tab.value));
+      }
+    }
+
+    // Default: show all tabs if no permissions set
     return allTabs;
-  }, [allTabs, permissions.visibleTabs, permissions.hiddenTabs]);
+  }, [allTabs, permissions.visibleTabs, permissions.hiddenTabs, userProfile]);
 }
 
 export default PermissionGuard;

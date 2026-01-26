@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DollarSign, Calculator, Droplet, MapPin, Download, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import moment from 'moment';
 import { supabaseClient } from "@/api/supabaseClient";
 import { motion } from 'framer-motion';
+import DataPagination from '@/components/ui/DataPagination';
 
 // Pricing rules
 const PRICING_RULES = {
@@ -332,16 +333,26 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
   }, [scans]);
 
   // Filter and paginate
-  const filteredVehicles = costData.vehicles.filter(v =>
-    (v.customerName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (v.siteName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (v.vehicleName || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredVehicles = useMemo(() => {
+    return costData.vehicles.filter(v =>
+      (v.customerName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (v.siteName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (v.vehicleName || '').toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [costData.vehicles, searchQuery]);
+
   const totalPages = Math.ceil(filteredVehicles.length / itemsPerPage);
-  const paginatedVehicles = filteredVehicles.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const paginatedVehicles = useMemo(() => {
+    return filteredVehicles.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+  }, [filteredVehicles, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   // Export to CSV
   const exportToCSV = () => {
@@ -538,52 +549,15 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between mt-4 pt-4 border-t">
-            <p className="text-sm text-slate-500">
-              Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredVehicles.length)} of {filteredVehicles.length} vehicles
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Previous
-              </Button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={currentPage === pageNum ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={currentPage === pageNum ? 'bg-[#7CB342] hover:bg-[#689F38]' : ''}
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+          {totalPages > 1 && (
+            <DataPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filteredVehicles.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
+          )}
         </CardContent>
       </Card>
 

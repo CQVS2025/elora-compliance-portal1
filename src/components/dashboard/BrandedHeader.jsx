@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, Settings, LogOut, User } from 'lucide-react';
 import { useAuth } from "@/lib/AuthContext";
@@ -15,6 +15,7 @@ import NotificationCenter from '@/components/notifications/NotificationCenter';
 export default function BrandedHeader({ onNotificationClick }) {
   const navigate = useNavigate();
   const { user, userProfile, logout } = useAuth();
+  const [avatarError, setAvatarError] = useState(false);
 
   // Fetch branding based on user's email domain
   const { data: clientBranding, isLoading } = useQuery({
@@ -71,6 +72,11 @@ export default function BrandedHeader({ onNotificationClick }) {
 
   const displayName = userProfile?.full_name || user?.email?.split('@')[0] || 'User';
   const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+
+  // Reset avatar error when profile changes
+  useEffect(() => {
+    setAvatarError(false);
+  }, [userProfile?.avatar_url]);
 
   const handleLogout = async () => {
     await logout();
@@ -178,15 +184,29 @@ export default function BrandedHeader({ onNotificationClick }) {
                     boxShadow: '0 4px 16px rgba(0,0,0,0.1)'
                   }}
                 >
-                  <div
-                    className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-base shadow-lg ring-2 ring-white/30 transition-transform duration-300 group-hover:scale-105"
-                    style={{
-                      background: `linear-gradient(135deg, ${branding.secondary_color} 0%, ${branding.secondary_color}CC 100%)`,
-                      boxShadow: `0 4px 16px ${branding.secondary_color}40`
-                    }}
-                  >
-                    {initials}
-                  </div>
+                  {userProfile?.avatar_url && !avatarError ? (
+                    <div
+                      className="w-11 h-11 rounded-full overflow-hidden shadow-lg ring-2 ring-white/30 transition-transform duration-300 group-hover:scale-105"
+                    >
+                      <img
+                        key={userProfile.avatar_url}
+                        src={userProfile.avatar_url}
+                        alt="Profile avatar"
+                        className="w-full h-full object-cover"
+                        onError={() => setAvatarError(true)}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-base shadow-lg ring-2 ring-white/30 transition-transform duration-300 group-hover:scale-105"
+                      style={{
+                        background: `linear-gradient(135deg, ${branding.secondary_color} 0%, ${branding.secondary_color}CC 100%)`,
+                        boxShadow: `0 4px 16px ${branding.secondary_color}40`
+                      }}
+                    >
+                      {initials}
+                    </div>
+                  )}
                   <div className="hidden lg:block text-left">
                     <span className="text-white font-semibold text-sm block leading-tight drop-shadow">
                       {displayName}

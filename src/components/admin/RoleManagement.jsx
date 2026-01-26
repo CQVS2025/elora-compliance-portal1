@@ -17,41 +17,47 @@ import { usePermissions } from '@/components/auth/PermissionGuard';
 import UserRoleModal from './UserRoleModal';
 
 const ROLE_CONFIG = {
-  admin: {
-    label: 'Administrator',
+  super_admin: {
+    label: 'Super Admin',
     color: 'bg-red-500',
-    description: 'Full system access',
-    permissions: ['All features', 'User management', 'Data export', 'System settings']
+    description: 'Platform-wide administrator',
+    permissions: ['All companies', 'All users', 'All tabs', 'Full system access']
+  },
+  admin: {
+    label: 'Admin',
+    color: 'bg-purple-500',
+    description: 'Company administrator',
+    permissions: ['Company data', 'All tabs (no users)', 'Export reports', 'Full company access']
   },
   manager: {
     label: 'Manager',
     color: 'bg-blue-500',
-    description: 'Manage fleet operations',
-    permissions: ['View all data', 'Edit vehicles', 'Reports', 'Data export']
+    description: 'Fleet manager (assigned sites)',
+    permissions: ['Assigned sites', 'All tabs (no users)', 'Reports', 'Data export']
   },
-  technician: {
-    label: 'Technician',
-    color: 'bg-purple-500',
-    description: 'Maintenance management',
-    permissions: ['View maintenance', 'Add maintenance', 'Edit maintenance', 'View vehicles']
-  },
-  viewer: {
-    label: 'Viewer',
+  user: {
+    label: 'User',
     color: 'bg-slate-500',
-    description: 'Read-only access',
-    permissions: ['View dashboards', 'View reports', 'No editing']
+    description: 'Standard user (demo/guest)',
+    permissions: ['Assigned companies', 'All tabs (no users)', 'View & export', 'No admin']
   },
-  site_manager: {
-    label: 'Site Manager',
+  batcher: {
+    label: 'Batcher',
     color: 'bg-teal-500',
-    description: 'Manage assigned sites',
-    permissions: ['View assigned sites', 'Edit site vehicles', 'Site reports']
+    description: 'Single site manager',
+    permissions: ['One assigned site only', 'All tabs (no users)', 'Site locked', 'Site reports']
   },
   driver: {
     label: 'Driver',
     color: 'bg-green-500',
     description: 'Vehicle operator',
-    permissions: ['View assigned vehicles', 'Report issues', 'Mobile access']
+    permissions: ['Assigned vehicles only', 'Compliance tab only', 'Mobile access', 'No editing']
+  },
+  viewer: {
+    label: 'Viewer',
+    color: 'bg-gray-500',
+    description: 'Read-only access',
+    permissions: ['All tabs (read-only)', 'View reports', 'No editing', 'No admin']
   }
 };
 
@@ -162,12 +168,13 @@ export default function RoleManagement({ vehicles, sites }) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="admin">Administrators</SelectItem>
+                  <SelectItem value="super_admin">Super Admins</SelectItem>
+                  <SelectItem value="admin">Admins</SelectItem>
                   <SelectItem value="manager">Managers</SelectItem>
-                  <SelectItem value="technician">Technicians</SelectItem>
-                  <SelectItem value="viewer">Viewers</SelectItem>
-                  <SelectItem value="site_manager">Site Managers</SelectItem>
+                  <SelectItem value="user">Users</SelectItem>
+                  <SelectItem value="batcher">Batchers</SelectItem>
                   <SelectItem value="driver">Drivers</SelectItem>
+                  <SelectItem value="viewer">Viewers</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -192,7 +199,7 @@ export default function RoleManagement({ vehicles, sites }) {
                       <div>
                         <p className="font-semibold text-slate-800">{user.full_name || 'No Name'}</p>
                         <p className="text-sm text-slate-600">{user.email}</p>
-                        {user.role === 'site_manager' && user.assigned_sites?.length > 0 && (
+                        {user.role === 'batcher' && user.assigned_sites?.length > 0 && (
                           <p className="text-xs text-slate-500 mt-1">
                             {user.assigned_sites.length} site{user.assigned_sites.length !== 1 ? 's' : ''} assigned
                           </p>

@@ -36,8 +36,11 @@ export default function AppleHeader() {
         .from('client_branding')
         .select('*')
         .eq('client_email_domain', emailDomain)
-        .single();
-      if (error) return null;
+        .maybeSingle(); // Use maybeSingle() instead of single() to handle 0 rows gracefully
+      if (error) {
+        console.warn('Error fetching client branding:', error);
+        return null;
+      }
       return data;
     },
     enabled: !!user?.email,
@@ -122,6 +125,7 @@ export default function AppleHeader() {
               email={user?.email}
               initials={initials}
               userRole={userProfile?.role}
+              userProfile={userProfile}
               onNavigate={navigate}
               onLogout={handleLogout}
             />
@@ -135,8 +139,25 @@ export default function AppleHeader() {
 /**
  * User Menu Dropdown
  */
-function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, onNavigate, onLogout }) {
-  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, userProfile, onNavigate, onLogout }) {
+  // Check if user has admin access - check both userRole prop and userProfile object
+  const role = userRole || userProfile?.role;
+  const isAdmin = role === 'admin' || role === 'super_admin';
+  const [avatarError, setAvatarError] = React.useState(false);
+  
+  // Debug log to see what role is being passed
+  console.log('UserMenu Debug:', { 
+    userRole, 
+    userProfile, 
+    role, 
+    isAdmin,
+    profileRole: userProfile?.role 
+  });
+
+  // Reset avatar error when profile changes
+  React.useEffect(() => {
+    setAvatarError(false);
+  }, [userProfile?.avatar_url]);
 
   return (
     <div className="relative">
@@ -149,9 +170,21 @@ function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, o
           transition-colors
         "
       >
-        <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
-          <span className="text-white font-semibold text-sm">{initials}</span>
-        </div>
+        {userProfile?.avatar_url && !avatarError ? (
+          <div className="w-8 h-8 rounded-full overflow-hidden shadow-sm border border-gray-200 dark:border-zinc-700">
+            <img
+              key={userProfile.avatar_url}
+              src={userProfile.avatar_url}
+              alt="Profile avatar"
+              className="w-full h-full object-cover"
+              onError={() => setAvatarError(true)}
+            />
+          </div>
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+            <span className="text-white font-semibold text-sm">{initials}</span>
+          </div>
+        )}
         <span className="text-sm font-medium text-gray-900 dark:text-white hidden md:block">
           {displayName}
         </span>
@@ -220,7 +253,21 @@ function UserMenu({ isOpen, setIsOpen, displayName, email, initials, userRole, o
                     }}
                   >
                     Admin Console
+                    {role === 'super_admin' && (
+                      <span className="ml-auto text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                        SUPER
+                      </span>
+                    )}
                   </MenuButton>
+                </div>
+              )}
+              
+              {/* Debug info - remove after testing */}
+              {!userProfile && (
+                <div className="p-2 border-t border-gray-100 dark:border-zinc-800">
+                  <div className="px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                    Profile loading...
+                  </div>
                 </div>
               )}
 
