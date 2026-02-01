@@ -312,53 +312,74 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
     let chartConfig;
 
     if (type === 'compliance') {
+      const compliant = data.compliant || 0;
+      const atRisk = data.atRisk || 0;
+      const total = compliant + atRisk;
       chartConfig = {
         type: 'doughnut',
         data: {
           labels: ['Compliant', 'At Risk'],
           datasets: [{
-            data: [data.compliant || 0, data.atRisk || 0],
-            backgroundColor: [primaryColor || '#7CB342', '#ef4444'],
-            borderWidth: 0
+            data: total > 0 ? [compliant, atRisk] : [1],
+            backgroundColor: total > 0 ? [primaryColor || '#7CB342', '#ef4444'] : ['#e2e8f0'],
+            borderWidth: 3,
+            borderColor: '#fff',
+            hoverOffset: 4
           }]
         },
         options: {
           responsive: false,
+          cutout: '60%',
           plugins: {
+            title: { display: false },
             legend: {
               position: 'bottom',
               labels: {
                 font: { size: 12 },
-                padding: 15
+                padding: 16,
+                usePointStyle: true
               }
             }
           }
         }
       };
     } else if (type === 'costs') {
-      // Create a simple bar chart for costs
+      const monthly = data.monthly || 0;
+      const total = data.total || 0;
+      const hasBoth = monthly > 0 && total > 0;
+      const labels = hasBoth ? ['Monthly Average', 'Total Period'] : ['Total Washes'];
+      const values = hasBoth ? [monthly, total] : [total];
       chartConfig = {
         type: 'bar',
         data: {
-          labels: ['Monthly Average', 'Total Period'],
+          labels,
           datasets: [{
-            label: 'Cost ($)',
-            data: [data.monthly || 0, data.total || 0],
-            backgroundColor: [primaryColor || '#7CB342', '#10b981'],
-            borderWidth: 0
+            label: hasBoth ? 'Value' : 'Total Washes',
+            data: values,
+            backgroundColor: hasBoth
+              ? [primaryColor || '#7CB342', '#10b981']
+              : primaryColor || '#7CB342',
+            borderRadius: 6,
+            borderSkipped: false
           }]
         },
         options: {
           responsive: false,
           scales: {
             y: {
-              beginAtZero: true
+              beginAtZero: true,
+              grid: { color: '#e2e8f0' },
+              ticks: { font: { size: 11 }, color: '#64748b' }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 11 }, color: '#334155' }
             }
           },
           plugins: {
-            legend: {
-              display: false
-            }
+            legend: { display: false },
+            tooltip: { enabled: false },
+            title: { display: false }
           }
         }
       };
@@ -378,9 +399,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
   };
 
   const buildEnhancedReportHtml = async (reportData, clientBranding = null, includeCharts = true) => {
-    const selectedReports = formData.report_types.length > 0
-      ? formData.report_types
-      : ['compliance', 'costs'];
+    const selectedReports = [...new Set(
+      formData.report_types.length > 0 ? formData.report_types : ['compliance', 'costs']
+    )];
 
     // Use client branding if provided, otherwise use default colors
     const primaryColor = clientBranding?.primary_color || '#7CB342';
@@ -388,8 +409,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
     const companyName = clientBranding?.company_name || 'ELORA';
     const logoUrl = clientBranding?.logo_url || null;
 
-    const section = (title, content) => `
-      <div style="margin: 30px 0 20px 0; page-break-inside: avoid;">
+    // Section spacing - gap between Compliance and Cost & Usage
+    const section = (title, content, startNewPage = false) => `
+      ${startNewPage ? '<div style="height: 96px;"></div>' : ''}
+      <div style="margin: ${startNewPage ? '0' : '30px'} 0 20px 0; page-break-inside: avoid;">
         <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0 0 12px 0; font-family: Arial, sans-serif;">
           ${title}
         </h2>
@@ -446,7 +469,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
 
         content += section('Compliance Overview',
           twoColumnMetrics(
-            metricCard('AVERAGE COMPLIANCE', `${complianceData.averageCompliance || 0}%`, 'Across all vehicles', primaryColor),
+            metricCard('COMPLIANCE RATE', `${complianceData.averageCompliance || 0}%`, '% of vehicles meeting target', primaryColor),
             metricCard('TOTAL VEHICLES', `${complianceData.totalVehicles || 0}`, 'In your fleet', secondaryColor)
           ) +
           twoColumnMetrics(
@@ -476,21 +499,25 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
     }
 
 
-    // Cost Analysis section
+    // Cost Analysis / Usage section
     if (selectedReports.includes('costs')) {
       const costData = reportData?.costs?.summary;
 
-      if (costData) {
+      if (costData && (costData.totalWashes != null || costData.totalCost != null)) {
+        const totalWashes = costData.totalWashes ?? 0;
+        const totalCost = costData.totalCost ?? 0;
+        const hasCostData = totalCost > 0 || costData.monthlyAverage > 0;
+
         let chartHtml = '';
-        if (includeCharts) {
+        if (includeCharts && (totalWashes > 0 || totalCost > 0)) {
           try {
             const chartImage = await generateChartImage('costs', {
               monthly: costData.monthlyAverage || 0,
-              total: costData.totalCost || 0
+              total: hasCostData ? totalCost : totalWashes
             }, primaryColor);
             chartHtml = `
               <div style="text-align: center; margin: 20px 0; page-break-inside: avoid;">
-                <img src="${chartImage}" style="max-width: 400px; height: auto;" alt="Cost Chart" />
+                <img src="${chartImage}" style="max-width: 400px; height: auto;" alt="Usage Chart" />
               </div>
             `;
           } catch (error) {
@@ -498,19 +525,23 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
           }
         }
 
-        content += section('Cost Analysis',
-          twoColumnMetrics(
-            metricCard('MONTHLY AVERAGE', `$${costData.monthlyAverage || 0}`, 'Per month', primaryColor),
-            metricCard('TOTAL THIS PERIOD', `$${costData.totalCost || 0}`, 'Last 30 days', '#10b981')
-          ) +
-          chartHtml
-        );
+        const costContent = (hasCostData
+          ? twoColumnMetrics(
+              metricCard('MONTHLY AVERAGE', `$${costData.monthlyAverage || 0}`, 'Per month', primaryColor),
+              metricCard('TOTAL THIS PERIOD', `$${totalCost}`, 'In selected period', '#10b981')
+            )
+          : twoColumnMetrics(
+              metricCard('TOTAL WASHES', `${totalWashes.toLocaleString()}`, 'In selected period', primaryColor),
+              metricCard('ACTIVE DRIVERS', `${costData.activeDrivers ?? 0}`, 'Vehicles with washes in period', '#10b981')
+            )) + chartHtml;
+        content += section('Cost & Usage', costContent, true);
       } else {
-        content += section('Cost Analysis',
+        content += section('Cost & Usage',
           twoColumnMetrics(
             metricCard('MONTHLY AVERAGE', '—', 'Awaiting live data', primaryColor),
             metricCard('TOTAL THIS PERIOD', '—', 'Awaiting live data', '#10b981')
-          )
+          ),
+          true
         );
       }
     }
@@ -609,101 +640,43 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
         };
       }
 
-      let reportData = null;
-      let reportHtml = '';
-      let usedBackendData = false;
+      // Use reportData from Dashboard (same data as email) - matches UI stats
+      let reportDataForPdf = null;
+      if (reportData?.stats && reportData?.filteredVehicles) {
+        const { stats, filteredVehicles, dateRange } = reportData;
+        const vehicles = filteredVehicles || [];
+        const compliantCount = vehicles.filter(v => (v.washes_completed ?? 0) >= (v.target ?? 12)).length;
+        const atRiskCount = vehicles.length - compliantCount;
 
-      // Try to fetch report data from backend
-      try {
-        console.log('[handleExportPdf] Fetching report data from backend...');
-        const result = await supabaseClient.reports.send({
-          userEmail: currentUser.email,
-          reportTypes: formData.report_types,
-          includeCharts: false, // We'll generate charts ourselves
-          previewOnly: true
-        });
-
-        console.log('[handleExportPdf] Backend response received:', result);
-
-        // The backend might return the data in different formats
-        // Check if we got HTML back or structured data
-        if (result?.data?.html || result?.html) {
-          // Backend returned HTML - we need to parse it or use it directly
-          const htmlContent = result?.data?.html || result?.html;
-          console.log('[handleExportPdf] Received HTML from backend, length:', htmlContent.length);
-
-          // For now, we'll try to extract data from vehicles directly
-          // This is a workaround - ideally backend should return structured data
-          try {
-            const { data: vehicles } = await supabaseClient.tables.vehicles
-              .select('*')
-              .order('updated_date', { ascending: false })
-              .limit(1000);
-            console.log('[handleExportPdf] Fetched data directly:', {
-              vehicleCount: vehicles?.length || 0
-            });
-
-            if (vehicles && vehicles.length > 0) {
-              // Generate compliance data
-              const compliantVehicles = vehicles.filter(v => (v.compliance_rate || 0) >= 80);
-              const atRiskVehicles = vehicles.filter(v => (v.compliance_rate || 0) < 80);
-              const totalCompliance = vehicles.reduce((sum, v) => sum + (v.compliance_rate || 0), 0);
-              const averageCompliance = Math.round(totalCompliance / vehicles.length);
-
-              // Generate cost data
-              const now = new Date();
-              const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-              
-              // Calculate costs from other sources (not maintenance)
-              const totalCost = 0;
-              const monthlyAverage = 0;
-
-              reportData = {
-                compliance: {
-                  summary: {
-                    averageCompliance,
-                    totalVehicles: vehicles.length,
-                    compliantVehicles: compliantVehicles.length,
-                    atRiskVehicles: atRiskVehicles.length,
-                    alerts: atRiskVehicles.length > 0 ? [{
-                      title: 'Low Compliance Alert',
-                      message: `${atRiskVehicles.length} vehicle(s) are below the 80% compliance threshold and require attention.`,
-                      type: 'warning'
-                    }] : []
-                  }
-                },
-                costs: {
-                  summary: {
-                    totalCost: Math.round(totalCost),
-                    monthlyAverage,
-                    recordCount: 0
-                  }
-                },
-              };
-
-              usedBackendData = true;
-              console.log('[handleExportPdf] Successfully parsed data from backend');
+        reportDataForPdf = {
+          compliance: {
+            summary: {
+              averageCompliance: stats.complianceRate ?? 0,
+              totalVehicles: stats.totalVehicles ?? vehicles.length,
+              compliantVehicles: compliantCount,
+              atRiskVehicles: atRiskCount,
+              alerts: atRiskCount > 0 ? [{
+                title: 'Low Compliance Alert',
+                message: `${atRiskCount} vehicle(s) are below the compliance threshold and require attention.`,
+                type: 'warning'
+              }] : []
             }
-          } catch (dataError) {
-            console.error('[handleExportPdf] Error fetching direct data:', dataError);
+          },
+          costs: {
+            summary: {
+              totalCost: 0,
+              monthlyAverage: 0,
+              totalWashes: stats.monthlyWashes ?? 0,
+              activeDrivers: stats.activeDrivers ?? 0,
+              recordCount: 0
+            }
           }
-        }
-      } catch (error) {
-        console.error('[handleExportPdf] Backend call failed:', error);
-        console.error('[handleExportPdf] Error details:', {
-          message: error.message,
-          stack: error.stack
-        });
+        };
       }
 
       // Generate enhanced HTML with charts
-      console.log('[handleExportPdf] Generating enhanced HTML with charts...');
-      reportHtml = await buildEnhancedReportHtml(reportData, branding, formData.include_charts);
-
-      if (!reportData) {
-        console.warn('[handleExportPdf] Using fallback template - real data was not available');
-        usedBackendData = false;
-      }
+      console.log('[handleExportPdf] Generating enhanced HTML with report data:', reportDataForPdf ? 'available' : 'fallback');
+      const reportHtml = await buildEnhancedReportHtml(reportDataForPdf, branding, true);
 
       console.log('[handleExportPdf] Report HTML length:', reportHtml.length);
 
@@ -780,12 +753,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
       console.log('[handleExportPdf] Saving PDF as:', filename);
       pdf.save(filename);
 
-      // Show appropriate success message
-      if (usedBackendData) {
-        setSuccessMessage('PDF exported successfully with real data!');
-      } else {
-        setSuccessMessage('PDF exported. Connect to live data sources for real metrics.');
-      }
+      setSuccessMessage('PDF exported successfully!');
       setTimeout(() => setSuccessMessage(''), 5000);
 
       console.log('[handleExportPdf] PDF export completed successfully');
