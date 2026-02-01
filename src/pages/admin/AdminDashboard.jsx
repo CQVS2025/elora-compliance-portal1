@@ -15,7 +15,8 @@ import {
   Settings,
   TrendingUp,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  LayoutGrid
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -24,6 +25,7 @@ export default function AdminDashboard() {
 
   // Check if user has admin access (for UI customization)
   const isAdmin = userProfile?.role === 'super_admin' || userProfile?.role === 'admin';
+  const isSuperAdmin = userProfile?.role === 'super_admin';
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['adminStats'],
@@ -247,6 +249,51 @@ export default function AdminDashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {isSuperAdmin && (
+            <>
+              <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/admin/role-management')}>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-amber-100 flex items-center justify-center">
+                      <Shield className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <div>
+                      <CardTitle>User Role Management</CardTitle>
+                      <CardDescription>View role definitions and permissions (read-only)</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
+                    <p className="text-sm text-slate-600">Super Admin, Admin, Manager</p>
+                    <p className="text-sm text-slate-600">User, Batcher, Driver, Viewer</p>
+                    <p className="text-sm text-slate-600">Reference guide for role access</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/admin/tab-visibility')}>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-indigo-100 flex items-center justify-center">
+                      <LayoutGrid className="w-6 h-6 text-indigo-600" />
+                    </div>
+                    <div>
+                      <CardTitle>Tab Visibility by Role</CardTitle>
+                      <CardDescription>Override which tabs each role can see on the dashboard</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
+                    <p className="text-sm text-slate-600">e.g. Allow Driver to see Reports</p>
+                    <p className="text-sm text-slate-600">Toggle tabs per role</p>
+                    <p className="text-sm text-slate-600">Defaults by role, custom overrides</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -11,7 +11,7 @@ import AssignVehiclesModal from './AssignVehiclesModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import DataPagination from '@/components/ui/DataPagination';
 
-export default function SiteManagement({ customers, vehicles }) {
+export default function SiteManagement({ customers, vehicles, selectedCustomer }) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -20,7 +20,7 @@ export default function SiteManagement({ customers, vehicles }) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
 
-  const { data: sites = [], isLoading, error: sitesError } = useQuery({
+  const { data: allSites = [], isLoading, error: sitesError } = useQuery({
     queryKey: ['sites'],
     queryFn: async () => {
       try {
@@ -49,6 +49,12 @@ export default function SiteManagement({ customers, vehicles }) {
     retry: 1,
     staleTime: 30000,
   });
+
+  // Apply customer filter from Dashboard
+  const sites = useMemo(() => {
+    if (!selectedCustomer || selectedCustomer === 'all') return allSites;
+    return allSites.filter(s => s.customer_ref === selectedCustomer);
+  }, [allSites, selectedCustomer]);
 
   const deleteMutation = useMutation({
     mutationFn: async (siteId) => {
@@ -103,10 +109,10 @@ export default function SiteManagement({ customers, vehicles }) {
     );
   }, [filteredSites, currentPage, itemsPerPage]);
 
-  // Reset to page 1 when search changes
+  // Reset to page 1 when search or filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, selectedCustomer]);
 
   const getStatusColor = (status) => {
     switch (status) {

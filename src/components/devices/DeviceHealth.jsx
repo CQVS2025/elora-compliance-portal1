@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabaseClient } from "@/api/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,39 +11,37 @@ import {
   Activity,
   Clock,
   Search,
-  TrendingUp
+  TrendingUp,
+  Loader2
 } from 'lucide-react';
 import moment from 'moment';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import DataPagination from '@/components/ui/DataPagination';
+
+// NEW: Import queryOptions with tenant isolation
+import { devicesOptions } from '@/query/options';
+import { usePermissions } from '@/components/auth/PermissionGuard';
 
 export default function DeviceHealth({ selectedCustomer, selectedSite }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  const { data: allDevices = [], isLoading } = useQuery({
-    queryKey: ['devices'],
-    queryFn: async () => {
-      const response = await supabaseClient.elora.devices({ status: 'active' });
-      return response?.data ?? response ?? [];
-    }
-  });
+  // NEW: Get tenant context for query key
+  const permissions = usePermissions();
+  const companyId = permissions.userProfile?.company_id;
 
-  // Filter devices based on selected customer and site
-  const devices = useMemo(() => {
-    let filtered = allDevices;
-    
-    if (selectedCustomer && selectedCustomer !== 'all') {
-      filtered = filtered.filter(d => d.customerRef === selectedCustomer);
-    }
-    
-    if (selectedSite && selectedSite !== 'all') {
-      filtered = filtered.filter(d => d.siteRef === selectedSite);
-    }
-    
-    return filtered;
-  }, [allDevices, selectedCustomer, selectedSite]);
+  // NEW: Use tenant-aware query options with filters
+  const { data: allDevices = [], isLoading, isFetching } = useQuery(
+    devicesOptions(companyId, {
+      status: '1,2', // Active + inactive
+      customerId: selectedCustomer !== 'all' ? selectedCustomer : undefined,
+      siteId: selectedSite !== 'all' ? selectedSite : undefined,
+    })
+  );
+
+  // Filter devices based on selected customer and site (already done in query, so simplified)
+  const devices = allDevices;
 
   // Calculate device health stats
   const stats = useMemo(() => {
@@ -92,10 +89,10 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
     );
   }, [filteredDevices, currentPage, itemsPerPage]);
 
-  // Reset to page 1 when search changes
+  // Reset to page 1 when search or filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, selectedCustomer, selectedSite]);
 
   // Device status by site
   const devicesBySite = useMemo(() => {
@@ -147,13 +144,21 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Server className="w-12 h-12 text-[#7CB342] animate-pulse" />
+        <Loader2 className="w-12 h-12 text-[#7CB342] animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {isFetching && (
+        <div className="absolute inset-0 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
+          <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 px-6 py-3 rounded-xl shadow-lg">
+            <Loader2 className="w-5 h-5 text-[#7CB342] animate-spin" />
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Updating devices...</span>
+          </div>
+        </div>
+      )}
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>

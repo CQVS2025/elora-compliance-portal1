@@ -1,3 +1,6 @@
+/**
+ * ACATC /api/customers supports: status, q (search). No customer/site (returns list of customers). We pass status only.
+ */
 Deno.serve(async (req) => {
   try {
     const apiKey = Deno.env.get("ELORA_API_KEY");
@@ -8,7 +11,8 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url);
     const body = await req.json().catch(() => ({}));
-    const status = url.searchParams.get('status') || body.status || 'active';
+    // Get ALL customers (active + inactive) - default is '1,2' per API docs
+    const status = url.searchParams.get('status') || body.status || 'all';
 
     const response = await fetch(`https://www.elora.com.au/api/customers?status=${status}`, {
       headers: {

@@ -1,3 +1,6 @@
+/**
+ * ACATC /api/sites does NOT accept filters. We fetch all sites and filter by customer in this edge.
+ */
 Deno.serve(async (req) => {
   try {
     const apiKey = Deno.env.get("ELORA_API_KEY");

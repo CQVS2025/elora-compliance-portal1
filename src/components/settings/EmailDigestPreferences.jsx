@@ -37,7 +37,6 @@ export default function EmailDigestPreferences({ userEmail }) {
     frequency: 'daily',
     sendTime: '08:00',
     includeCompliance: true,
-    includeMaintenance: true,
     includeAlerts: true,
     includeActivity: true,
     onlyIfChanges: false,

@@ -25,8 +25,6 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
 const NOTIFICATION_ICONS = {
-  maintenance_due: Wrench,
-  maintenance_overdue: AlertTriangle,
   low_compliance: TrendingDown,
   vehicle_assigned: Truck,
   issue_reported: AlertTriangle,

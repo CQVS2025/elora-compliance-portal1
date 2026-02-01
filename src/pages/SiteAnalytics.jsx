@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabaseClient } from "@/api/supabaseClient";
 import moment from 'moment';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,65 +8,49 @@ import { Input } from "@/components/ui/input";
 import { Calendar, TrendingUp, AlertTriangle, Droplet, Loader2, Download } from 'lucide-react';
 import Header from '@/components/dashboard/Header';
 import { usePermissions, useFilteredData } from '@/components/auth/PermissionGuard';
-
-async function fetchSites() {
-  const response = await supabaseClient.elora.sites({});
-  const data = response?.data ?? response ?? [];
-  return data.map(s => ({
-    id: s.ref,
-    name: s.siteName,
-    customer_ref: s.customerRef
-  }));
-}
-
-async function fetchVehicles({ startDate, endDate } = {}) {
-  const response = await supabaseClient.elora.vehicles({});
-  return response?.data ?? response ?? [];
-}
-
-async function fetchScans({ startDate, endDate } = {}) {
-  const params = {};
-  if (startDate) params.start_date = startDate;
-  if (endDate) params.end_date = endDate;
-
-  const response = await supabaseClient.elora.scans(params);
-  return response?.data ?? response ?? [];
-}
+import { sitesOptions, vehiclesOptions, scansOptions } from '@/query/options';
+import { supabase } from '@/lib/supabase';
+import { queryKeys } from '@/query/keys';
 
 export default function SiteAnalytics() {
   const permissions = usePermissions();
+  const companyId = permissions.userProfile?.company_id;
+  
   const [dateRange, setDateRange] = useState({
     start: moment().subtract(30, 'days').format('YYYY-MM-DD'),
     end: moment().format('YYYY-MM-DD')
   });
 
   const { data: rawSites = [], isLoading: sitesLoading } = useQuery({
-    queryKey: ['sites'],
-    queryFn: fetchSites,
+    ...sitesOptions(companyId),
+    placeholderData: (prev) => prev,
   });
 
   const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
-    queryKey: ['vehicles'],
-    queryFn: fetchVehicles,
+    ...vehiclesOptions(companyId),
+    placeholderData: (prev) => prev,
   });
 
   const { data: scans = [], isLoading: scansLoading } = useQuery({
-    queryKey: ['scans', dateRange.start, dateRange.end],
-    queryFn: () => fetchScans({
+    ...scansOptions(companyId, {
       startDate: dateRange.start,
-      endDate: dateRange.end
+      endDate: dateRange.end,
     }),
+    placeholderData: (prev) => prev,
   });
 
   const { data: issues = [] } = useQuery({
-    queryKey: ['issues'],
+    queryKey: queryKeys.tenant.issues(companyId),
     queryFn: async () => {
-      const { data, error } = await supabaseClient.tables.issues
+      const { data, error } = await supabase
+        .from('issues')
         .select('*')
         .order('created_date', { ascending: false })
         .limit(1000);
       return data || [];
-    }
+    },
+    staleTime: 2 * 60 * 1000,
+    enabled: !!companyId,
   });
 
   // Apply permission filtering

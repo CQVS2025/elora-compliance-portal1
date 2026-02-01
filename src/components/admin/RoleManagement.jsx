@@ -116,35 +116,8 @@ export default function RoleManagement({ vehicles, sites }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-slate-800">User Role Management</h2>
-        <p className="text-slate-600 mt-1">Manage user roles and permissions</p>
-      </div>
-
-      {/* Role Legend with Permissions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {Object.entries(ROLE_CONFIG).map(([role, config]) => (
-          <Card key={role} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <div className={`w-10 h-10 ${config.color} rounded-lg flex items-center justify-center shrink-0`}>
-                  <Shield className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800">{config.label}</p>
-                  <p className="text-xs text-slate-600 mb-2">{config.description}</p>
-                  <div className="space-y-1">
-                    {config.permissions.map((permission, idx) => (
-                      <div key={idx} className="flex items-center gap-1 text-xs text-slate-500">
-                        <div className="w-1 h-1 rounded-full bg-slate-400" />
-                        <span>{permission}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        <h2 className="text-2xl font-bold text-slate-800">Assign User Roles</h2>
+        <p className="text-slate-600 mt-1">Manage and assign roles to users</p>
       </div>
 
       {/* Filters */}

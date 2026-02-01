@@ -2,6 +2,7 @@ import React from 'react';
 import './App.css'
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
@@ -37,6 +38,9 @@ const AuthenticatedApp = () => {
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
+    } else if (authError.type === 'user_unassigned') {
+      navigateToLogin();
+      return null;
     } else if (authError.type === 'auth_required') {
       // Redirect to login automatically
       navigateToLogin();
@@ -102,6 +106,20 @@ const AuthenticatedApp = () => {
         <Route path="/admin/companies" element={
           <SuperAdminRoute>
             {React.createElement(Pages['admin/companies'])}
+          </SuperAdminRoute>
+        } />
+
+        {/* Super Admin only route - User Role Management (read-only reference) */}
+        <Route path="/admin/role-management" element={
+          <SuperAdminRoute>
+            {React.createElement(Pages['admin/role-management'])}
+          </SuperAdminRoute>
+        } />
+
+        {/* Super Admin only route - Tab Visibility by Role */}
+        <Route path="/admin/tab-visibility" element={
+          <SuperAdminRoute>
+            {React.createElement(Pages['admin/tab-visibility'])}
           </SuperAdminRoute>
         } />
 
@@ -246,6 +264,15 @@ function App() {
         </Router>
         <Toaster />
         <VisualEditAgent />
+        
+        {/* TanStack Query DevTools - Only in development */}
+        {import.meta.env.DEV && (
+          <ReactQueryDevtools
+            initialIsOpen={false}
+            position="bottom-right"
+            buttonPosition="bottom-right"
+          />
+        )}
       </QueryClientProvider>
     </AuthProvider>
   )

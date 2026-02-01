@@ -33,6 +33,10 @@ export function getUserFriendlyError(error, context = '') {
     return 'Your account has been deactivated. Please contact your administrator to reactivate it.';
   }
 
+  if (lowerError.includes('not assigned') || lowerError.includes('unassigned') || lowerError.includes('no company')) {
+    return 'You are not assigned to any company. Please contact your administrator.';
+  }
+
   if (lowerError.includes('invalid login') || lowerError.includes('invalid credentials')) {
     return 'Email or password is incorrect. Please try again.';
   }

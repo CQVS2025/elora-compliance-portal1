@@ -11,6 +11,8 @@ import Settings from './pages/Settings';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
 import CompanyManagement from './pages/admin/CompanyManagement';
+import RoleManagementInfo from './pages/admin/RoleManagementInfo';
+import RoleTabSettings from './pages/admin/RoleTabSettings';
 import __Layout from './Layout.jsx';
 
 
@@ -28,6 +30,8 @@ export const PAGES = {
     "admin": AdminDashboard,
     "admin/users": UserManagement,
     "admin/companies": CompanyManagement,
+    "admin/role-management": RoleManagementInfo,
+    "admin/tab-visibility": RoleTabSettings,
 }
 
 export const pagesConfig = {
