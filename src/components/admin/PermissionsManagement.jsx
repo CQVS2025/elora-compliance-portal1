@@ -25,7 +25,8 @@ import {
   FileText,
   DollarSign,
   Truck,
-  MapPin
+  MapPin,
+  Palette
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,7 +65,7 @@ const ALL_TABS = [
   { value: 'sites', label: 'Sites', icon: MapPin },
   { value: 'reports', label: 'Reports', icon: FileText },
   { value: 'email-reports', label: 'Email Reports', icon: FileText },
-  { value: 'users', label: 'Users', icon: Users },
+  { value: 'branding', label: 'Branding', icon: Palette },
 ];
 
 const DEFAULT_FORM = {
@@ -86,7 +87,6 @@ const DEFAULT_FORM = {
   can_manage_users: false,
   can_export_data: true,
   can_view_costs: true,
-  can_generate_ai_reports: true,
   can_edit_vehicles: true,
   can_edit_sites: true,
   can_delete_records: false,
@@ -634,7 +634,6 @@ export default function PermissionsManagement() {
                       { key: 'can_manage_sites', label: 'Manage Sites', desc: 'Create and edit sites' },
                       { key: 'can_manage_users', label: 'Manage Users', desc: 'User administration' },
                       { key: 'can_export_data', label: 'Export Data', desc: 'Export data to CSV/Excel' },
-                      { key: 'can_generate_ai_reports', label: 'Generate AI Reports', desc: 'Use AI report features' },
                       { key: 'can_edit_vehicles', label: 'Edit Vehicles', desc: 'Modify vehicle data' },
                       { key: 'can_edit_sites', label: 'Edit Sites', desc: 'Modify site data' },
                       { key: 'can_delete_records', label: 'Delete Records', desc: 'Delete data permanently' },

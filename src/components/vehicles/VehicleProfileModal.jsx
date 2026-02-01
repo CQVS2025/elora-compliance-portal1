@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Truck,
-  Wrench,
   Droplet,
   DollarSign,
   Users,
@@ -76,18 +75,6 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
   const permissions = usePermissions();
   const userConfig = getUserSpecificConfig(permissions.user?.email);
 
-  const { data: maintenanceRecords = [] } = useQuery({
-    queryKey: ['maintenance', vehicle?.id],
-    queryFn: async () => {
-      if (!vehicle?.id) return [];
-      const { data, error } = await supabaseClient.tables.maintenanceRecords
-        .select('*')
-        .eq('vehicle_id', vehicle.id)
-        .order('service_date', { ascending: false });
-      return data || [];
-    },
-    enabled: open && !!vehicle?.id
-  });
 
   const { data: issues = [] } = useQuery({
     queryKey: ['issues', vehicle?.id],
@@ -156,23 +143,6 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
     };
   }, [washHistory, vehicle]);
 
-  // Maintenance cost summary
-  const maintenanceCosts = useMemo(() => {
-    if (!maintenanceRecords.length) return null;
-    
-    const totalCost = maintenanceRecords.reduce((sum, r) => sum + (r.cost || 0), 0);
-    const avgCost = totalCost / maintenanceRecords.length;
-    const lastService = maintenanceRecords[0];
-    const nextService = maintenanceRecords.find(r => r.next_service_date);
-
-    return {
-      totalCost,
-      avgCost,
-      recordCount: maintenanceRecords.length,
-      lastService,
-      nextService
-    };
-  }, [maintenanceRecords]);
 
   if (!vehicle) return null;
 
@@ -182,18 +152,7 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
   const exportData = (type) => {
     let data, headers, filename;
     
-    if (type === 'maintenance') {
-      headers = ['Date', 'Service Type', 'Cost', 'Mileage', 'Next Service', 'Notes'];
-      data = maintenanceRecords.map(r => [
-        moment(r.service_date).format('YYYY-MM-DD'),
-        r.service_type,
-        r.cost || 0,
-        r.mileage || 0,
-        r.next_service_date ? moment(r.next_service_date).format('YYYY-MM-DD') : '',
-        r.notes || ''
-      ]);
-      filename = `${vehicle.name}-maintenance-history.csv`;
-    } else if (type === 'washes') {
+    if (type === 'washes') {
       headers = ['Date', 'Time', 'Site', 'Wash Type'];
       data = washHistory.map(s => [
         moment(s.timestamp).format('YYYY-MM-DD'),
@@ -238,9 +197,8 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-          <TabsList className={`grid w-full ${userConfig?.hideUsageCosts ? 'grid-cols-4' : 'grid-cols-5'}`}>
+          <TabsList className={`grid w-full ${userConfig?.hideUsageCosts ? 'grid-cols-3' : 'grid-cols-4'}`}>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
             <TabsTrigger value="compliance">Compliance</TabsTrigger>
             {!userConfig?.hideUsageCosts && (
               <TabsTrigger value="costs">Usage Costs</TabsTrigger>
@@ -302,25 +260,6 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                 </CardContent>
               </Card>
 
-              {maintenanceCosts && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Wrench className="w-4 h-4" />
-                      Maintenance Summary
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-2xl font-bold text-slate-800">${maintenanceCosts.totalCost.toLocaleString()}</p>
-                    <p className="text-xs text-slate-500">Total spent • {maintenanceCosts.recordCount} services</p>
-                    {maintenanceCosts.nextService && (
-                      <p className="text-sm text-orange-600 mt-2">
-                        Next service: {moment(maintenanceCosts.nextService.next_service_date).format('MMM D, YYYY')}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
 
               {usageCosts && !userConfig?.hideUsageCosts && (
                 <Card>
@@ -375,76 +314,6 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
             )}
           </TabsContent>
 
-          {/* Maintenance Tab */}
-          <TabsContent value="maintenance" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Complete Maintenance History</h3>
-              {maintenanceRecords.length > 0 && (
-                <Button onClick={() => exportData('maintenance')} variant="outline" size="sm">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export
-                </Button>
-              )}
-            </div>
-
-            {maintenanceRecords.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">No maintenance records yet</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {maintenanceRecords.map((record, idx) => (
-                  <Card key={idx}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-4">
-                          <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                            <Wrench className="w-5 h-5 text-purple-600" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-800">
-                              {record.service_type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                            </p>
-                            <p className="text-sm text-slate-600 mt-1">
-                              {moment(record.service_date).format('MMMM D, YYYY')}
-                            </p>
-                            {record.mileage && (
-                              <p className="text-xs text-slate-500 mt-1">
-                                Mileage: {record.mileage.toLocaleString()} km
-                              </p>
-                            )}
-                            {record.notes && (
-                              <p className="text-sm text-slate-600 mt-2">{record.notes}</p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          {record.cost && (
-                            <p className="text-lg font-bold text-[#7CB342]">${record.cost.toFixed(2)}</p>
-                          )}
-                          {record.next_service_date && (
-                            <p className="text-xs text-slate-500 mt-1">
-                              Next: {moment(record.next_service_date).format('MMM D, YYYY')}
-                            </p>
-                          )}
-                          <Badge className={`mt-2 ${
-                            record.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            record.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
-                            'bg-orange-100 text-orange-800'
-                          }`}>
-                            {record.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
 
           {/* Compliance Tab */}
           <TabsContent value="compliance" className="space-y-4">

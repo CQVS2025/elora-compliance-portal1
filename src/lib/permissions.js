@@ -144,9 +144,10 @@ export function canViewAllCompanies(userProfile) {
 
 /**
  * Check if user can edit company branding
+ * Super admins can edit all companies, admins can edit their own company
  */
 export function canEditBranding(userProfile) {
-  return isAdmin(userProfile);
+  return isAdmin(userProfile); // Returns true for both super_admin and admin
 }
 
 /**
@@ -192,14 +193,14 @@ export function getAccessibleTabs(userProfile) {
 
   const role = userProfile.role;
 
-  // Super admin sees all tabs
+  // Super admin sees all tabs (Users tab moved to Admin console)
   if (role === 'super_admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'users'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding'];
   }
 
-  // Admin sees all tabs except users
+  // Admin sees all tabs except users, but includes branding
   if (role === 'admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding'];
   }
 
   // Manager sees most tabs (limited to assigned sites)

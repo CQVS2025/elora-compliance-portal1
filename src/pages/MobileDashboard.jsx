@@ -4,7 +4,6 @@ import { supabaseClient } from "@/api/supabaseClient";
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { 
   Truck, 
-  Wrench, 
   AlertTriangle, 
   CheckCircle,
   Menu,
@@ -18,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import moment from 'moment';
 import MobileVehicleCard from '@/components/mobile/MobileVehicleCard';
 import MobileIssueReport from '@/components/mobile/MobileIssueReport';
-import MobileMaintenanceSchedule from '@/components/mobile/MobileMaintenanceSchedule';
 
 export default function MobileDashboard() {
   const permissions = usePermissions();
@@ -41,16 +39,6 @@ export default function MobileDashboard() {
     }
   });
 
-  const { data: maintenance = [] } = useQuery({
-    queryKey: ['mobile-maintenance'],
-    queryFn: async () => {
-      const { data, error } = await supabaseClient.tables.maintenanceRecords
-        .select('*')
-        .order('service_date', { ascending: false })
-        .limit(100);
-      return data || [];
-    }
-  });
 
   const { data: issues = [] } = useQuery({
     queryKey: ['mobile-issues'],
@@ -68,15 +56,6 @@ export default function MobileDashboard() {
     ? vehicles.filter(v => permissions.assignedVehicles.includes(v.id))
     : vehicles;
 
-  const myMaintenance = permissions.isDriver
-    ? maintenance.filter(m => permissions.assignedVehicles.includes(m.vehicle_id))
-    : maintenance;
-
-  const upcomingMaintenance = myMaintenance.filter(m => {
-    if (!m.next_service_date) return false;
-    const daysUntil = moment(m.next_service_date).diff(moment(), 'days');
-    return daysUntil >= 0 && daysUntil <= 30;
-  });
 
   const myIssues = permissions.isDriver
     ? issues.filter(i => i.reported_by === permissions.user?.email)
@@ -125,15 +104,6 @@ export default function MobileDashboard() {
               My Vehicles
             </button>
             <button
-              onClick={() => { setActiveTab('maintenance'); setMenuOpen(false); }}
-              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                activeTab === 'maintenance' ? 'bg-[#7CB342] text-white' : 'bg-white/10 text-white'
-              }`}
-            >
-              <Wrench className="w-5 h-5 inline mr-2" />
-              Maintenance
-            </button>
-            <button
               onClick={() => { setActiveTab('issues'); setMenuOpen(false); }}
               className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
                 activeTab === 'issues' ? 'bg-[#7CB342] text-white' : 'bg-white/10 text-white'
@@ -158,15 +128,6 @@ export default function MobileDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Calendar className="w-4 h-4 text-orange-600" />
-              <p className="text-xs text-slate-600">Upcoming</p>
-            </div>
-            <p className="text-2xl font-bold text-slate-800">{upcomingMaintenance.length}</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Main Content */}
@@ -195,9 +156,6 @@ export default function MobileDashboard() {
           </div>
         )}
 
-        {activeTab === 'maintenance' && (
-          <MobileMaintenanceSchedule maintenance={upcomingMaintenance} />
-        )}
 
         {activeTab === 'issues' && (
           <div className="space-y-3">
@@ -296,17 +254,6 @@ export default function MobileDashboard() {
           >
             <Truck className="w-5 h-5 mb-1" />
             <span className="text-xs font-medium">Vehicles</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('maintenance')}
-            className={`flex flex-col items-center py-2 px-3 rounded-lg transition-colors ${
-              activeTab === 'maintenance' 
-                ? 'bg-[#7CB342] text-white' 
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Wrench className="w-5 h-5 mb-1" />
-            <span className="text-xs font-medium">Service</span>
           </button>
           <button
             onClick={() => setActiveTab('issues')}

@@ -62,6 +62,31 @@ export default function Login() {
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
 
+  // Restore login rejection (unassigned / deactivated) after redirect — full reload wipes React state
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('elora_login_rejection');
+      if (!raw) return;
+      sessionStorage.removeItem('elora_login_rejection');
+      const { type, message } = JSON.parse(raw);
+      const friendly = getUserFriendlyError(message);
+      setError(friendly);
+      if (type === 'user_unassigned') {
+        toast({
+          title: 'Not Assigned to a Company',
+          description: 'You are not assigned to any company. Please contact your administrator.',
+          variant: 'destructive',
+        });
+      } else if (type === 'account_deactivated') {
+        toast({
+          title: 'Account Deactivated',
+          description: 'Your account has been deactivated. Please contact your administrator.',
+          variant: 'destructive',
+        });
+      }
+    } catch (_) {}
+  }, [toast]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -86,6 +111,14 @@ export default function Login() {
           toast({
             title: "Account Deactivated",
             description: "Your account has been deactivated. Please contact your administrator.",
+            variant: "destructive",
+          });
+        }
+        // Show special toast for unassigned user (no company)
+        if (errorMessage.toLowerCase().includes('not assigned') || errorMessage.toLowerCase().includes('unassigned') || authError?.type === 'user_unassigned') {
+          toast({
+            title: "Not Assigned to a Company",
+            description: "You are not assigned to any company. Please contact your administrator.",
             variant: "destructive",
           });
         }

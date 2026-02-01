@@ -11,7 +11,7 @@ import VehicleProfileModal from '@/components/vehicles/VehicleProfileModal';
  * Apple-style Vehicle List
  * Replaces the table-based vehicle display with spacious, interactive cards
  */
-export default function AppleVehicleList({ vehicles, scans, searchQuery, setSearchQuery }) {
+export default function AppleVehicleList({ vehicles, scans, searchQuery, setSearchQuery, userEmail }) {
   const permissions = usePermissions();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [selectedVehicleForProfile, setSelectedVehicleForProfile] = useState(null);
@@ -21,9 +21,11 @@ export default function AppleVehicleList({ vehicles, scans, searchQuery, setSear
   const [expandedVehicleId, setExpandedVehicleId] = useState(null);
   const itemsPerPage = 10;
 
-  const userEmail = typeof window !== 'undefined'
-    ? localStorage.getItem('userEmail') || sessionStorage.getItem('userEmail')
-    : null;
+  // Use userEmail from props, or fallback to permissions, or localStorage
+  const effectiveUserEmail = userEmail || permissions.user?.email || 
+    (typeof window !== 'undefined' 
+      ? localStorage.getItem('userEmail') || sessionStorage.getItem('userEmail')
+      : null);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -192,7 +194,7 @@ export default function AppleVehicleList({ vehicles, scans, searchQuery, setSear
                 setSelectedVehicleForProfile(vehicle);
                 setProfileModalOpen(true);
               }}
-              userEmail={userEmail}
+              userEmail={effectiveUserEmail}
             />
           ))}
         </motion.div>
@@ -263,16 +265,14 @@ function VehicleCard({ vehicle, index, scans, isExpanded, onToggleExpand, onView
             }`}
           />
 
-          {/* Favorite button */}
-          {userEmail && (
-            <div onClick={(e) => e.stopPropagation()}>
-              <FavoriteButton
-                vehicleRef={vehicle.id}
-                vehicleName={vehicle.name}
-                userEmail={userEmail}
-              />
-            </div>
-          )}
+          {/* Favorite button - Always show, but disabled if no userEmail */}
+          <div onClick={(e) => e.stopPropagation()}>
+            <FavoriteButton
+              vehicleRef={vehicle.id}
+              vehicleName={vehicle.name}
+              userEmail={userEmail}
+            />
+          </div>
 
           {/* Main info */}
           <div className="flex-1 min-w-0">

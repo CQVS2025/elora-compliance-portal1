@@ -1,7 +1,8 @@
 import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 import { performCompleteLogout } from '@/utils/storageCleanup';
-import { queryClientInstance } from '@/lib/query-client';
+import { queryClientInstance, clearAllCache } from '@/lib/query-client';
+import { clearTenantContextCache } from '@/api/edgeFetch';
 
 const AuthContext = createContext();
 
@@ -202,7 +203,27 @@ export const AuthProvider = ({ children }) => {
           type: 'account_deactivated',
           message: errorMsg
         });
-        // Sign out the user immediately
+        try {
+          sessionStorage.setItem('elora_login_rejection', JSON.stringify({ type: 'account_deactivated', message: errorMsg }));
+        } catch (_) {}
+        await supabase.auth.signOut();
+        setIsAuthenticated(false);
+        return { success: false, error: errorMsg };
+      }
+
+      // Check if user is unassigned (no company) — super_admin may have no company
+      if (profile.company_id == null && profile.role !== 'super_admin') {
+        console.log('User is unassigned (no company):', profile.email);
+        setUserProfile(null);
+        userProfileRef.current = null;
+        const errorMsg = 'You are not assigned to any company. Please contact your administrator.';
+        setAuthError({
+          type: 'user_unassigned',
+          message: errorMsg
+        });
+        try {
+          sessionStorage.setItem('elora_login_rejection', JSON.stringify({ type: 'user_unassigned', message: errorMsg }));
+        } catch (_) {}
         await supabase.auth.signOut();
         setIsAuthenticated(false);
         return { success: false, error: errorMsg };
@@ -302,6 +323,10 @@ export const AuthProvider = ({ children }) => {
       
       // Sign out from Supabase first (this clears Supabase session)
       await supabase.auth.signOut();
+      
+      // NEW: Clear TanStack Query cache and tenant context
+      clearAllCache();
+      clearTenantContextCache();
       
       // Clear all storage, cookies, and cache
       await performCompleteLogout(queryClientInstance, userEmail);

@@ -13,7 +13,23 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createSupabaseAdminClient();
-    const body = await req.json();
+    
+    // Parse request body
+    let body = {};
+    try {
+      body = await req.json();
+    } catch (e) {
+      // Body might be empty, try text
+      try {
+        const text = await req.text();
+        if (text) {
+          body = JSON.parse(text);
+        }
+      } catch (e2) {
+        console.log('Could not parse request body:', e2);
+      }
+    }
+    
     const { userEmail, vehicleRef, vehicleName, isFavorite } = body;
 
     if (!userEmail || !vehicleRef) {
@@ -26,7 +42,24 @@ Deno.serve(async (req) => {
     }
 
     if (isFavorite) {
-      // Add to favorites
+      // First, get user_id and company_id from user_profiles
+      const { data: userProfile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('id, company_id')
+        .eq('email', userEmail)
+        .single();
+
+      if (profileError || !userProfile) {
+        return new Response(JSON.stringify({
+          error: 'User not found',
+          details: profileError?.message || 'Could not find user profile'
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Check if already a favorite
       const { data: existing } = await supabase
         .from('favorite_vehicles')
         .select('*')
@@ -45,14 +78,15 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Create new favorite
+      // Create new favorite (created_at will be set automatically by DEFAULT NOW())
       const { data: newFavorite, error } = await supabase
         .from('favorite_vehicles')
         .insert({
+          user_id: userProfile.id,
+          company_id: userProfile.company_id,
           user_email: userEmail,
           vehicle_ref: vehicleRef,
-          vehicle_name: vehicleName,
-          created_date: new Date().toISOString()
+          vehicle_name: vehicleName
         })
         .select()
         .single();

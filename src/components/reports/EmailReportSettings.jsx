@@ -3,13 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Mail, Send, Clock, CheckCircle, Settings, Loader2, FileDown, Bell } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Bell } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Chart } from 'chart.js/auto';
 import { useToast } from '@/hooks/use-toast';
 
-export default function EmailReportSettings() {
+export default function EmailReportSettings({ reportData, onSetDateRange }) {
   const queryClient = useQueryClient();
   const { user: currentUser, isLoading: userLoading } = useAuth();
   const { toast } = useToast();
@@ -23,29 +23,29 @@ export default function EmailReportSettings() {
   const pdfContainerRef = useRef(null);
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true);
 
+  const userEmail = currentUser?.email || '';
+
   // Fetch user's email report preferences
   const { data: preferences, isLoading } = useQuery({
-    queryKey: ['emailReportPreferences', 'jonny@elora.com.au'],
+    queryKey: ['emailReportPreferences', userEmail],
     queryFn: async () => {
-      if (!currentUser?.email) return null;
+      if (!userEmail) return null;
 
       try {
-        const { data: result, error } = await supabaseClient.tables.emailReportPreferences
+        const { data: result } = await supabaseClient.tables.emailReportPreferences
           .select('*')
-          .eq('user_email', 'jonny@elora.com.au');
+          .eq('user_email', userEmail);
 
         if (result && result.length > 0) {
           return result[0];
         }
 
-        // Return default preferences if none exist
         return {
-          user_email: 'jonny@elora.com.au',
+          user_email: userEmail,
           enabled: false,
           frequency: 'weekly',
           report_types: [],
           include_charts: true,
-          include_ai_insights: true,
           scheduled_time: '09:00',
           scheduled_day_of_week: 1,
           scheduled_day_of_month: 1
@@ -55,36 +55,59 @@ export default function EmailReportSettings() {
         return null;
       }
     },
-    enabled: !!currentUser?.email
+    enabled: !!userEmail
   });
 
   // Form state
   const [formData, setFormData] = useState({
-    enabled: false,
-    frequency: 'weekly',
     report_types: [],
     include_charts: true,
-    include_ai_insights: true,
-    scheduled_time: '09:00',
-    scheduled_day_of_week: 1, // Monday
-    scheduled_day_of_month: 1
+    duration_type: 'months',
+    duration_count: 1
   });
 
   // Update form when preferences load
   useEffect(() => {
     if (preferences) {
-      setFormData({
-        enabled: preferences.enabled || false,
-        frequency: preferences.frequency || 'weekly',
+      setFormData(prev => ({
+        ...prev,
         report_types: preferences.report_types || [],
-        include_charts: preferences.include_charts !== false,
-        include_ai_insights: preferences.include_ai_insights !== false,
-        scheduled_time: preferences.scheduled_time || '09:00',
-        scheduled_day_of_week: preferences.scheduled_day_of_week ?? 1,
-        scheduled_day_of_month: preferences.scheduled_day_of_month || 1
-      });
+        include_charts: preferences.include_charts !== false
+      }));
     }
   }, [preferences]);
+
+  // Compute date range from duration and apply to dashboard filters
+  const getDateRangeFromDuration = (type, count) => {
+    const today = new Date();
+    const end = today.toISOString().slice(0, 10);
+    let start;
+
+    if (type === 'today') {
+      start = end;
+    } else if (type === 'days') {
+      const d = new Date(today);
+      d.setDate(d.getDate() - Math.max(1, count || 1));
+      start = d.toISOString().slice(0, 10);
+    } else if (type === 'weeks') {
+      const d = new Date(today);
+      d.setDate(d.getDate() - Math.max(1, count || 1) * 7);
+      start = d.toISOString().slice(0, 10);
+    } else {
+      // months
+      const d = new Date(today);
+      d.setMonth(d.getMonth() - Math.max(1, count || 1));
+      start = d.toISOString().slice(0, 10);
+    }
+    return { start, end };
+  };
+
+  const applyDurationToFilters = (type, count) => {
+    if (onSetDateRange) {
+      const range = getDateRangeFromDuration(type, count);
+      onSetDateRange(range);
+    }
+  };
 
   // Load email notifications setting
   useEffect(() => {
@@ -142,9 +165,7 @@ export default function EmailReportSettings() {
   // Available report types
   const reportTypes = [
     { id: 'compliance', label: 'Compliance Summary', icon: '📊', description: 'Vehicle compliance rates and wash tracking' },
-    { id: 'maintenance', label: 'Maintenance Analysis', icon: '🔧', description: 'Upcoming services and maintenance alerts' },
-    { id: 'costs', label: 'Cost Analysis', icon: '💰', description: 'Maintenance costs and financial trends' },
-    { id: 'ai_insights', label: 'AI-Generated Insights', icon: '🤖', description: 'Intelligent analysis and recommendations' }
+    { id: 'costs', label: 'Cost Analysis', icon: '💰', description: 'Cost and financial trends' }
   ];
 
   // Handle report type toggle
@@ -168,24 +189,23 @@ export default function EmailReportSettings() {
     }));
   };
 
-  // Save preferences mutation
+  // Save preferences mutation (report types and chart option)
   const savePreferences = async () => {
     if (!currentUser?.email) return;
 
     setSaving(true);
     try {
       const data = {
-        user_email: 'jonny@elora.com.au',
-        enabled: formData.enabled,
-        frequency: formData.frequency,
+        user_email: userEmail,
+        enabled: false,
+        frequency: 'weekly',
         report_types: formData.report_types,
         include_charts: formData.include_charts,
-        include_ai_insights: formData.include_ai_insights,
-        scheduled_time: formData.scheduled_time,
-        scheduled_day_of_week: formData.scheduled_day_of_week,
-        scheduled_day_of_month: formData.scheduled_day_of_month,
+        scheduled_time: '09:00',
+        scheduled_day_of_week: 1,
+        scheduled_day_of_month: 1,
         last_sent: preferences?.last_sent || null,
-        next_scheduled: calculateNextScheduled(formData.frequency, formData.scheduled_time, formData.scheduled_day_of_week, formData.scheduled_day_of_month)
+        next_scheduled: null
       };
 
       if (preferences?.id) {
@@ -199,7 +219,7 @@ export default function EmailReportSettings() {
           .insert([data]);
       }
 
-      queryClient.invalidateQueries(['emailReportPreferences', 'jonny@elora.com.au']);
+      queryClient.invalidateQueries(['emailReportPreferences', userEmail]);
       setSuccessMessage('Settings saved successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
@@ -208,50 +228,6 @@ export default function EmailReportSettings() {
     } finally {
       setSaving(false);
     }
-  };
-
-  // Calculate next scheduled date based on frequency
-  const calculateNextScheduled = (frequency, scheduledTime = '09:00', dayOfWeek = 1, dayOfMonth = 1) => {
-    const now = new Date();
-    const [hours, minutes] = scheduledTime.split(':').map(Number);
-
-    let nextDate = new Date();
-
-    switch (frequency) {
-      case 'daily':
-        nextDate.setHours(hours, minutes, 0, 0);
-        // If the time has passed today, schedule for tomorrow
-        if (nextDate <= now) {
-          nextDate.setDate(nextDate.getDate() + 1);
-        }
-        break;
-
-      case 'weekly':
-        nextDate.setHours(hours, minutes, 0, 0);
-        // Set to the specified day of week
-        const currentDay = nextDate.getDay();
-        const daysUntilTarget = (dayOfWeek - currentDay + 7) % 7;
-        nextDate.setDate(nextDate.getDate() + daysUntilTarget);
-
-        // If that's today but the time has passed, schedule for next week
-        if (nextDate <= now) {
-          nextDate.setDate(nextDate.getDate() + 7);
-        }
-        break;
-
-      case 'monthly':
-        nextDate.setHours(hours, minutes, 0, 0);
-        nextDate.setDate(dayOfMonth);
-
-        // If the day is in the past this month, schedule for next month
-        if (nextDate <= now) {
-          nextDate.setMonth(nextDate.getMonth() + 1);
-          nextDate.setDate(dayOfMonth);
-        }
-        break;
-    }
-
-    return nextDate.toISOString();
   };
 
   // Send email now
@@ -264,14 +240,7 @@ export default function EmailReportSettings() {
       userLoading: userLoading
     });
 
-    if (!currentUser) {
-      console.error('[handleSendNow] Current user is null');
-      alert('User not loaded. Please wait a moment and try again.');
-      return;
-    }
-
-    if (!currentUser.email) {
-      console.error('[handleSendNow] Current user has no email field:', currentUser);
+    if (!userEmail) {
       alert('User email not found. Please refresh the page and try again.');
       return;
     }
@@ -285,22 +254,19 @@ export default function EmailReportSettings() {
     setSendingNow(true);
     try {
       console.log('[handleSendNow] Sending email report with params:', {
-        userEmail: 'jonny@elora.com.au',
+        userEmail,
         reportTypes: formData.report_types,
-        includeCharts: formData.include_charts,
-        includeAiInsights: formData.include_ai_insights
+        includeCharts: formData.include_charts
       });
 
-      // Call cloud function to send email immediately
-      const result = await supabaseClient.reports.send({
-        userEmail: 'jonny@elora.com.au',
+      await supabaseClient.reports.send({
+        userEmail,
         reportTypes: formData.report_types,
         includeCharts: formData.include_charts,
-        includeAiInsights: formData.include_ai_insights
+        reportData: reportData || null
       });
 
-      console.log('[handleSendNow] Email report sent successfully:', result);
-      setSuccessMessage('Report sent successfully to jonny@elora.com.au! Check your email inbox.');
+      setSuccessMessage(`Report sent successfully to ${userEmail}! Check your email inbox.`);
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error) {
       console.error('[handleSendNow] Error sending email report:', error);
@@ -312,10 +278,13 @@ export default function EmailReportSettings() {
       });
 
       let errorMessage = 'Failed to send email. ';
-      if (error.message && error.message.includes('User not found')) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('user not found')) {
         errorMessage = 'Your user account was not found in the system. Please contact support.';
+      } else if (msg.includes('authorized recipients') || msg.includes('free accounts') || msg.includes('sandbox')) {
+        errorMessage = 'Email service is in sandbox mode. Add your email address as an authorized recipient in the Mailgun dashboard (Sending > Authorized Recipients), or upgrade your Mailgun plan to send to any address.';
       } else if (error.message) {
-        errorMessage += `Error: ${error.message}`;
+        errorMessage += error.message;
       } else {
         errorMessage += 'Please try again or contact support.';
       }
@@ -366,35 +335,6 @@ export default function EmailReportSettings() {
           }
         }
       };
-    } else if (type === 'maintenance') {
-      chartConfig = {
-        type: 'bar',
-        data: {
-          labels: ['Upcoming', 'Overdue'],
-          datasets: [{
-            label: 'Services',
-            data: [data.upcoming || 0, data.overdue || 0],
-            backgroundColor: [primaryColor || '#7CB342', '#ef4444'],
-            borderWidth: 0
-          }]
-        },
-        options: {
-          responsive: false,
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                stepSize: 1
-              }
-            }
-          },
-          plugins: {
-            legend: {
-              display: false
-            }
-          }
-        }
-      };
     } else if (type === 'costs') {
       // Create a simple bar chart for costs
       chartConfig = {
@@ -440,7 +380,7 @@ export default function EmailReportSettings() {
   const buildEnhancedReportHtml = async (reportData, clientBranding = null, includeCharts = true) => {
     const selectedReports = formData.report_types.length > 0
       ? formData.report_types
-      : ['compliance', 'maintenance', 'costs', 'ai_insights'];
+      : ['compliance', 'costs'];
 
     // Use client branding if provided, otherwise use default colors
     const primaryColor = clientBranding?.primary_color || '#7CB342';
@@ -535,78 +475,6 @@ export default function EmailReportSettings() {
       }
     }
 
-    // Maintenance section
-    if (selectedReports.includes('maintenance')) {
-      const maintenanceData = reportData?.maintenance?.summary;
-      const maintenanceList = reportData?.maintenance?.upcomingMaintenance;
-
-      if (maintenanceData) {
-        let chartHtml = '';
-        if (includeCharts) {
-          try {
-            const chartImage = await generateChartImage('maintenance', {
-              upcoming: maintenanceData.upcomingCount || 0,
-              overdue: maintenanceData.overdueCount || 0
-            }, primaryColor);
-            chartHtml = `
-              <div style="text-align: center; margin: 20px 0; page-break-inside: avoid;">
-                <img src="${chartImage}" style="max-width: 400px; height: auto;" alt="Maintenance Chart" />
-              </div>
-            `;
-          } catch (error) {
-            console.error('Error generating maintenance chart:', error);
-          }
-        }
-
-        let maintenanceTable = '';
-        if (maintenanceList && maintenanceList.length > 0) {
-          maintenanceTable = `
-            <div style="margin: 20px 0; page-break-inside: avoid;">
-              <h3 style="color: #334155; font-size: 16px; font-weight: 600; margin: 20px 0 10px 0; font-family: Arial, sans-serif;">Upcoming Maintenance Items</h3>
-              <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
-                <thead>
-                  <tr style="background: #f1f5f9;">
-                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; font-family: Arial, sans-serif;">Vehicle</th>
-                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; font-family: Arial, sans-serif;">Service</th>
-                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; font-family: Arial, sans-serif;">Due Date</th>
-                    <th style="padding: 12px; text-align: left; font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; font-family: Arial, sans-serif;">Days</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${maintenanceList.slice(0, 10).map((m, index) => `
-                    <tr style="border-bottom: 1px solid #f1f5f9; ${index % 2 === 0 ? 'background: #ffffff;' : 'background: #f8fafc;'}">
-                      <td style="padding: 12px; font-size: 13px; color: #334155; font-family: Arial, sans-serif;">${m.vehicleName}</td>
-                      <td style="padding: 12px; font-size: 13px; color: #334155; font-family: Arial, sans-serif;">${m.serviceType}</td>
-                      <td style="padding: 12px; font-size: 13px; color: #334155; font-family: Arial, sans-serif;">${m.dueDate}</td>
-                      <td style="padding: 12px; font-size: 13px; color: ${m.status === 'Overdue' ? '#ef4444' : '#334155'}; font-weight: ${m.status === 'Overdue' ? '600' : '400'}; font-family: Arial, sans-serif;">${m.daysUntil}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          `;
-        }
-
-        content += section('Maintenance Status',
-          twoColumnMetrics(
-            metricCard('UPCOMING SERVICES', `${maintenanceData.upcomingCount || 0}`, 'Next 30 days', primaryColor),
-            metricCard('OVERDUE SERVICES', `${maintenanceData.overdueCount || 0}`, 'Need attention', '#ef4444')
-          ) +
-          chartHtml +
-          maintenanceTable
-        );
-      } else {
-        content += section('Maintenance Status',
-          twoColumnMetrics(
-            metricCard('UPCOMING SERVICES', '—', 'Awaiting live data', primaryColor),
-            metricCard('OVERDUE SERVICES', '—', 'Awaiting live data', '#ef4444')
-          ) + `
-          <div style="background: #f8fafc; border-radius: 8px; padding: 18px; margin: 20px 0; border: 1px dashed #cbd5e1;">
-            <p style="color: #475569; font-size: 13px; margin: 0; font-family: Arial, sans-serif;">Maintenance items will appear here once data syncing is complete.</p>
-          </div>
-        `);
-      }
-    }
 
     // Cost Analysis section
     if (selectedReports.includes('costs')) {
@@ -644,27 +512,6 @@ export default function EmailReportSettings() {
             metricCard('TOTAL THIS PERIOD', '—', 'Awaiting live data', '#10b981')
           )
         );
-      }
-    }
-
-    // AI Insights section
-    if (selectedReports.includes('ai_insights')) {
-      const aiInsights = reportData?.aiInsights;
-
-      if (aiInsights && aiInsights !== 'AI insights are currently unavailable.') {
-        content += section('AI-Generated Insights', `
-          <div style="background: #f8fafc; border-radius: 8px; padding: 24px; margin: 20px 0; border-left: 4px solid ${primaryColor}; page-break-inside: avoid;">
-            <p style="color: #334155; font-size: 14px; line-height: 1.8; margin: 0; font-family: Arial, sans-serif; white-space: pre-wrap;">${aiInsights}</p>
-          </div>
-        `);
-      } else {
-        content += section('AI-Generated Insights', `
-          <div style="background: #f8fafc; border-radius: 8px; padding: 24px; margin: 20px 0; border-left: 4px solid ${primaryColor};">
-            <p style="color: #334155; font-size: 13px; line-height: 1.8; margin: 0; font-family: Arial, sans-serif;">
-              AI insights will be generated once live data becomes available.
-            </p>
-          </div>
-        `);
       }
     }
 
@@ -773,7 +620,6 @@ export default function EmailReportSettings() {
           userEmail: currentUser.email,
           reportTypes: formData.report_types,
           includeCharts: false, // We'll generate charts ourselves
-          includeAiInsights: formData.include_ai_insights,
           previewOnly: true
         });
 
@@ -786,21 +632,15 @@ export default function EmailReportSettings() {
           const htmlContent = result?.data?.html || result?.html;
           console.log('[handleExportPdf] Received HTML from backend, length:', htmlContent.length);
 
-          // For now, we'll try to extract data from vehicles/maintenance directly
+          // For now, we'll try to extract data from vehicles directly
           // This is a workaround - ideally backend should return structured data
           try {
             const { data: vehicles } = await supabaseClient.tables.vehicles
               .select('*')
               .order('updated_date', { ascending: false })
               .limit(1000);
-            const { data: maintenanceRecords } = await supabaseClient.tables.maintenanceRecords
-              .select('*')
-              .order('service_date', { ascending: false })
-              .limit(1000);
-
             console.log('[handleExportPdf] Fetched data directly:', {
-              vehicleCount: vehicles?.length || 0,
-              maintenanceCount: maintenanceRecords?.length || 0
+              vehicleCount: vehicles?.length || 0
             });
 
             if (vehicles && vehicles.length > 0) {
@@ -810,44 +650,13 @@ export default function EmailReportSettings() {
               const totalCompliance = vehicles.reduce((sum, v) => sum + (v.compliance_rate || 0), 0);
               const averageCompliance = Math.round(totalCompliance / vehicles.length);
 
-              // Generate maintenance data
-              const now = new Date();
-              const upcomingMaintenance = [];
-              let overdueCount = 0;
-
-              for (const record of maintenanceRecords || []) {
-                if (!record.next_service_date) continue;
-                const nextDate = new Date(record.next_service_date);
-                const daysUntil = Math.ceil((nextDate - now) / (1000 * 60 * 60 * 24));
-
-                if (daysUntil < 0) {
-                  overdueCount++;
-                }
-
-                if (daysUntil <= 30) {
-                  const vehicle = vehicles.find(v => v.id === record.vehicle_id);
-                  upcomingMaintenance.push({
-                    vehicleName: vehicle?.name || 'Unknown',
-                    serviceType: record.service_type || 'Maintenance',
-                    dueDate: nextDate.toLocaleDateString(),
-                    daysUntil: Math.max(0, daysUntil),
-                    status: daysUntil < 0 ? 'Overdue' : daysUntil <= 7 ? 'Urgent' : 'Scheduled'
-                  });
-                }
-              }
-
-              upcomingMaintenance.sort((a, b) => a.daysUntil - b.daysUntil);
-
               // Generate cost data
+              const now = new Date();
               const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-              const recentRecords = maintenanceRecords?.filter(r => {
-                if (!r.service_date) return false;
-                const serviceDate = new Date(r.service_date);
-                return serviceDate >= thirtyDaysAgo;
-              }) || [];
-
-              const totalCost = recentRecords.reduce((sum, r) => sum + (r.cost || 0), 0);
-              const monthlyAverage = Math.round(totalCost / (recentRecords.length > 0 ? 1 : 1));
+              
+              // Calculate costs from other sources (not maintenance)
+              const totalCost = 0;
+              const monthlyAverage = 0;
 
               reportData = {
                 compliance: {
@@ -863,21 +672,13 @@ export default function EmailReportSettings() {
                     }] : []
                   }
                 },
-                maintenance: {
-                  summary: {
-                    upcomingCount: upcomingMaintenance.length,
-                    overdueCount
-                  },
-                  upcomingMaintenance
-                },
                 costs: {
                   summary: {
                     totalCost: Math.round(totalCost),
                     monthlyAverage,
-                    recordCount: recentRecords.length
+                    recordCount: 0
                   }
                 },
-                aiInsights: formData.include_ai_insights ? 'AI insights are being generated...' : null
               };
 
               usedBackendData = true;
@@ -1061,7 +862,7 @@ export default function EmailReportSettings() {
           </div>
           <div>
             <h1 className="text-3xl font-bold mb-2">Email Report Settings</h1>
-            <p className="text-white/90">Configure automated email reports and delivery preferences</p>
+            <p className="text-white/90">Request and configure email reports</p>
           </div>
         </div>
       </div>
@@ -1074,167 +875,73 @@ export default function EmailReportSettings() {
         </div>
       )}
 
-      {/* Email Notifications Toggle */}
-      <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-50 rounded-lg">
-              <Bell className="w-6 h-6 text-emerald-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-slate-800">Email Notifications</h2>
-              <p className="text-sm text-slate-600">Receive email notifications for important updates</p>
-            </div>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={emailNotificationsEnabled}
-              onChange={(e) => {
-                setEmailNotificationsEnabled(e.target.checked);
-                saveEmailNotifications(e.target.checked);
-              }}
-              className="sr-only peer"
-            />
-            <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500"></div>
-          </label>
-        </div>
-      </div>
 
-      {/* Enable/Disable Toggle */}
-      <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <Settings className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-slate-800">Enable Email Reports</h2>
-              <p className="text-sm text-slate-600">Receive automated reports via email</p>
-            </div>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={formData.enabled}
-              onChange={(e) => setFormData(prev => ({ ...prev, enabled: e.target.checked }))}
-              className="sr-only peer"
-            />
-            <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-elora-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-elora-primary"></div>
-          </label>
-        </div>
-      </div>
-
-      {/* Report Frequency */}
+      {/* Report Duration - data range for the email */}
       <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
         <div className="flex items-center gap-3 mb-4">
           <Clock className="w-5 h-5 text-slate-600" />
-          <h2 className="text-lg font-semibold text-slate-800">Report Frequency</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Report Duration</h2>
         </div>
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {['daily', 'weekly', 'monthly'].map((freq) => (
-            <button
-              key={freq}
-              onClick={() => setFormData(prev => ({ ...prev, frequency: freq }))}
-              className={`p-4 rounded-lg border-2 transition-all ${
-                formData.frequency === freq
-                  ? 'border-elora-primary bg-elora-primary/5 text-elora-primary font-semibold'
-                  : 'border-slate-200 text-slate-600 hover:border-elora-primary/50'
-              }`}
-            >
-              <div className="text-center">
-                <div className="text-lg capitalize">{freq}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Scheduling Options */}
-        <div className="pt-6 border-t border-slate-200 space-y-4">
-          <h3 className="text-md font-semibold text-slate-700 mb-3">Schedule Details</h3>
-
-          {/* Time Picker (all frequencies) */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <label className="text-sm font-medium text-slate-600 min-w-[100px]">
-              Time of Day:
-            </label>
-            <input
-              type="time"
-              value={formData.scheduled_time}
-              onChange={(e) => setFormData(prev => ({ ...prev, scheduled_time: e.target.value }))}
-              className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-elora-primary focus:border-transparent"
-            />
-            <span className="text-sm text-slate-500">
-              Reports will be sent at this time
-            </span>
+        <p className="text-sm text-slate-600 mb-6">
+          Select the date range for the report data. The filters above will update to match.
+        </p>
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            {[
+              { id: 'today', label: 'Today' },
+              { id: 'days', label: 'Last X days' },
+              { id: 'weeks', label: 'Last X weeks' },
+              { id: 'months', label: 'Last X months' }
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => {
+                  const count = opt.id === 'days' ? 7 : opt.id === 'weeks' ? 1 : opt.id === 'months' ? 1 : null;
+                  setFormData(prev => ({
+                    ...prev,
+                    duration_type: opt.id,
+                    duration_count: count ?? prev.duration_count
+                  }));
+                  if (opt.id !== 'today') {
+                    applyDurationToFilters(opt.id, count ?? (opt.id === 'days' ? 7 : 1));
+                  } else {
+                    applyDurationToFilters('today', null);
+                  }
+                }}
+                className={`px-4 py-2.5 rounded-lg border-2 transition-all text-sm font-medium ${
+                  formData.duration_type === opt.id
+                    ? 'border-elora-primary bg-elora-primary/5 text-elora-primary'
+                    : 'border-slate-200 text-slate-600 hover:border-elora-primary/50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
-
-          {/* Day of Week Picker (weekly only) */}
-          {formData.frequency === 'weekly' && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <label className="text-sm font-medium text-slate-600 min-w-[100px]">
-                Day of Week:
+          {(formData.duration_type === 'days' || formData.duration_type === 'weeks' || formData.duration_type === 'months') && (
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="text-sm font-medium text-slate-600">
+                {formData.duration_type === 'days' && 'Number of days:'}
+                {formData.duration_type === 'weeks' && 'Number of weeks:'}
+                {formData.duration_type === 'months' && 'Number of months:'}
               </label>
-              <select
-                value={formData.scheduled_day_of_week}
-                onChange={(e) => setFormData(prev => ({ ...prev, scheduled_day_of_week: Number(e.target.value) }))}
-                className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-elora-primary focus:border-transparent"
-              >
-                <option value={0}>Sunday</option>
-                <option value={1}>Monday</option>
-                <option value={2}>Tuesday</option>
-                <option value={3}>Wednesday</option>
-                <option value={4}>Thursday</option>
-                <option value={5}>Friday</option>
-                <option value={6}>Saturday</option>
-              </select>
+              <input
+                type="number"
+                min={1}
+                max={formData.duration_type === 'days' ? 365 : formData.duration_type === 'weeks' ? 52 : 60}
+                value={formData.duration_count}
+                onChange={(e) => {
+                  const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                  setFormData(prev => ({ ...prev, duration_count: val }));
+                  applyDurationToFilters(formData.duration_type, val);
+                }}
+                className="w-20 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-elora-primary focus:border-transparent"
+              />
               <span className="text-sm text-slate-500">
-                Weekly reports will be sent on this day
+                {formData.duration_type === 'days' && `Last ${formData.duration_count} day${formData.duration_count > 1 ? 's' : ''}`}
+                {formData.duration_type === 'weeks' && `Last ${formData.duration_count} week${formData.duration_count > 1 ? 's' : ''}`}
+                {formData.duration_type === 'months' && `Last ${formData.duration_count} month${formData.duration_count > 1 ? 's' : ''}`}
               </span>
-            </div>
-          )}
-
-          {/* Day of Month Picker (monthly only) */}
-          {formData.frequency === 'monthly' && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <label className="text-sm font-medium text-slate-600 min-w-[100px]">
-                Day of Month:
-              </label>
-              <select
-                value={formData.scheduled_day_of_month}
-                onChange={(e) => setFormData(prev => ({ ...prev, scheduled_day_of_month: Number(e.target.value) }))}
-                className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-elora-primary focus:border-transparent"
-              >
-                {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                  <option key={day} value={day}>{day}</option>
-                ))}
-              </select>
-              <span className="text-sm text-slate-500">
-                Monthly reports will be sent on this day
-              </span>
-            </div>
-          )}
-
-          {/* Preview of next scheduled time */}
-          {formData.enabled && (
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm text-blue-800">
-                <strong>Next scheduled report:</strong>{' '}
-                {new Date(calculateNextScheduled(
-                  formData.frequency,
-                  formData.scheduled_time,
-                  formData.scheduled_day_of_week,
-                  formData.scheduled_day_of_month
-                )).toLocaleString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                  hour12: true
-                })}
-              </p>
             </div>
           )}
         </div>
@@ -1283,65 +990,15 @@ export default function EmailReportSettings() {
         </div>
       </div>
 
-      {/* Additional Options */}
-      <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
-        <h2 className="text-lg font-semibold text-slate-800 mb-4">Additional Options</h2>
-        <div className="space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={formData.include_charts}
-              onChange={(e) => setFormData(prev => ({ ...prev, include_charts: e.target.checked }))}
-              className="w-5 h-5 text-elora-primary border-slate-300 rounded focus:ring-elora-primary"
-            />
-            <div>
-              <div className="font-medium text-slate-800">Include Charts & Visualizations</div>
-              <div className="text-sm text-slate-600">Add visual graphs and charts to your reports</div>
-            </div>
-          </label>
-
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={formData.include_ai_insights}
-              onChange={(e) => setFormData(prev => ({ ...prev, include_ai_insights: e.target.checked }))}
-              className="w-5 h-5 text-elora-primary border-slate-300 rounded focus:ring-elora-primary"
-            />
-            <div>
-              <div className="font-medium text-slate-800">Include AI-Generated Insights</div>
-              <div className="text-sm text-slate-600">Get intelligent analysis and recommendations</div>
-            </div>
-          </label>
-        </div>
-      </div>
-
       {/* Action Buttons */}
       <div className="flex flex-col md:flex-row gap-4">
         <button
-          onClick={savePreferences}
-          disabled={saving}
-          className="flex-1 bg-elora-primary hover:bg-elora-primary-light text-white font-semibold py-4 px-6 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Settings className="w-5 h-5" />
-              Save Settings
-            </>
-          )}
-        </button>
-
-        <button
           onClick={handleSendNow}
-          disabled={sendingNow || userLoading || !currentUser?.email || formData.report_types.length === 0}
+          disabled={sendingNow || userLoading || !userEmail || formData.report_types.length === 0}
           className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 px-6 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
           title={
             userLoading ? 'Loading user information...' :
-            !currentUser?.email ? 'User email not available' :
+            !userEmail ? 'User email not available' :
             formData.report_types.length === 0 ? 'Please select at least one report type' :
             'Send email report now'
           }
@@ -1366,11 +1023,11 @@ export default function EmailReportSettings() {
 
         <button
           onClick={handleExportPdf}
-          disabled={exportingPdf || userLoading || !currentUser?.email || formData.report_types.length === 0}
+          disabled={exportingPdf || userLoading || !userEmail || formData.report_types.length === 0}
           className="flex-1 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-semibold py-4 px-6 rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
           title={
             userLoading ? 'Loading user information...' :
-            !currentUser?.email ? 'User email not available' :
+            !userEmail ? 'User email not available' :
             formData.report_types.length === 0 ? 'Please select at least one report type' :
             'Export report to PDF'
           }
@@ -1411,26 +1068,10 @@ export default function EmailReportSettings() {
       {/* Info Box */}
       <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
         <p className="text-sm text-blue-800">
-          <strong>Note:</strong> Email reports will be sent to{' '}
-          <strong className="text-blue-900">jonny@elora.com.au</strong>{' '}
-          with your organization's branding.
-          {formData.enabled && formData.frequency && (
-            <span> Your next scheduled report will be sent {formData.frequency}.</span>
-          )}
+          <strong>Note:</strong> The report uses the date range and filters (customer, site) selected above. Reports will be sent to{' '}
+          <strong className="text-blue-900">{userEmail || 'your email'}</strong>.{' '}
         </p>
       </div>
-
-      {/* Debug Info (remove after testing) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="bg-gray-100 border border-gray-300 p-4 rounded-lg text-xs">
-          <p className="font-bold mb-2">Debug Info:</p>
-          <p>User Loading: {userLoading ? 'Yes' : 'No'}</p>
-          <p>Current User: {currentUser ? 'Loaded' : 'Not Loaded'}</p>
-          <p>User Email: {currentUser?.email || 'Not Available'}</p>
-          <p>Report Types Selected: {formData.report_types.length}</p>
-          <p>Button Should Be: {(sendingNow || userLoading || !currentUser?.email || formData.report_types.length === 0) ? 'Disabled' : 'Enabled'}</p>
-        </div>
-      )}
     </div>
   );
 }

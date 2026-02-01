@@ -221,68 +221,6 @@ export const generateComplianceReport = (data, branding) => {
   return generateCompleteEmailTemplate(branding, content);
 };
 
-/**
- * Generates maintenance report content
- */
-export const generateMaintenanceReport = (data, branding) => {
-  const { summary, upcomingMaintenance, costAnalysis, dateRange } = data;
-
-  let content = `
-    <p style="color: #64748b; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      Fleet maintenance overview and upcoming service requirements for <strong>${dateRange || 'the selected period'}</strong>.
-    </p>
-
-    ${generateSectionHeader('Maintenance Summary', '🔧')}
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 30px;">
-      ${generateMetricCard('Upcoming Services', summary?.upcomingCount || 0, 'Next 30 days', branding?.primary_color)}
-      ${generateMetricCard('Overdue Services', summary?.overdueCount || 0, 'Require immediate attention', '#ef4444')}
-    </div>
-  `;
-
-  if (costAnalysis) {
-    content += `
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-        ${generateMetricCard('Monthly Average', `$${costAnalysis.monthlyAverage || 0}`, 'Maintenance costs', branding?.secondary_color)}
-        ${generateMetricCard('Total This Period', `$${costAnalysis.totalCost || 0}`, 'All maintenance', '#10b981')}
-      </div>
-    `;
-  }
-
-  if (upcomingMaintenance && upcomingMaintenance.length > 0) {
-    const urgentServices = upcomingMaintenance.filter(m => m.daysUntil <= 7);
-
-    if (urgentServices.length > 0) {
-      content += `
-        ${generateSectionHeader('Urgent - Next 7 Days', '🚨')}
-        ${generateDataTable(
-          ['Vehicle', 'Service Type', 'Due Date', 'Days Until Due'],
-          urgentServices.map(m => [
-            m.vehicleName || 'N/A',
-            m.serviceType || 'N/A',
-            m.dueDate || 'N/A',
-            `${m.daysUntil || 0} days`
-          ])
-        )}
-      `;
-    }
-
-    content += `
-      ${generateSectionHeader('All Upcoming Maintenance', '📅')}
-      ${generateDataTable(
-        ['Vehicle', 'Service Type', 'Due Date', 'Status'],
-        upcomingMaintenance.map(m => [
-          m.vehicleName || 'N/A',
-          m.serviceType || 'N/A',
-          m.dueDate || 'N/A',
-          m.status || 'Scheduled'
-        ])
-      )}
-    `;
-  }
-
-  return generateCompleteEmailTemplate(branding, content);
-};
 
 /**
  * Generates a combined "All Reports" email
@@ -290,7 +228,7 @@ export const generateMaintenanceReport = (data, branding) => {
 export const generateAllReportsEmail = (reports, branding) => {
   let content = `
     <p style="color: #64748b; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      Complete fleet management report including compliance, maintenance, and analytics insights.
+      Complete fleet management report including compliance and analytics insights.
     </p>
   `;
 
@@ -313,31 +251,6 @@ export const generateAllReportsEmail = (reports, branding) => {
     }
   }
 
-  // Maintenance Section
-  if (reports.maintenance) {
-    const { summary, upcomingMaintenance } = reports.maintenance;
-    content += `
-      ${generateSectionHeader('Maintenance Status', '🔧')}
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 30px;">
-        ${generateMetricCard('Upcoming Services', summary?.upcomingCount || 0, 'Next 30 days', branding?.secondary_color)}
-        ${generateMetricCard('Overdue Services', summary?.overdueCount || 0, 'Need attention', '#ef4444')}
-      </div>
-
-      ${upcomingMaintenance && upcomingMaintenance.length > 0 ?
-        generateDataTable(
-          ['Vehicle', 'Service Type', 'Due Date', 'Days Until'],
-          upcomingMaintenance.slice(0, 5).map(m => [
-            m.vehicleName || 'N/A',
-            m.serviceType || 'N/A',
-            m.dueDate || 'N/A',
-            `${m.daysUntil || 0} days`
-          ])
-        )
-        : '<p style="color: #64748b; font-style: italic;">No upcoming maintenance scheduled</p>'
-      }
-    `;
-  }
 
   // Cost Analysis Section
   if (reports.costs) {
@@ -346,8 +259,8 @@ export const generateAllReportsEmail = (reports, branding) => {
       ${generateSectionHeader('Cost Analysis', '💰')}
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-        ${generateMetricCard('Monthly Average', `$${summary?.monthlyAverage || 0}`, 'Maintenance costs', branding?.primary_color)}
-        ${generateMetricCard('This Period', `$${summary?.totalCost || 0}`, 'Total maintenance', '#10b981')}
+        ${generateMetricCard('Monthly Average', `$${summary?.monthlyAverage || 0}`, 'Costs', branding?.primary_color)}
+        ${generateMetricCard('This Period', `$${summary?.totalCost || 0}`, 'Total costs', '#10b981')}
       </div>
     `;
   }

@@ -88,23 +88,9 @@ export function exportVehicleComplianceReport(vehicles, dateRange) {
   return exportToExcel(data, 'vehicle_compliance_report', 'Compliance');
 }
 
-// Export maintenance report
-export function exportMaintenanceReport(maintenanceRecords) {
-  const data = maintenanceRecords.map(record => ({
-    'Vehicle Name': record.vehicle_name || 'Unknown',
-    'Service Type': record.service_type || 'N/A',
-    'Service Date': record.service_date ? moment(record.service_date).format('YYYY-MM-DD') : 'N/A',
-    'Next Service Date': record.next_service_date ? moment(record.next_service_date).format('YYYY-MM-DD') : 'N/A',
-    'Cost': record.cost ? `$${record.cost.toFixed(2)}` : '$0.00',
-    'Description': record.description || '',
-    'Status': record.status || 'Completed',
-  }));
-
-  return exportToExcel(data, 'maintenance_report', 'Maintenance');
-}
 
 // Export comprehensive fleet report (multiple sheets)
-export function exportComprehensiveFleetReport(vehicles, scans, maintenanceRecords) {
+export function exportComprehensiveFleetReport(vehicles, scans) {
   const sheets = [
     {
       name: 'Vehicle Summary',
@@ -128,19 +114,6 @@ export function exportComprehensiveFleetReport(vehicles, scans, maintenanceRecor
       }))
     }
   ];
-
-  if (maintenanceRecords && maintenanceRecords.length > 0) {
-    sheets.push({
-      name: 'Maintenance',
-      data: maintenanceRecords.map(m => ({
-        'Vehicle': m.vehicle_name || 'Unknown',
-        'Service Type': m.service_type || 'N/A',
-        'Service Date': m.service_date ? moment(m.service_date).format('YYYY-MM-DD') : 'N/A',
-        'Cost': m.cost ? `$${m.cost.toFixed(2)}` : '$0.00',
-        'Description': m.description || '',
-      }))
-    });
-  }
 
   return exportMultiSheetExcel(sheets, 'fleet_report');
 }

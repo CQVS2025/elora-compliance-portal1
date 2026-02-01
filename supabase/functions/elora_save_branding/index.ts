@@ -1,10 +1,13 @@
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
-import { createSupabaseAdminClient } from '../_shared/supabase.ts';
-import { v4 as uuidv4 } from 'https://esm.sh/uuid@9.0.0';
+import { createSupabaseAdminClient, createSupabaseClient } from '../_shared/supabase.ts';
 
 /**
  * Save Client Branding Function
  * Creates or updates branding settings for a company
+ * 
+ * Access Control:
+ * - Super Admins: Can manage branding for ANY company
+ * - Admins: Can ONLY manage branding for THEIR OWN company
  */
 
 Deno.serve(async (req) => {
@@ -13,7 +16,50 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse;
 
   try {
+    // Verify authentication and get user profile
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({
+        error: 'Missing authorization header',
+        success: false
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const supabaseClient = createSupabaseClient(req);
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({
+        error: 'Invalid or expired token',
+        success: false
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Get user profile to check role and company
     const supabase = createSupabaseAdminClient();
+    const { data: userProfile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('role, company_id')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !userProfile) {
+      return new Response(JSON.stringify({
+        error: 'User profile not found',
+        success: false
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const body = await req.json();
     const {
       id,
@@ -23,35 +69,6 @@ Deno.serve(async (req) => {
       logo_url,
       primary_color,
       secondary_color,
-      // Login branding
-      login_background_url,
-      login_background_color,
-      login_tagline,
-      login_custom_css,
-      login_logo_position,
-      // Email branding
-      email_header_html,
-      email_footer_html,
-      email_accent_color,
-      email_font_family,
-      email_from_name,
-      email_reply_to,
-      // Custom domain
-      custom_domain,
-      // PDF branding
-      pdf_logo_url,
-      pdf_header_html,
-      pdf_footer_html,
-      pdf_accent_color,
-      pdf_include_cover_page,
-      pdf_cover_page_html,
-      // Additional
-      favicon_url,
-      app_name,
-      support_email,
-      support_phone,
-      terms_url,
-      privacy_url,
     } = body;
 
     // Validate required fields
@@ -61,6 +78,31 @@ Deno.serve(async (req) => {
         success: false
       }), {
         status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Access Control: Enforce company restrictions
+    const isSuperAdmin = userProfile.role === 'super_admin';
+    const isAdmin = userProfile.role === 'admin';
+
+    if (!isSuperAdmin && !isAdmin) {
+      return new Response(JSON.stringify({
+        error: 'Insufficient permissions. Only admins can manage branding.',
+        success: false
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Admins can ONLY manage their own company's branding
+    if (isAdmin && userProfile.company_id !== company_id) {
+      return new Response(JSON.stringify({
+        error: 'Access denied. You can only manage branding for your own company.',
+        success: false
+      }), {
+        status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -75,48 +117,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Only include fields that exist in the client_branding table schema
     const brandingData: Record<string, any> = {
       company_id,
       company_name: company_name || 'ELORA Fleet',
       logo_url: logo_url || null,
       primary_color: primary_color || '#7CB342',
       secondary_color: secondary_color || '#9CCC65',
-      login_background_url: login_background_url || null,
-      login_background_color: login_background_color || '#f8fafc',
-      login_tagline: login_tagline || null,
-      login_custom_css: login_custom_css || null,
-      login_logo_position: login_logo_position || 'center',
-      email_header_html: email_header_html || null,
-      email_footer_html: email_footer_html || null,
-      email_accent_color: email_accent_color || '#7CB342',
-      email_font_family: email_font_family || 'Arial, sans-serif',
-      email_from_name: email_from_name || null,
-      email_reply_to: email_reply_to || null,
-      pdf_logo_url: pdf_logo_url || null,
-      pdf_header_html: pdf_header_html || null,
-      pdf_footer_html: pdf_footer_html || null,
-      pdf_accent_color: pdf_accent_color || '#7CB342',
-      pdf_include_cover_page: pdf_include_cover_page ?? true,
-      pdf_cover_page_html: pdf_cover_page_html || null,
-      favicon_url: favicon_url || null,
-      app_name: app_name || null,
-      support_email: support_email || null,
-      support_phone: support_phone || null,
-      terms_url: terms_url || null,
-      privacy_url: privacy_url || null,
     };
-
-    // Handle custom domain - generate verification token if new domain
-    if (custom_domain) {
-      brandingData.custom_domain = custom_domain;
-
-      // Check if this is a new domain
-      if (!id) {
-        brandingData.custom_domain_verified = false;
-        brandingData.custom_domain_verification_token = `elora-verify-${uuidv4().split('-')[0]}`;
-        brandingData.custom_domain_ssl_status = 'pending';
-      }
-    }
 
     let result;
 
@@ -143,6 +151,24 @@ Deno.serve(async (req) => {
 
       if (error) throw error;
       result = data;
+    }
+
+    // Also update the companies table to keep branding in sync
+    // This ensures company cards and other UI elements use the latest branding
+    const { error: companyUpdateError } = await supabase
+      .from('companies')
+      .update({
+        name: company_name || null,
+        logo_url: logo_url || null,
+        primary_color: primary_color || null,
+        secondary_color: secondary_color || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', company_id);
+
+    if (companyUpdateError) {
+      console.warn('Failed to update companies table:', companyUpdateError);
+      // Don't fail the request if company update fails, just log it
     }
 
     return new Response(JSON.stringify({

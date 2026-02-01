@@ -1,6 +1,6 @@
 import React from 'react';
-import { Calendar, Lock, AlertCircle, Search } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Calendar, Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Select,
   SelectContent,
@@ -26,14 +26,19 @@ export default function AppleFilterSection({
   activePeriod,
   setActivePeriod,
   lockCustomerFilter = false,
+  lockSiteFilter = false,
   restrictedCustomerName = null,
+  restrictedSiteName = null,
+  isFiltering = false,
+  isDataLoading = false,
 }) {
+  const showLoading = isFiltering || isDataLoading;
   const periods = ['Today', 'Week', 'Month'];
 
   return (
     <div className="space-y-4">
       {/* Restricted User Banner */}
-      {lockCustomerFilter && restrictedCustomerName && (
+      {(lockCustomerFilter && restrictedCustomerName) || (lockSiteFilter && restrictedSiteName) ? (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -46,14 +51,20 @@ export default function AppleFilterSection({
           <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
             <h3 className="font-semibold text-amber-900 dark:text-amber-200 mb-0.5">
-              Viewing {restrictedCustomerName} Only
+              {lockSiteFilter && restrictedSiteName 
+                ? `Viewing ${restrictedSiteName} Only`
+                : `Viewing ${restrictedCustomerName} Only`
+              }
             </h3>
             <p className="text-sm text-amber-700 dark:text-amber-400/80">
-              Your account is configured to view data for this customer.
+              {lockSiteFilter 
+                ? 'Your account is configured to view data for this site only.'
+                : 'Your account is configured to view data for this customer.'
+              }
             </p>
           </div>
         </motion.div>
-      )}
+      ) : null}
 
       {/* Filter Controls */}
       <div className="flex flex-wrap items-center gap-3">
@@ -92,28 +103,38 @@ export default function AppleFilterSection({
         </div>
 
         {/* Site Dropdown */}
-        <Select value={selectedSite} onValueChange={setSelectedSite}>
-          <SelectTrigger
-            className="
-              h-10 px-4 rounded-xl min-w-[160px]
-              bg-white/80 dark:bg-zinc-900/80
-              border border-gray-200/50 dark:border-zinc-800/50
-              backdrop-blur-xl
-              hover:bg-white dark:hover:bg-zinc-900
-              transition-colors
-            "
+        <div className="relative">
+          <Select 
+            value={selectedSite} 
+            onValueChange={setSelectedSite}
+            disabled={lockSiteFilter}
           >
-            <SelectValue placeholder="All Sites" />
-          </SelectTrigger>
-          <SelectContent className="rounded-xl border-gray-200/50 dark:border-zinc-800">
-            <SelectItem value="all" className="rounded-lg">All Sites</SelectItem>
-            {sites.filter(site => site.name !== 'All Sites').map((site) => (
-              <SelectItem key={site.id} value={site.id} className="rounded-lg">
-                {site.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <SelectTrigger
+              className={`
+                h-10 px-4 rounded-xl min-w-[160px]
+                bg-white/80 dark:bg-zinc-900/80
+                border border-gray-200/50 dark:border-zinc-800/50
+                backdrop-blur-xl
+                hover:bg-white dark:hover:bg-zinc-900
+                transition-colors
+                ${lockSiteFilter ? 'opacity-60 cursor-not-allowed' : ''}
+              `}
+            >
+              <SelectValue placeholder="All Sites" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-gray-200/50 dark:border-zinc-800">
+              <SelectItem value="all" className="rounded-lg">All Sites</SelectItem>
+              {sites.filter(site => site.name !== 'All Sites').map((site) => (
+                <SelectItem key={site.id} value={site.id} className="rounded-lg">
+                  {site.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {lockSiteFilter && (
+            <Lock className="w-4 h-4 text-amber-500 absolute right-10 top-1/2 -translate-y-1/2 pointer-events-none" />
+          )}
+        </div>
 
         {/* Date Range */}
         <div className="
@@ -144,12 +165,32 @@ export default function AppleFilterSection({
           />
         </div>
 
-        {/* Period Selector */}
-        <PeriodSelector
-          periods={periods}
-          activePeriod={activePeriod}
-          onChange={setActivePeriod}
-        />
+        {/* Unified loading indicator – pill with fade and subtle pulse */}
+        <AnimatePresence mode="wait">
+          {showLoading && (
+            <motion.div
+              key="loading-pill"
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -6 }}
+              transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="
+                relative flex items-center gap-2.5 px-4 py-2 rounded-full
+                bg-slate-100 dark:bg-zinc-800/95
+                border border-slate-200/80 dark:border-zinc-700/80
+                backdrop-blur-sm
+              "
+            >
+              <Loader2
+                className="w-4 h-4 text-slate-500 dark:text-zinc-400 animate-spin flex-shrink-0"
+                strokeWidth={2.25}
+              />
+              <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">
+                {isDataLoading && !isFiltering ? 'Loading data…' : 'Updating…'}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -1,3 +1,6 @@
+/**
+ * ACATC /api/scans supports: fromDate, toDate, customer, site, vehicle, device, status, page, pageSize. We pass them.
+ */
 Deno.serve(async (req) => {
   try {
     const apiKey = Deno.env.get("ELORA_API_KEY");

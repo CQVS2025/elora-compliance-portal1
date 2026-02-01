@@ -83,9 +83,16 @@ Deno.serve(async (req) => {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    // Fetch all necessary data
-    const vehicles = await base44.asServiceRole.entities.Vehicle.list('-updated_date', 1000);
-    const maintenanceRecords = await base44.asServiceRole.entities.Maintenance.list('-service_date', 1000);
+    // Fetch all necessary data from Elora API (NO LIMITS)
+    console.log('Fetching vehicles from Elora API...');
+    const vehiclesResponse = await base44.asServiceRole.functions.invoke('elora_vehicles', {
+      status: '1,2' // Get all vehicles (active + inactive)
+    });
+    const vehicles = vehiclesResponse?.data || [];
+    console.log(`Fetched ${vehicles.length} vehicles from Elora API`);
+    
+    // Note: Maintenance records are not available in Elora API (maintenance features removed)
+    const maintenanceRecords = [];
 
     // Filter data based on user permissions
     let userVehicles = vehicles;

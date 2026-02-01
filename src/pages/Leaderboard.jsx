@@ -1,48 +1,43 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabaseClient } from "@/api/supabaseClient";
 import { Trophy, Medal, Star, TrendingUp, Flame, Award, Target, Zap, Crown, ArrowLeft, Building2, MapPin, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import moment from 'moment';
 import confetti from 'canvas-confetti';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-
-async function fetchVehicles({ customerId, siteId } = {}) {
-  const params = {};
-  if (customerId && customerId !== 'all') params.customer_id = customerId;
-  if (siteId && siteId !== 'all') params.site_id = siteId;
-  const response = await supabaseClient.elora.vehicles(params);
-  return response?.data ?? response ?? [];
-}
-
-async function fetchScans({ customerId, siteId } = {}) {
-  const startDate = moment().startOf('month').format('YYYY-MM-DD');
-  const endDate = moment().format('YYYY-MM-DD');
-  const params = { start_date: startDate, end_date: endDate };
-  if (customerId && customerId !== 'all') params.customer_id = customerId;
-  if (siteId && siteId !== 'all') params.site_id = siteId;
-  const response = await supabaseClient.elora.scans(params);
-  return response?.data ?? response ?? [];
-}
+import { vehiclesOptions, scansOptions } from '@/query/options';
+import { usePermissions } from '@/components/auth/PermissionGuard';
 
 export default function Leaderboard() {
   const [timeframe, setTimeframe] = useState('month');
   const [celebratedTop, setCelebratedTop] = useState(false);
+  const permissions = usePermissions();
+  const companyId = permissions.userProfile?.company_id;
 
-  // Get filters from URL params
   const urlParams = new URLSearchParams(window.location.search);
   const customerFilter = urlParams.get('customer') || 'all';
   const siteFilter = urlParams.get('site') || 'all';
 
+  const startDate = moment().startOf('month').format('YYYY-MM-DD');
+  const endDate = moment().format('YYYY-MM-DD');
+
   const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
-    queryKey: ['vehicles', customerFilter, siteFilter],
-    queryFn: () => fetchVehicles({ customerId: customerFilter, siteId: siteFilter }),
+    ...vehiclesOptions(companyId, {
+      customerId: customerFilter !== 'all' ? customerFilter : undefined,
+      siteId: siteFilter !== 'all' ? siteFilter : undefined,
+    }),
+    placeholderData: (prev) => prev,
   });
 
   const { data: scans = [], isLoading: scansLoading } = useQuery({
-    queryKey: ['scans', timeframe, customerFilter, siteFilter],
-    queryFn: () => fetchScans({ customerId: customerFilter, siteId: siteFilter }),
+    ...scansOptions(companyId, {
+      startDate,
+      endDate,
+      customerId: customerFilter !== 'all' ? customerFilter : undefined,
+      siteId: siteFilter !== 'all' ? siteFilter : undefined,
+    }),
+    placeholderData: (prev) => prev,
   });
 
   const calculateBadges = (driver) => {

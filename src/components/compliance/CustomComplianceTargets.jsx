@@ -1,64 +1,24 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Target, Save, Loader2, Plus, Trash2 } from 'lucide-react';
-import { supabaseClient } from "@/api/supabaseClient";
 import { toast } from 'sonner';
 import { Label } from "@/components/ui/label";
 
-async function fetchComplianceTargets(customerRef) {
-  try {
-    const response = await supabaseClient.compliance.getTargets({ customerRef });
-    return response || [];
-  } catch (error) {
-    console.error('Error fetching compliance targets:', error);
-    return [];
-  }
-}
+// NEW: Import query options and mutations
+import { complianceTargetsOptions } from '@/query/options';
+import { useSaveComplianceTarget, useDeleteComplianceTarget } from '@/query/mutations';
 
-async function saveComplianceTarget(target) {
-  const response = await supabaseClient.compliance.saveTarget(target);
-  return response;
-}
-
-async function deleteComplianceTarget(targetId) {
-  const response = await supabaseClient.compliance.deleteTarget(targetId);
-  return response;
-}
-
-export default function CustomComplianceTargets({ customerRef, vehicles, sites }) {
-  const queryClient = useQueryClient();
+export default function CustomComplianceTargets({ customerRef, vehicles, sites, userEmail }) {
   const [editingTarget, setEditingTarget] = useState(null);
 
-  const { data: targets = [], isLoading } = useQuery({
-    queryKey: ['complianceTargets', customerRef],
-    queryFn: () => fetchComplianceTargets(customerRef),
-    enabled: !!customerRef && customerRef !== 'all',
-  });
+  // NEW: Use queryOptions with user-scoped key
+  const { data: targets = [], isLoading } = useQuery(
+    complianceTargetsOptions(userEmail, customerRef)
+  );
 
-  const saveMutation = useMutation({
-    mutationFn: saveComplianceTarget,
-    onSuccess: () => {
-      queryClient.invalidateQueries(['complianceTargets', customerRef]);
-      toast.success('Compliance target saved');
-      setEditingTarget(null);
-    },
-    onError: (error) => {
-      console.error('Error saving target:', error);
-      toast.error('Failed to save target');
-    }
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteComplianceTarget,
-    onSuccess: () => {
-      queryClient.invalidateQueries(['complianceTargets', customerRef]);
-      toast.success('Compliance target deleted');
-    },
-    onError: (error) => {
-      console.error('Error deleting target:', error);
-      toast.error('Failed to delete target');
-    }
-  });
+  // NEW: Use mutation hooks
+  const saveMutation = useSaveComplianceTarget();
+  const deleteMutation = useDeleteComplianceTarget();
 
   const handleAddNew = () => {
     setEditingTarget({
@@ -75,10 +35,23 @@ export default function CustomComplianceTargets({ customerRef, vehicles, sites }
       return;
     }
 
-    saveMutation.mutate({
-      ...editingTarget,
-      customerRef
-    });
+    saveMutation.mutate(
+      {
+        ...editingTarget,
+        customerRef,
+        userEmail,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Compliance target saved');
+          setEditingTarget(null);
+        },
+        onError: (error) => {
+          console.error('Error saving target:', error);
+          toast.error('Failed to save target');
+        },
+      }
+    );
   };
 
   if (!customerRef || customerRef === 'all') {

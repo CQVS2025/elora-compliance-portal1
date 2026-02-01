@@ -1,3 +1,7 @@
+/**
+ * ACATC /api/refills supports: fromDate, toDate, customerRef/customer, siteRef/site, productRef/product, status.
+ * We pass fromDate, toDate, customerRef, siteRef.
+ */
 const ELORA_API_KEY = Deno.env.get("ELORA_API_KEY");
 
 Deno.serve(async (req) => {
@@ -7,13 +11,14 @@ Deno.serve(async (req) => {
 
   const { fromDate, toDate, customerRef, siteRef } = await req.json();
 
-  // Build query params
+  // Build query params - NO PAGINATION LIMITS
   const params = new URLSearchParams();
   if (fromDate) params.append('fromDate', fromDate);
   if (toDate) params.append('toDate', toDate);
   if (customerRef && customerRef !== 'all') params.append('customerRef', customerRef);
   if (siteRef && siteRef !== 'all') params.append('siteRef', siteRef);
-  params.append('pageSize', '1000');
+  // Use 'export=all' to get ALL refills without pagination
+  params.append('export', 'all');
 
   try {
     params.append('api_key', ELORA_API_KEY);

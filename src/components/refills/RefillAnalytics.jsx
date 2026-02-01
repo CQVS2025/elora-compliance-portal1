@@ -42,25 +42,16 @@ import {
 } from 'recharts';
 import moment from 'moment';
 
-export default function RefillAnalytics({ refills, scans, sites, selectedCustomer, selectedSite }) {
+export default function RefillAnalytics({ refills, scans, sites, selectedCustomer, selectedSite, dateRange }) {
   const [productFilter, setProductFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [dateFrom, setDateFrom] = useState(moment().subtract(30, 'days').format('YYYY-MM-DD'));
-  const [dateTo, setDateTo] = useState(moment().format('YYYY-MM-DD'));
-  const [customerFilter, setCustomerFilter] = useState('all');
-  const [siteFilter, setSiteFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  // Get unique values for filters
-  const uniqueCustomers = useMemo(() => {
-    const customers = new Set(refills?.map(r => r.customer) || []);
-    return ['all', ...Array.from(customers).sort()];
-  }, [refills]);
+  const itemsPerPage = 50; // Match client system (50 per page)
 
-  const uniqueSites = useMemo(() => {
-    const sites = new Set(refills?.map(r => r.site) || []);
-    return ['all', ...Array.from(sites).sort()];
-  }, [refills]);
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCustomer, selectedSite, productFilter, statusFilter]);
 
   const uniqueProducts = useMemo(() => {
     const products = new Set(refills?.map(r => r.productName) || []);
@@ -72,24 +63,61 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
     return ['all', ...Array.from(statuses).sort()];
   }, [refills]);
 
-  // Apply filters to refills
+  // Apply filters to refills (NO date filter - show all refills including future scheduled)
   const filteredRefills = useMemo(() => {
-    if (!refills?.length) return [];
+    console.log('🔍 REFILL FILTERING START:', {
+      totalRefills: refills?.length || 0,
+      selectedCustomer,
+      selectedSite,
+      productFilter,
+      statusFilter
+    });
     
-    return refills.filter(refill => {
-      const refillDate = moment(refill.date);
-      const matchesDate = refillDate.isBetween(dateFrom, dateTo, 'day', '[]');
-      const matchesCustomer = customerFilter === 'all' || refill.customer === customerFilter;
-      const matchesSite = siteFilter === 'all' || refill.site === siteFilter;
+    if (!refills?.length) {
+      console.log('⚠️ NO REFILLS DATA');
+      return [];
+    }
+    
+    const filtered = refills.filter(refill => {
+      // NO date filter - show ALL refills (past, present, and future scheduled)
+      // This matches the client's original system behavior
+      
+      // Customer filter (use Dashboard selectedCustomer)
+      const matchesCustomer = !selectedCustomer || selectedCustomer === 'all' || refill.customer === selectedCustomer;
+      
+      // Site filter (use Dashboard selectedSite)
+      const matchesSite = !selectedSite || selectedSite === 'all' || refill.site === selectedSite;
+      
+      // Product and status filters (component-specific)
       const matchesProduct = productFilter === 'all' || refill.productName === productFilter;
       const matchesStatus = statusFilter === 'all' || refill.status === statusFilter;
       
-      return matchesDate && matchesCustomer && matchesSite && matchesProduct && matchesStatus;
+      return matchesCustomer && matchesSite && matchesProduct && matchesStatus;
     });
-  }, [refills, dateFrom, dateTo, customerFilter, siteFilter, productFilter, statusFilter]);
+    
+    console.log('✅ REFILL FILTERING COMPLETE:', {
+      totalRefills: refills.length,
+      filteredCount: filtered.length,
+      filterBreakdown: {
+        byCustomer: refills.filter(r => !selectedCustomer || selectedCustomer === 'all' || r.customer === selectedCustomer).length,
+        bySite: refills.filter(r => !selectedSite || selectedSite === 'all' || r.site === selectedSite).length,
+        byProduct: refills.filter(r => productFilter === 'all' || r.productName === productFilter).length,
+        byStatus: refills.filter(r => statusFilter === 'all' || r.status === statusFilter).length
+      },
+      uniqueCustomers: [...new Set(refills.map(r => r.customer))].length,
+      uniqueSites: [...new Set(refills.map(r => r.site))].length,
+      uniqueProducts: [...new Set(refills.map(r => r.productName))].length,
+      uniqueStatuses: [...new Set(refills.map(r => r.status))].length
+    });
+    
+    return filtered;
+  }, [refills, selectedCustomer, selectedSite, productFilter, statusFilter]);
 
   const analysis = useMemo(() => {
-    if (!filteredRefills?.length || !scans?.length) return null;
+    if (!filteredRefills?.length) return null;
+
+    // Scans are optional: full intelligence needs wash data; refill-only analysis still runs
+    const safeScans = scans && Array.isArray(scans) ? scans : [];
 
     // Group refills by site - only count delivered or confirmed refills
     const refillsBySite = {};
@@ -122,9 +150,9 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
       }
     });
 
-    // Group scans by site
+    // Group scans by site (empty when no wash data in period)
     const scansBySite = {};
-    scans.forEach(scan => {
+    safeScans.forEach(scan => {
       const siteName = scan.site_name || scan.siteName;
       if (!scansBySite[siteName]) {
         scansBySite[siteName] = [];
@@ -373,7 +401,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
     const last90Days = moment().subtract(90, 'days');
     const dailyConsumption = {};
     
-    scans.forEach(scan => {
+    safeScans.forEach(scan => {
       const scanDate = moment(scan.timestamp);
       if (scanDate.isAfter(last90Days)) {
         const dateKey = scanDate.format('YYYY-MM-DD');
@@ -470,16 +498,9 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
   const handleClearFilters = () => {
     setProductFilter('all');
     setStatusFilter('all');
-    setCustomerFilter('all');
-    setSiteFilter('all');
-    setDateFrom(moment().subtract(30, 'days').format('YYYY-MM-DD'));
-    setDateTo(moment().format('YYYY-MM-DD'));
   };
 
-  const hasActiveFilters = productFilter !== 'all' || statusFilter !== 'all' || 
-    customerFilter !== 'all' || siteFilter !== 'all' ||
-    dateFrom !== moment().subtract(30, 'days').format('YYYY-MM-DD') ||
-    dateTo !== moment().format('YYYY-MM-DD');
+  const hasActiveFilters = productFilter !== 'all' || statusFilter !== 'all';
 
   if (!analysis) {
     return (
@@ -508,6 +529,40 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
 
   return (
     <div className="space-y-6">
+      {/* DEBUG INFO CARD */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-blue-900">
+            <Activity className="w-5 h-5" />
+            Refills Data Debug Info
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="bg-white p-3 rounded-lg border border-blue-200">
+              <div className="text-xs text-slate-600 mb-1">Total Refills (API)</div>
+              <div className="text-2xl font-bold text-blue-900">{refills?.length || 0}</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-blue-200">
+              <div className="text-xs text-slate-600 mb-1">After Filters</div>
+              <div className="text-2xl font-bold text-blue-900">{filteredRefills?.length || 0}</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-blue-200">
+              <div className="text-xs text-slate-600 mb-1">Unique Customers</div>
+              <div className="text-2xl font-bold text-blue-900">{[...new Set(refills?.map(r => r.customer) || [])].length}</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-blue-200">
+              <div className="text-xs text-slate-600 mb-1">Unique Sites</div>
+              <div className="text-2xl font-bold text-blue-900">{[...new Set(refills?.map(r => r.site) || [])].length}</div>
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-slate-600">
+            <strong>Expected:</strong> 3782 refills from client system | 
+            <strong className="ml-2">Current Filters:</strong> Customer: {selectedCustomer || 'all'}, Site: {selectedSite || 'all'}, Product: {productFilter}, Status: {statusFilter}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Filters */}
       <Card>
         <CardHeader>
@@ -530,61 +585,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {/* Date Range */}
-            <div>
-              <label className="text-xs text-slate-600 mb-1 block">From Date</label>
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-slate-600 mb-1 block">To Date</label>
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="w-full"
-              />
-            </div>
-
-            {/* Customer Filter */}
-            <div>
-              <label className="text-xs text-slate-600 mb-1 block">Customer</label>
-              <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Customers" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueCustomers.map(customer => (
-                    <SelectItem key={customer} value={customer}>
-                      {customer === 'all' ? 'All Customers' : customer}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Site Filter */}
-            <div>
-              <label className="text-xs text-slate-600 mb-1 block">Site</label>
-              <Select value={siteFilter} onValueChange={setSiteFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Sites" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueSites.map(site => (
-                    <SelectItem key={site} value={site}>
-                      {site === 'all' ? 'All Sites' : site}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Product Filter */}
             <div>
               <label className="text-xs text-slate-600 mb-1 block">Product</label>
@@ -1014,6 +1015,118 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* ALL REFILLS TABLE - Matching Client System */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Droplet className="w-5 h-5 text-[#7CB342]" />
+            All Refills ({filteredRefills.length} total)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b-2 border-slate-200">
+                <tr>
+                  <th className="text-left p-3 font-semibold text-slate-700">Ref</th>
+                  <th className="text-left p-3 font-semibold text-slate-700">Customer</th>
+                  <th className="text-left p-3 font-semibold text-slate-700">Site</th>
+                  <th className="text-left p-3 font-semibold text-slate-700">Area Manager</th>
+                  <th className="text-left p-3 font-semibold text-slate-700">Date</th>
+                  <th className="text-left p-3 font-semibold text-slate-700">Invoice No</th>
+                  <th className="text-left p-3 font-semibold text-slate-700">Product</th>
+                  <th className="text-right p-3 font-semibold text-slate-700">Start (L)</th>
+                  <th className="text-right p-3 font-semibold text-slate-700">New Total (L)</th>
+                  <th className="text-right p-3 font-semibold text-slate-700">Delivered (L)</th>
+                  <th className="text-right p-3 font-semibold text-slate-700">Rate ($)</th>
+                  <th className="text-right p-3 font-semibold text-slate-700">Total (Ex.GST)</th>
+                  <th className="text-left p-3 font-semibold text-slate-700">PO</th>
+                  <th className="text-left p-3 font-semibold text-slate-700">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRefills
+                  .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                  .map((refill, index) => (
+                    <tr 
+                      key={refill.ref || index} 
+                      className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                    >
+                      <td className="p-3 font-medium text-blue-600">{refill.ref}</td>
+                      <td className="p-3">{refill.customer}</td>
+                      <td className="p-3">{refill.site}</td>
+                      <td className="p-3">{refill.areaManager || '---'}</td>
+                      <td className="p-3">{moment(refill.date).format('ddd, DD MMM, YYYY')}</td>
+                      <td className="p-3">{refill.invoiceNo || '---'}</td>
+                      <td className="p-3">{refill.product || refill.productName}</td>
+                      <td className="p-3 text-right">{refill.startLitres?.toFixed(1) || '0.0'}</td>
+                      <td className="p-3 text-right">{refill.newTotalLitres?.toFixed(1) || '0.0'}</td>
+                      <td className="p-3 text-right">{refill.deliveredLitres?.toFixed(1) || '0.0'}</td>
+                      <td className="p-3 text-right">${refill.ratePerLitre?.toFixed(2) || '0.00'}</td>
+                      <td className="p-3 text-right font-semibold">${refill.totalExGst?.toFixed(2) || '0.00'}</td>
+                      <td className="p-3">{refill.po || '---'}</td>
+                      <td className="p-3">
+                        <Badge 
+                          variant={
+                            refill.status === 'Scheduled' ? 'secondary' : 
+                            refill.status === 'Confirmed' ? 'default' : 
+                            'outline'
+                          }
+                        >
+                          {refill.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+              <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
+                <tr>
+                  <td colSpan="7" className="p-3 text-right">Totals (Page):</td>
+                  <td className="p-3 text-right">
+                    {filteredRefills
+                      .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                      .reduce((sum, r) => sum + (r.startLitres || 0), 0)
+                      .toFixed(1)}
+                  </td>
+                  <td className="p-3 text-right">
+                    {filteredRefills
+                      .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                      .reduce((sum, r) => sum + (r.newTotalLitres || 0), 0)
+                      .toFixed(1)}
+                  </td>
+                  <td className="p-3 text-right">
+                    {filteredRefills
+                      .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                      .reduce((sum, r) => sum + (r.deliveredLitres || 0), 0)
+                      .toFixed(1)}
+                  </td>
+                  <td className="p-3"></td>
+                  <td className="p-3 text-right">
+                    ${filteredRefills
+                      .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                      .reduce((sum, r) => sum + (r.totalExGst || 0), 0)
+                      .toFixed(2)}
+                  </td>
+                  <td colSpan="2" className="p-3"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          
+          {/* Pagination */}
+          <div className="mt-4">
+            <DataPagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(filteredRefills.length / itemsPerPage)}
+              onPageChange={setCurrentPage}
+              totalItems={filteredRefills.length}
+              itemsPerPage={itemsPerPage}
+              itemName="refills"
+            />
+          </div>
         </CardContent>
       </Card>
 

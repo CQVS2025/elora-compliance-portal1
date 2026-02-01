@@ -12,7 +12,6 @@ const DEFAULT_WIDGETS = [
   { id: 'vehicleTable', name: 'Vehicle Table', enabled: true, order: 5 },
   { id: 'washAnalytics', name: 'Wash Analytics', enabled: true, order: 6 },
   { id: 'performanceChart', name: 'Performance Chart', enabled: true, order: 7 },
-  { id: 'washPatterns', name: 'Wash Patterns', enabled: true, order: 8 },
 ];
 
 export function useDashboardCustomization(userEmail) {

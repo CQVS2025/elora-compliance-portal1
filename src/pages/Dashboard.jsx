@@ -1,41 +1,19 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Truck, CheckCircle, Droplet, Users, Loader2, Trophy, ChevronRight, AlertTriangle, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import moment from 'moment';
-import { supabaseClient } from "@/api/supabaseClient";
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
-async function fetchDashboardData({ customerId, siteId, startDate, endDate } = {}) {
-  const params = {};
-  if (customerId && customerId !== 'all') params.customer_id = customerId;
-  if (siteId && siteId !== 'all') params.site_id = siteId;
-  if (startDate) params.start_date = startDate;
-  if (endDate) params.end_date = endDate;
-
-  const response = await supabaseClient.elora.dashboard(params);
-  return response?.data ?? response;
-}
-
-async function fetchCustomers() {
-  const response = await supabaseClient.elora.customers();
-  const data = response?.data ?? response ?? [];
-  return data.map(c => ({
-    id: c.ref,
-    name: c.name
-  }));
-}
-
-async function fetchSites() {
-  const response = await supabaseClient.elora.sites({});
-  const data = response?.data ?? response ?? [];
-  return data.map(s => ({
-    id: s.ref,
-    name: s.siteName,
-    customer_ref: s.customerRef
-  }));
-}
+// NEW: Import TanStack Query options factories
+import {
+  customersOptions,
+  sitesOptions,
+  vehiclesOptions,
+  dashboardOptions,
+  refillsOptions,
+} from '@/query/options';
 
 // Import Apple-style components
 import AppleHeader from '@/components/layout/AppleHeader';
@@ -50,23 +28,16 @@ import VehiclePerformanceChart from '@/components/dashboard/VehiclePerformanceCh
 import SiteManagement from '@/components/sites/SiteManagement';
 import ReportsDashboard from '@/components/reports/ReportsDashboard';
 import EmailReportSettings from '@/components/reports/EmailReportSettings';
-import RoleManagement from '@/components/admin/RoleManagement';
-import MultiTenantConfig from '@/components/admin/MultiTenantConfig';
-import PermissionsManagement from '@/components/admin/PermissionsManagement';
 import BrandingManagement from '@/components/admin/BrandingManagement';
 import UsageCosts from '@/components/costs/UsageCosts';
 import MobileDashboard from './MobileDashboard';
 import DeviceHealth from '@/components/devices/DeviceHealth';
 import CostForecast from '@/components/analytics/CostForecast';
-import WashPatternAnalytics from '@/components/analytics/WashPatternAnalytics';
 import RefillAnalytics from '@/components/refills/RefillAnalytics';
-import RecentActivityFeed from '@/components/dashboard/RecentActivityFeed';
 import FavoriteVehicles from '@/components/dashboard/FavoriteVehicles';
 import DashboardCustomizer from '@/components/dashboard/DashboardCustomizer';
-import EmailDigestPreferences from '@/components/settings/EmailDigestPreferences';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import CustomComplianceTargets from '@/components/compliance/CustomComplianceTargets';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePermissions, useFilteredData, useAvailableTabs } from '@/components/auth/PermissionGuard';
 
 // All available tabs (maintenance removed)
@@ -78,26 +49,94 @@ const ALL_TABS = [
   { value: 'sites', label: 'Sites' },
   { value: 'reports', label: 'Reports' },
   { value: 'email-reports', label: 'Email Reports' },
-  { value: 'users', label: 'Users' }
+  { value: 'branding', label: 'Branding' }
 ];
+
+// Default filter values - each tab gets its own copy, no mixing
+const getDefaultFilters = () => ({
+  selectedCustomer: 'all',
+  selectedSite: 'all',
+  dateRange: {
+    start: moment().startOf('month').format('YYYY-MM-DD'),
+    end: moment().format('YYYY-MM-DD')
+  },
+  activePeriod: 'Month'
+});
+
+// Date range for period preset
+const getDateRangeForPeriod = (period) => {
+  if (period === 'Today') {
+    return { start: moment().format('YYYY-MM-DD'), end: moment().format('YYYY-MM-DD') };
+  }
+  if (period === 'Week') {
+    return { start: moment().startOf('week').format('YYYY-MM-DD'), end: moment().format('YYYY-MM-DD') };
+  }
+  if (period === 'Month') {
+    return { start: moment().startOf('month').format('YYYY-MM-DD'), end: moment().format('YYYY-MM-DD') };
+  }
+  return null;
+};
+
+// Tabs that use filters (customer, site, date) - each has isolated filter state
+const FILTER_TABS = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
+
+// Email Reports shares filters with Compliance so the emailed report matches what the user sees
+const REPORT_FILTER_SOURCE = 'compliance';
 
 export default function Dashboard() {
   const permissions = usePermissions();
   const [isMobile, setIsMobile] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState('all');
-  const [selectedSite, setSelectedSite] = useState('all');
   const [showCustomizer, setShowCustomizer] = useState(false);
+
+  // Per-tab filter state - each tab has its own filters, no mixing
+  const [tabFilters, setTabFilters] = useState(() => {
+    const initial = {};
+    FILTER_TABS.forEach(tab => {
+      initial[tab] = getDefaultFilters();
+    });
+    return initial;
+  });
 
   // Use database-driven tab visibility from permissions
   const availableTabs = useAvailableTabs(ALL_TABS);
 
-  const [dateRange, setDateRange] = useState({
-    start: moment().startOf('month').format('YYYY-MM-DD'),
-    end: moment().format('YYYY-MM-DD')
-  });
-  const [activePeriod, setActivePeriod] = useState('Month');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('compliance');
+
+  // Get tenant context (company_id) from user profile for query keys
+  const companyId = permissions.userProfile?.company_id;
+
+  // Filter tab used for data queries (Email Reports uses Compliance filters so report matches dashboard)
+  const filterTabForData = activeTab === 'email-reports' ? REPORT_FILTER_SOURCE : activeTab;
+
+  // Current tab's filters - used for queries and display (isolated per tab)
+  const currentFilters = useMemo(() => {
+    const base = tabFilters[filterTabForData] || getDefaultFilters();
+    return { ...getDefaultFilters(), ...base };
+  }, [tabFilters, filterTabForData]);
+
+  const { selectedCustomer, selectedSite, dateRange, activePeriod } = currentFilters;
+
+  // Update current tab's filter (Email Reports updates Compliance so report stays in sync)
+  const updateTabFilter = useCallback((updates) => {
+    setTabFilters(prev => {
+      const tab = activeTab === 'email-reports' ? REPORT_FILTER_SOURCE : activeTab;
+      const current = prev[tab] || getDefaultFilters();
+      const next = { ...current, ...updates };
+      if (updates.selectedCustomer && updates.selectedCustomer !== current.selectedCustomer) {
+        next.selectedSite = 'all';
+      }
+      return { ...prev, [tab]: next };
+    });
+  }, [activeTab]);
+
+  const setSelectedCustomer = useCallback((v) => updateTabFilter({ selectedCustomer: v }), [updateTabFilter]);
+  const setSelectedSite = useCallback((v) => updateTabFilter({ selectedSite: v }), [updateTabFilter]);
+  const setDateRange = useCallback((v) => updateTabFilter({ dateRange: v, activePeriod: 'Custom' }), [updateTabFilter]);
+  const setActivePeriod = useCallback((period) => {
+    const range = getDateRangeForPeriod(period);
+    if (range) updateTabFilter({ activePeriod: period, dateRange: range });
+  }, [updateTabFilter]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -116,153 +155,221 @@ export default function Dashboard() {
     }
   }, [availableTabs, activeTab]);
 
-  useEffect(() => {
-    if (activePeriod === 'Today') {
-      setDateRange({
-        start: moment().format('YYYY-MM-DD'),
-        end: moment().format('YYYY-MM-DD')
-      });
-    } else if (activePeriod === 'Week') {
-      setDateRange({
-        start: moment().startOf('week').format('YYYY-MM-DD'),
-        end: moment().format('YYYY-MM-DD')
-      });
-    } else if (activePeriod === 'Month') {
-      setDateRange({
-        start: moment().startOf('month').format('YYYY-MM-DD'),
-        end: moment().format('YYYY-MM-DD')
-      });
-    }
-  }, [activePeriod]);
+  // NEW: Use TanStack Query options with tenant-aware keys
+  const { data: customers = [], isLoading: customersLoading, error: customersError } = useQuery(
+    customersOptions(companyId)
+  );
 
-  const { data: customers = [], isLoading: customersLoading, error: customersError } = useQuery({
-    queryKey: ['customers'],
-    queryFn: fetchCustomers,
-    retry: 1,
-    staleTime: 30000,
+  const { data: rawSites = [], isLoading: sitesLoading, error: sitesError } = useQuery(
+    sitesOptions(companyId)
+  );
+
+  // Fetch ALL vehicles with filters and placeholderData to prevent flashing
+  const { data: allVehicles = [], isLoading: vehiclesLoading, isFetching: vehiclesFetching, error: vehiclesError } = useQuery({
+    ...vehiclesOptions(companyId, {
+      customerId: selectedCustomer !== 'all' ? selectedCustomer : undefined,
+      siteId: selectedSite !== 'all' ? selectedSite : undefined,
+    }),
+    placeholderData: (previousData) => previousData, // Keep previous data while refetching
   });
 
-  const filteredCustomers = useMemo(() => {
-    if (!permissions.restrictedCustomer) return customers;
-    const restrictedCustomer = customers.find(c =>
-      c.name && c.name.toUpperCase().includes(permissions.restrictedCustomer.toUpperCase())
-    );
-    return restrictedCustomer ? [restrictedCustomer] : customers;
-  }, [customers, permissions.restrictedCustomer]);
-
-  useEffect(() => {
-    if (permissions.restrictedCustomer && filteredCustomers.length === 1) {
-      setSelectedCustomer(filteredCustomers[0].id);
-    }
-  }, [filteredCustomers, permissions.restrictedCustomer]);
-
-  const { data: rawSites = [], isLoading: sitesLoading, error: sitesError } = useQuery({
-    queryKey: ['sites'],
-    queryFn: () => fetchSites(),
-    retry: 1,
-    staleTime: 30000,
-  });
-
-  const allSites = useMemo(() => {
-    if (selectedCustomer === 'all' || !selectedCustomer) return rawSites;
-    return rawSites.filter(site => site.id === selectedCustomer || site.customer_ref === selectedCustomer);
-  }, [rawSites, selectedCustomer]);
-
-  const { data: dashboardData, isLoading: dashboardLoading, error: dashboardError } = useQuery({
-    queryKey: ['dashboard', selectedCustomer, selectedSite, dateRange.start, dateRange.end],
-    queryFn: () => fetchDashboardData({
+  const { data: dashboardData, isLoading: dashboardLoading, isFetching: dashboardFetching, error: dashboardError } = useQuery({
+    ...dashboardOptions(companyId, {
       customerId: selectedCustomer,
       siteId: selectedSite,
       startDate: dateRange.start,
-      endDate: dateRange.end
+      endDate: dateRange.end,
     }),
-    retry: 1,
-    staleTime: 30000,
+    placeholderData: (previousData) => previousData, // Keep previous data while refetching
   });
 
-  const { data: refills = [] } = useQuery({
-    queryKey: ['refills', selectedCustomer, selectedSite, dateRange.start, dateRange.end],
-    queryFn: async () => {
-      const response = await supabaseClient.elora.refills({
-        fromDate: dateRange.start,
-        toDate: dateRange.end,
-        customerRef: selectedCustomer,
-        siteRef: selectedSite
-      });
-      return response?.data ?? response ?? [];
-    },
-    retry: 1,
-    staleTime: 30000,
+  // Fetch ALL refills (no date range limit) - includes past and future scheduled refills
+  const { data: refills = [], isFetching: refillsFetching } = useQuery({
+    ...refillsOptions(companyId, {
+      customerRef: selectedCustomer !== 'all' ? selectedCustomer : undefined,
+      siteRef: selectedSite !== 'all' ? selectedSite : undefined,
+    }),
+    placeholderData: (previousData) => previousData, // Keep previous data while refetching
   });
 
-  useEffect(() => {
-    setSelectedSite('all');
-  }, [selectedCustomer]);
+  // Show spinner when filters trigger refetch (only for tabs that use this data)
+  const isFiltersFetching = (vehiclesFetching || dashboardFetching || refillsFetching) && FILTER_TABS.includes(activeTab);
 
   const processedData = useMemo(() => {
-    if (!dashboardData?.rows || !Array.isArray(dashboardData.rows)) return { vehicles: [], scans: [] };
-
+    // Start with ALL vehicles from vehicles API
     const vehicleMap = new Map();
+    
+    // First, add all vehicles from the vehicles API
+    allVehicles.forEach(vehicle => {
+      vehicleMap.set(vehicle.vehicleRef || vehicle.internalVehicleId, {
+        id: vehicle.vehicleRef || vehicle.internalVehicleId,
+        name: vehicle.vehicleName,
+        rfid: vehicle.vehicleRfid,
+        site_id: vehicle.siteId,
+        site_name: vehicle.siteName,
+        customer_name: vehicle.customerName,
+        customer_ref: vehicle.customerId,
+        washes_completed: 0, // Will be updated from dashboard data
+        target: vehicle.washesPerWeek || 12,
+        last_scan: vehicle.lastScanAt || null,
+        status: vehicle.statusLabel,
+      });
+    });
+
     const scansArray = [];
     const startMoment = moment(dateRange.start);
     const endMoment = moment(dateRange.end);
 
-    dashboardData.rows.forEach(row => {
-      const rowDate = moment(`${row.year}-${String(row.month).padStart(2, '0')}-01`);
-      if (!rowDate.isBetween(startMoment, endMoment, 'month', '[]')) {
-        return;
-      }
-
-      const vehicleKey = row.vehicleRef;
-
-      if (!vehicleMap.has(vehicleKey)) {
-        vehicleMap.set(vehicleKey, {
-          id: row.vehicleRef,
-          name: row.vehicleName,
-          rfid: row.vehicleRef,
-          site_id: row.siteRef,
-          site_name: row.siteName,
-          washes_completed: row.totalScans || 0,
-          target: row.washesPerWeek || 12,
-          last_scan: row.lastScan,
-        });
-      } else {
-        const existing = vehicleMap.get(vehicleKey);
-        existing.washes_completed += (row.totalScans || 0);
-        if (row.lastScan && (!existing.last_scan || row.lastScan > existing.last_scan)) {
-          existing.last_scan = row.lastScan;
+    // Then, update wash counts from dashboard data (for the date range)
+    if (dashboardData?.rows && Array.isArray(dashboardData.rows)) {
+      dashboardData.rows.forEach(row => {
+        const rowDate = moment(`${row.year}-${String(row.month).padStart(2, '0')}-01`);
+        if (!rowDate.isBetween(startMoment, endMoment, 'month', '[]')) {
+          return;
         }
-      }
 
-      if (row.totalScans > 0) {
-        scansArray.push({
-          vehicleRef: row.vehicleRef,
-          siteRef: row.siteRef,
-          siteName: row.siteName,
-          timestamp: row.lastScan
-        });
-      }
-    });
+        const vehicleKey = row.vehicleRef;
+
+        if (vehicleMap.has(vehicleKey)) {
+          const existing = vehicleMap.get(vehicleKey);
+          existing.washes_completed += (row.totalScans || 0);
+          if (row.lastScan && (!existing.last_scan || row.lastScan > existing.last_scan)) {
+            existing.last_scan = row.lastScan;
+          }
+        } else {
+          // Vehicle exists in dashboard but not in vehicles API (shouldn't happen, but handle it)
+          vehicleMap.set(vehicleKey, {
+            id: row.vehicleRef,
+            name: row.vehicleName,
+            rfid: row.vehicleRef,
+            site_id: row.siteRef,
+            site_name: row.siteName,
+            washes_completed: row.totalScans || 0,
+            target: row.washesPerWeek || 12,
+            last_scan: row.lastScan,
+          });
+        }
+
+        if (row.totalScans > 0) {
+          scansArray.push({
+            vehicleRef: row.vehicleRef,
+            siteRef: row.siteRef,
+            siteName: row.siteName,
+            timestamp: row.lastScan
+          });
+        }
+      });
+    }
 
     return {
       vehicles: Array.from(vehicleMap.values()),
       scans: scansArray
     };
-  }, [dashboardData, dateRange]);
+  }, [allVehicles, dashboardData, dateRange]);
 
   const enrichedVehicles = processedData.vehicles;
   const scans = processedData.scans;
 
-  const { filteredVehicles: permissionFilteredVehicles } = useFilteredData(enrichedVehicles, allSites);
+  // Apply role-based filtering FIRST to get what this user can access
+  const { filteredVehicles: permissionFilteredVehicles, filteredSites: permissionFilteredSites } = useFilteredData(enrichedVehicles, rawSites, customers);
+
+  // Get unique customers from role-filtered sites (for dropdown)
+  const filteredCustomers = useMemo(() => {
+    // Driver: derive customers from their vehicles when permissionFilteredSites is empty
+    if (permissionFilteredSites.length === 0 && permissionFilteredVehicles?.length > 0) {
+      const vehicleCustomerRefs = new Set(
+        permissionFilteredVehicles.map(v => v.customer_ref).filter(Boolean)
+      );
+      const accessibleCustomers = customers.filter(c => vehicleCustomerRefs.has(c.id));
+      return accessibleCustomers.length > 0 ? accessibleCustomers : customers;
+    }
+
+    // Get unique customer_refs from sites this user can access
+    const accessibleCustomerRefs = new Set(
+      permissionFilteredSites.map(site => site.customer_ref).filter(Boolean)
+    );
+    
+    const accessibleCustomers = customers.filter(c => accessibleCustomerRefs.has(c.id));
+    
+    if (permissions.restrictedCustomer && accessibleCustomers.length > 0) {
+      const restrictedCustomer = accessibleCustomers.find(c =>
+        c.name && c.name.toUpperCase().includes(permissions.restrictedCustomer.toUpperCase())
+      );
+      return restrictedCustomer ? [restrictedCustomer] : accessibleCustomers;
+    }
+    
+    return accessibleCustomers;
+  }, [permissionFilteredSites, permissionFilteredVehicles, customers, permissions.restrictedCustomer]);
+
+  // Auto-select customer if user has restricted access (apply to all filter tabs)
+  useEffect(() => {
+    if (permissions.restrictedCustomer && filteredCustomers.length === 1) {
+      const customerId = filteredCustomers[0].id;
+      setTabFilters(prev => {
+        const next = { ...prev };
+        FILTER_TABS.forEach(tab => {
+          next[tab] = { ...(next[tab] || getDefaultFilters()), selectedCustomer: customerId, selectedSite: 'all' };
+        });
+        return next;
+      });
+    }
+  }, [filteredCustomers, permissions.restrictedCustomer]);
+
+  // Auto-select site for batchers (apply to all filter tabs)
+  useEffect(() => {
+    if (permissions.isBatcher && permissionFilteredSites.length === 1) {
+      const siteId = permissionFilteredSites[0].id;
+      setTabFilters(prev => {
+        const next = { ...prev };
+        FILTER_TABS.forEach(tab => {
+          next[tab] = { ...(next[tab] || getDefaultFilters()), selectedSite: siteId };
+        });
+        return next;
+      });
+    }
+  }, [permissions.isBatcher, permissionFilteredSites]);
+
+  // Auto-select customer for managers/batchers if they only have access to one
+  useEffect(() => {
+    if ((permissions.isManager || permissions.isBatcher) && filteredCustomers.length === 1 && selectedCustomer === 'all') {
+      const customerId = filteredCustomers[0].id;
+      setTabFilters(prev => {
+        const next = { ...prev };
+        const tab = activeTab === 'email-reports' ? REPORT_FILTER_SOURCE : activeTab;
+        if (FILTER_TABS.includes(activeTab)) {
+          next[tab] = { ...(next[tab] || getDefaultFilters()), selectedCustomer: customerId, selectedSite: 'all' };
+        }
+        return next;
+      });
+    }
+  }, [permissions.isManager, permissions.isBatcher, filteredCustomers, selectedCustomer, activeTab]);
+
+  // Filter sites by selected customer (from role-filtered sites)
+  const allSites = useMemo(() => {
+    // Driver: derive sites from their vehicles when permissionFilteredSites is empty
+    if (permissionFilteredSites.length === 0 && permissionFilteredVehicles?.length > 0) {
+      const vehicleSiteIds = new Set(
+        permissionFilteredVehicles.map(v => v.site_id).filter(Boolean)
+      );
+      const driverSites = rawSites.filter(s => vehicleSiteIds.has(s.id));
+      if (selectedCustomer === 'all' || !selectedCustomer) return driverSites;
+      return driverSites.filter(site => site.id === selectedCustomer || site.customer_ref === selectedCustomer);
+    }
+    if (selectedCustomer === 'all' || !selectedCustomer) return permissionFilteredSites;
+    return permissionFilteredSites.filter(site => site.id === selectedCustomer || site.customer_ref === selectedCustomer);
+  }, [permissionFilteredSites, permissionFilteredVehicles, rawSites, selectedCustomer]);
 
   // Apply customer and site filters to vehicles (client-side filtering)
   const filteredVehicles = useMemo(() => {
     let result = permissionFilteredVehicles || [];
 
+    // Use allSites for filter logic (handles Driver case where allSites is derived from vehicles)
+    const sitesForFilter = allSites.length > 0 ? allSites : permissionFilteredSites;
+
     // Filter by customer (via site's customer_ref)
-    if (selectedCustomer && selectedCustomer !== 'all') {
-      const customerSiteIds = rawSites
-        .filter(s => s.customer_ref === selectedCustomer)
+    if (selectedCustomer && selectedCustomer !== 'all' && sitesForFilter.length > 0) {
+      const customerSiteIds = sitesForFilter
+        .filter(s => s.customer_ref === selectedCustomer || s.id === selectedCustomer)
         .map(s => s.id);
       result = result.filter(v => customerSiteIds.includes(v.site_id));
     }
@@ -273,27 +380,37 @@ export default function Dashboard() {
     }
 
     return result;
-  }, [permissionFilteredVehicles, selectedCustomer, selectedSite, rawSites]);
+  }, [permissionFilteredVehicles, selectedCustomer, selectedSite, permissionFilteredSites, allSites]);
 
   // Apply customer and site filters to scans for consistent chart/analytics data
   const filteredScans = useMemo(() => {
     let result = scans || [];
 
-    // Filter by customer (via site's customer_ref)
-    if (selectedCustomer && selectedCustomer !== 'all') {
-      const customerSiteIds = rawSites
-        .filter(s => s.customer_ref === selectedCustomer)
-        .map(s => s.id);
-      result = result.filter(s => customerSiteIds.includes(s.siteRef));
-    }
+    // Driver: filter by vehicle (permissionFilteredSites is empty; use filteredVehicles so customer/site filters apply)
+    if (permissionFilteredSites.length === 0 && filteredVehicles?.length > 0) {
+      const accessibleVehicleRefs = new Set(
+        filteredVehicles.map(v => v.id || v.rfid).filter(Boolean)
+      );
+      result = result.filter(s => accessibleVehicleRefs.has(s.vehicleRef));
+    } else if (permissionFilteredSites.length > 0) {
+      // Other roles: filter by role-accessible sites
+      const accessibleSiteIds = permissionFilteredSites.map(s => s.id);
+      result = result.filter(s => accessibleSiteIds.includes(s.siteRef));
 
-    // Filter by site
-    if (selectedSite && selectedSite !== 'all') {
-      result = result.filter(s => s.siteRef === selectedSite);
+      if (selectedCustomer && selectedCustomer !== 'all') {
+        const customerSiteIds = permissionFilteredSites
+          .filter(s => s.customer_ref === selectedCustomer)
+          .map(s => s.id);
+        result = result.filter(s => customerSiteIds.includes(s.siteRef));
+      }
+
+      if (selectedSite && selectedSite !== 'all') {
+        result = result.filter(s => s.siteRef === selectedSite);
+      }
     }
 
     return result;
-  }, [scans, selectedCustomer, selectedSite, rawSites]);
+  }, [scans, selectedCustomer, selectedSite, permissionFilteredSites, filteredVehicles]);
 
   const washTrendsData = useMemo(() => {
     if (!dashboardData?.charts?.totalWashesByMonth?.length) {
@@ -343,8 +460,11 @@ export default function Dashboard() {
     };
   }, [filteredVehicles]);
 
-  const isLoading = permissions.isLoading || customersLoading || sitesLoading || dashboardLoading;
-  const hasError = customersError || sitesError || dashboardError;
+  // Only block full-page spinner on permissions + customers + sites (needed for shell).
+  // Vehicles and dashboard load in background so the page appears sooner.
+  const isLoading = permissions.isLoading || customersLoading || sitesLoading;
+  const hasError = customersError || sitesError || vehiclesError || dashboardError;
+  const isDataLoading = vehiclesLoading || dashboardLoading;
 
   if (isMobile && permissions.isDriver) {
     return <MobileDashboard />;
@@ -481,7 +601,11 @@ export default function Dashboard() {
             activePeriod={activePeriod}
             setActivePeriod={setActivePeriod}
             lockCustomerFilter={permissions.lockCustomerFilter}
+            lockSiteFilter={permissions.isBatcher}
             restrictedCustomerName={permissions.restrictedCustomer}
+            restrictedSiteName={permissions.isBatcher && allSites.length === 1 ? allSites[0].name : null}
+            isFiltering={isFiltersFetching}
+            isDataLoading={isDataLoading}
           />
         </div>
 
@@ -492,16 +616,13 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Activity & Favorites */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <RecentActivityFeed
-            customerRef={selectedCustomer}
-            siteRef={selectedSite}
-          />
+        {/* Favorite Vehicles - Full Width */}
+        <div className="mb-8">
           <FavoriteVehicles
             vehicles={filteredVehicles}
             selectedCustomer={selectedCustomer}
             selectedSite={selectedSite}
+            userEmail={permissions.user?.email}
           />
         </div>
 
@@ -569,6 +690,7 @@ export default function Dashboard() {
                   scans={filteredScans}
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
+                  userEmail={permissions.user?.email}
                 />
 
                 {/* Charts in Glass Cards */}
@@ -610,6 +732,7 @@ export default function Dashboard() {
                 sites={allSites}
                 selectedCustomer={selectedCustomer}
                 selectedSite={selectedSite}
+                dateRange={dateRange}
               />
             )}
 
@@ -621,52 +744,42 @@ export default function Dashboard() {
             )}
 
             {activeTab === 'sites' && (
-              <SiteManagement customers={customers} vehicles={enrichedVehicles} />
+              <SiteManagement 
+                customers={customers} 
+                vehicles={enrichedVehicles}
+                selectedCustomer={selectedCustomer}
+              />
             )}
 
             {activeTab === 'reports' && (
-              <ReportsDashboard vehicles={filteredVehicles} scans={filteredScans} />
+              <ReportsDashboard 
+                vehicles={filteredVehicles} 
+                scans={filteredScans}
+                dateRange={dateRange}
+                selectedSite={selectedSite}
+              />
             )}
 
             {activeTab === 'email-reports' && (
-              <EmailReportSettings />
+              <EmailReportSettings
+                reportData={{
+                  stats,
+                  dateRange,
+                  filteredVehicles,
+                  selectedCustomer,
+                  selectedSite
+                }}
+                onSetDateRange={(range) => updateTabFilter({ dateRange: range, activePeriod: 'Custom' })}
+              />
             )}
 
-            {activeTab === 'users' && (
-              <div className="space-y-6">
-                <Tabs defaultValue="roles" className="w-full">
-                  <TabsList className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-xl p-1 flex-wrap">
-                    <TabsTrigger value="roles" className="rounded-lg">User Roles</TabsTrigger>
-                    <TabsTrigger value="permissions" className="rounded-lg">Permissions</TabsTrigger>
-                    <TabsTrigger value="branding" className="rounded-lg">Branding</TabsTrigger>
-                    <TabsTrigger value="multitenant" className="rounded-lg">Multi-Tenant</TabsTrigger>
-                    <TabsTrigger value="digest" className="rounded-lg">Email Digest</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="roles" className="mt-6">
-                    <RoleManagement vehicles={enrichedVehicles} sites={allSites} />
-                  </TabsContent>
-                  <TabsContent value="permissions" className="mt-6">
-                    <PermissionsManagement />
-                  </TabsContent>
-                  <TabsContent value="branding" className="mt-6">
-                    <BrandingManagement />
-                  </TabsContent>
-                  <TabsContent value="multitenant" className="mt-6">
-                    <MultiTenantConfig />
-                  </TabsContent>
-                  <TabsContent value="digest" className="mt-6">
-                    <EmailDigestPreferences />
-                  </TabsContent>
-                </Tabs>
-              </div>
+            {activeTab === 'branding' && (
+              <BrandingManagement />
             )}
+
           </motion.div>
         </AnimatePresence>
 
-        {/* Wash Pattern Analytics */}
-        <div className="mt-8">
-          <WashPatternAnalytics scans={filteredScans} />
-        </div>
       </main>
 
       {/* Dashboard Customizer Modal */}

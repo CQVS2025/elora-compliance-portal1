@@ -1,3 +1,6 @@
+/**
+ * ACATC /api/dashboard supports: customer, site, year, month. We pass customer, site, fromDate, endDate.
+ */
 Deno.serve(async (req) => {
   try {
     const apiKey = Deno.env.get("ELORA_API_KEY");

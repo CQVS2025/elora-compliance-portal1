@@ -16,6 +16,7 @@ FUNCTIONS=(
   "checkNotifications"
   "createHeidelbergTestUser"
   "createHeidelbergUser"
+  "deleteMyAccount"
   "elora_customers"
   "elora_dashboard"
   "elora_delete_compliance_target"

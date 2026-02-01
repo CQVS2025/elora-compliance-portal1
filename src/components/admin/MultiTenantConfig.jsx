@@ -41,13 +41,12 @@ export default function MultiTenantConfig() {
 
   const availableTabs = [
     'compliance',
-    'maintenance',
     'costs',
     'refills',
     'devices',
     'sites',
     'reports',
-    'users'
+    'branding'
   ];
 
   // Simulated user configs - In production, fetch from database/API
@@ -58,7 +57,7 @@ export default function MultiTenantConfig() {
       restrictedCustomer: 'HEIDELBERG MATERIALS',
       lockCustomerFilter: true,
       showAllData: false,
-      visibleTabs: ['compliance', 'maintenance', 'reports', 'users'],
+      visibleTabs: ['compliance', 'reports', 'users'],
       configType: 'Restricted Client'
     },
     // Add more as needed from database
@@ -150,7 +149,7 @@ export default function MultiTenantConfig() {
       restrictedClient: {
         lockCustomerFilter: true,
         showAllData: false,
-        selectedTabs: ['compliance', 'maintenance', 'reports']
+        selectedTabs: ['compliance', 'reports']
       },
       clientAdmin: {
         lockCustomerFilter: true,

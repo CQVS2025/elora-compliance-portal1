@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
   Users,
   ArrowLeft,
@@ -28,7 +30,10 @@ import {
   X,
   Loader2,
   AlertCircle,
-  Globe
+  Globe,
+  KeyRound,
+  UserMinus,
+  ChevronDown
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -36,6 +41,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatErrorForToast, formatSuccessForToast } from '@/utils/errorMessages';
 import DataPagination from '@/components/ui/DataPagination';
@@ -61,9 +76,17 @@ export default function UserManagement() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState(null);
+  const [resetPasswordNewPassword, setResetPasswordNewPassword] = useState('');
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [userToRemoveFromCompany, setUserToRemoveFromCompany] = useState(null);
+  const [userToAssign, setUserToAssign] = useState(null);
+  const [assignToCompanyId, setAssignToCompanyId] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const [companyComboboxOpen, setCompanyComboboxOpen] = useState(false);
 
   // Get company from URL parameter (if coming from company management page)
   const urlCompanyId = searchParams.get('company');
@@ -90,8 +113,10 @@ export default function UserManagement() {
 
   // Set company_id from selected tab when modal opens
   useEffect(() => {
-    if (showCreateModal && selectedCompanyTab !== 'all') {
+    if (showCreateModal && selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned') {
       setFormData(prev => ({ ...prev, company_id: selectedCompanyTab }));
+    } else if (showCreateModal && selectedCompanyTab === 'unassigned') {
+      setFormData(prev => ({ ...prev, company_id: '' }));
     }
   }, [showCreateModal, selectedCompanyTab]);
 
@@ -99,6 +124,12 @@ export default function UserManagement() {
   const { data: users = [], isLoading: loadingUsers } = useQuery({
     queryKey: ['adminUsers'],
     queryFn: async () => {
+      console.log('🔍 FETCHING USERS:', {
+        isSuperAdmin,
+        userProfileCompanyId: userProfile?.company_id,
+        timestamp: new Date().toISOString()
+      });
+
       let query = supabase
         .from('user_profiles')
         .select('*, companies(name)')
@@ -109,6 +140,14 @@ export default function UserManagement() {
       }
 
       const { data, error } = await query;
+      
+      console.log('📊 USERS QUERY RESULT:', {
+        totalUsers: data?.length || 0,
+        error: error?.message || null,
+        firstUser: data?.[0],
+        sample: data?.slice(0, 3)
+      });
+
       if (error) throw error;
       return data;
     },
@@ -158,12 +197,13 @@ export default function UserManagement() {
   // Create user mutation - uses edge function with admin API
   const createUserMutation = useMutation({
     mutationFn: async (userData) => {
-      // Determine company_id: from form, selected tab, or user's company
-      const companyId = userData.company_id || 
-                        (selectedCompanyTab !== 'all' ? selectedCompanyTab : null) || 
-                        userProfile?.company_id;
-      
-      if (!companyId) {
+      // Determine company_id: from form, selected tab, or user's company. Super admin may leave unassigned.
+      let companyId = userData.company_id || 
+                      (selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' ? selectedCompanyTab : null) || 
+                      (isSuperAdmin ? null : userProfile?.company_id);
+      if (companyId === '') companyId = null;
+
+      if (!isSuperAdmin && !companyId) {
         throw new Error('Company ID is required. Please select a company.');
       }
 
@@ -175,7 +215,7 @@ export default function UserManagement() {
           phone: userData.phone,
           job_title: userData.job_title,
           role: userData.role,
-          company_id: companyId,
+          company_id: companyId || undefined,
         });
 
         // Edge function returns { success, message, user, profile } on success
@@ -234,16 +274,21 @@ export default function UserManagement() {
   // Update user mutation
   const updateUserMutation = useMutation({
     mutationFn: async ({ id, ...userData }) => {
+      const companyId = userData.company_id === '' ? null : userData.company_id;
+      const payload = {
+        full_name: userData.full_name,
+        phone: userData.phone,
+        job_title: userData.job_title,
+        role: userData.role,
+        company_id: companyId,
+        updated_at: new Date().toISOString(),
+        ...(companyId == null && { company_name: null }),
+        ...(companyId != null && userData.company_name != null && { company_name: userData.company_name }),
+      };
+
       const { data, error } = await supabase
         .from('user_profiles')
-        .update({
-          full_name: userData.full_name,
-          phone: userData.phone,
-          job_title: userData.job_title,
-          role: userData.role,
-          company_id: userData.company_id,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq('id', id)
         .select()
         .single();
@@ -285,6 +330,44 @@ export default function UserManagement() {
     },
   });
 
+  // Reset password mutation (super admin only)
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ user_id, new_password }) => {
+      const response = await supabaseClient.admin.updateUserPassword({ user_id, new_password });
+      if (response?.error) throw new Error(response.error);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['adminUsers']);
+      setShowResetPasswordModal(false);
+      setResetPasswordUser(null);
+      setResetPasswordNewPassword('');
+      toast({ title: 'Password updated', description: 'The user\'s password has been reset successfully.' });
+    },
+    onError: (error) => {
+      toast(formatErrorForToast(error, 'resetting password'));
+    },
+  });
+
+  // Delete user mutation (super admin only)
+  const deleteUserMutation = useMutation({
+    mutationFn: async ({ user_id }) => {
+      const response = await supabaseClient.admin.deleteUser({ user_id });
+      if (response?.error) throw new Error(response.error);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['adminUsers']);
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
+      setUserToDelete(null);
+      toast(formatSuccessForToast('delete', 'user'));
+    },
+    onError: (error) => {
+      toast(formatErrorForToast(error, 'deleting user'));
+      setUserToDelete(null);
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       email: '',
@@ -293,7 +376,7 @@ export default function UserManagement() {
       phone: '',
       job_title: '',
       role: 'user',
-      company_id: selectedCompanyTab !== 'all' ? selectedCompanyTab : '',
+      company_id: selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' ? selectedCompanyTab : '',
     });
   };
 
@@ -305,21 +388,89 @@ export default function UserManagement() {
       phone: user.phone || '',
       job_title: user.job_title || '',
       role: user.role,
-      company_id: user.company_id,
+      company_id: user.company_id ?? '',
     });
     setShowEditModal(true);
   };
 
+  const unassignedCount = useMemo(() => users.filter(u => !u.company_id).length, [users]);
+
+  // Group companies by first letter for better organization
+  const groupedCompanies = useMemo(() => {
+    const groups = {};
+    companies.forEach(company => {
+      const firstLetter = company.name?.charAt(0).toUpperCase() || '#';
+      if (!groups[firstLetter]) {
+        groups[firstLetter] = [];
+      }
+      groups[firstLetter].push(company);
+    });
+    return Object.keys(groups).sort().map(letter => ({
+      letter,
+      companies: groups[letter].sort((a, b) => a.name.localeCompare(b.name))
+    }));
+  }, [companies]);
+
+  // Get display name for selected company
+  const getSelectedCompanyDisplay = () => {
+    if (selectedCompanyTab === 'all') {
+      return { name: 'All Users', icon: <Globe className="w-4 h-4" />, count: users.length };
+    }
+    if (selectedCompanyTab === 'unassigned') {
+      return { name: 'Unassigned', icon: <UserMinus className="w-4 h-4" />, count: unassignedCount };
+    }
+    const company = companies.find(c => c.id === selectedCompanyTab);
+    if (company) {
+      return {
+        name: company.name,
+        icon: company.logo_url ? (
+          <img src={company.logo_url} alt={company.name} className="w-4 h-4 object-contain" />
+        ) : (
+          <div
+            className="w-4 h-4 rounded flex items-center justify-center text-white text-xs font-bold"
+            style={{ backgroundColor: company.primary_color || '#7CB342' }}
+          >
+            {company.name?.charAt(0)}
+          </div>
+        ),
+        count: company.userCount || 0
+      };
+    }
+    return { name: 'All Users', icon: <Globe className="w-4 h-4" />, count: users.length };
+  };
+
   // Filter users based on selected company tab, search, and role
   const filteredUsers = useMemo(() => {
-    return users.filter(user => {
+    console.log('🔍 FILTERING USERS:', {
+      totalUsers: users.length,
+      searchQuery,
+      roleFilter,
+      selectedCompanyTab
+    });
+
+    const filtered = users.filter(user => {
       const matchesSearch = !searchQuery ||
         user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-      const matchesCompany = selectedCompanyTab === 'all' || user.company_id === selectedCompanyTab;
+      const matchesCompany =
+        selectedCompanyTab === 'all' ? true
+          : selectedCompanyTab === 'unassigned' ? !user.company_id
+          : user.company_id === selectedCompanyTab;
       return matchesSearch && matchesRole && matchesCompany;
     });
+
+    console.log('✅ FILTERED USERS RESULT:', {
+      totalUsers: users.length,
+      filteredCount: filtered.length,
+      filterBreakdown: {
+        bySearch: users.filter(u => !searchQuery || u.email?.toLowerCase().includes(searchQuery.toLowerCase()) || u.full_name?.toLowerCase().includes(searchQuery.toLowerCase())).length,
+        byRole: users.filter(u => roleFilter === 'all' || u.role === roleFilter).length,
+        byCompany: users.filter(u => selectedCompanyTab === 'all' ? true : selectedCompanyTab === 'unassigned' ? !u.company_id : u.company_id === selectedCompanyTab).length
+      }
+    });
+
+    return filtered;
   }, [users, searchQuery, roleFilter, selectedCompanyTab]);
 
   // Pagination
@@ -375,48 +526,108 @@ export default function UserManagement() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Company Tabs - Only for Super Admin */}
+        {/* Company Selector - Only for Super Admin */}
         {isSuperAdmin && (
           <Card className="mb-6">
-            <CardContent className="p-0">
-              <Tabs value={selectedCompanyTab} onValueChange={setSelectedCompanyTab}>
-                <div className="border-b px-4 pt-4">
-                  <TabsList className="h-auto p-0 bg-transparent border-none">
-                    <TabsTrigger
-                      value="all"
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-[#7CB342] rounded-none px-4 py-3"
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <Label className="text-sm font-medium text-slate-700 whitespace-nowrap">Filter by Company:</Label>
+                <Popover open={companyComboboxOpen} onOpenChange={setCompanyComboboxOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={companyComboboxOpen}
+                      className="w-[300px] justify-between"
                     >
-                      <Globe className="w-4 h-4 mr-2" />
-                      All Users
-                      <Badge className="ml-2 bg-slate-200 text-slate-700">{users.length}</Badge>
-                    </TabsTrigger>
-                    {companies.map(company => (
-                      <TabsTrigger
-                        key={company.id}
-                        value={company.id}
-                        className="data-[state=active]:border-b-2 data-[state=active]:border-[#7CB342] rounded-none px-4 py-3"
-                      >
-                        {company.logo_url ? (
-                          <img
-                            src={company.logo_url}
-                            alt={company.name}
-                            className="w-5 h-5 object-contain mr-2"
-                          />
-                        ) : (
-                          <div
-                            className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold mr-2"
-                            style={{ backgroundColor: company.primary_color || '#7CB342' }}
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {getSelectedCompanyDisplay().icon}
+                        <span className="truncate">{getSelectedCompanyDisplay().name}</span>
+                        <Badge className="ml-auto bg-slate-200 text-slate-700">
+                          {getSelectedCompanyDisplay().count}
+                        </Badge>
+                      </div>
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search companies..." />
+                      <CommandList className="max-h-[400px]">
+                        <CommandEmpty>No companies found.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="all"
+                            onSelect={() => {
+                              setSelectedCompanyTab('all');
+                              setCompanyComboboxOpen(false);
+                            }}
                           >
-                            {company.name?.charAt(0)}
-                          </div>
-                        )}
-                        {company.name}
-                        <Badge className="ml-2 bg-slate-200 text-slate-700">{company.userCount}</Badge>
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </div>
-              </Tabs>
+                            <Globe className="mr-2 h-4 w-4" />
+                            <span>All Users</span>
+                            <Badge className="ml-auto bg-slate-200 text-slate-700">{users.length}</Badge>
+                            {selectedCompanyTab === 'all' && (
+                              <Check className="ml-2 h-4 w-4 text-[#7CB342]" />
+                            )}
+                          </CommandItem>
+                          <CommandItem
+                            value="unassigned"
+                            onSelect={() => {
+                              setSelectedCompanyTab('unassigned');
+                              setCompanyComboboxOpen(false);
+                            }}
+                          >
+                            <UserMinus className="mr-2 h-4 w-4" />
+                            <span>Unassigned</span>
+                            <Badge className="ml-auto bg-amber-100 text-amber-800">{unassignedCount}</Badge>
+                            {selectedCompanyTab === 'unassigned' && (
+                              <Check className="ml-2 h-4 w-4 text-[#7CB342]" />
+                            )}
+                          </CommandItem>
+                        </CommandGroup>
+                        {groupedCompanies.map(({ letter, companies: letterCompanies }) => (
+                          <CommandGroup key={letter} heading={letter}>
+                            {letterCompanies.map((company) => (
+                              <CommandItem
+                                key={company.id}
+                                value={company.id}
+                                onSelect={() => {
+                                  setSelectedCompanyTab(company.id);
+                                  setCompanyComboboxOpen(false);
+                                }}
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  {company.logo_url ? (
+                                    <img
+                                      src={company.logo_url}
+                                      alt={company.name}
+                                      className="w-4 h-4 object-contain shrink-0"
+                                    />
+                                  ) : (
+                                    <div
+                                      className="w-4 h-4 rounded flex items-center justify-center text-white text-xs font-bold shrink-0"
+                                      style={{ backgroundColor: company.primary_color || '#7CB342' }}
+                                    >
+                                      {company.name?.charAt(0)}
+                                    </div>
+                                  )}
+                                  <span className="truncate">{company.name}</span>
+                                  <Badge className="ml-auto bg-slate-200 text-slate-700 shrink-0">
+                                    {company.userCount || 0}
+                                  </Badge>
+                                </div>
+                                {selectedCompanyTab === company.id && (
+                                  <Check className="ml-2 h-4 w-4 text-[#7CB342] shrink-0" />
+                                )}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        ))}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -526,6 +737,33 @@ export default function UserManagement() {
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit
                               </DropdownMenuItem>
+                              {isSuperAdmin && !user.company_id && (
+                                <DropdownMenuItem onClick={() => { setUserToAssign(user); setAssignToCompanyId(''); }}>
+                                  <Building2 className="w-4 h-4 mr-2" />
+                                  Assign to company
+                                </DropdownMenuItem>
+                              )}
+                              {isSuperAdmin && (
+                                <DropdownMenuItem onClick={() => { setResetPasswordUser(user); setResetPasswordNewPassword(''); setShowResetPasswordModal(true); }}>
+                                  <KeyRound className="w-4 h-4 mr-2" />
+                                  Reset password
+                                </DropdownMenuItem>
+                              )}
+                              {isSuperAdmin && user.company_id && (
+                                <DropdownMenuItem onClick={() => setUserToRemoveFromCompany(user)}>
+                                  <UserMinus className="w-4 h-4 mr-2" />
+                                  Remove from company
+                                </DropdownMenuItem>
+                              )}
+                              {isSuperAdmin && (
+                                <DropdownMenuItem
+                                  className="text-red-600 focus:text-red-600"
+                                  onClick={() => setUserToDelete(user)}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete user
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 onClick={() => toggleStatusMutation.mutate({
                                   id: user.id,
@@ -578,12 +816,15 @@ export default function UserManagement() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create New User</DialogTitle>
-            {selectedCompanyTab !== 'all' && companies.find(c => c.id === selectedCompanyTab) && (
+            {selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' && companies.find(c => c.id === selectedCompanyTab) && (
               <p className="text-sm text-slate-500 mt-1">
                 Creating user for: <span className="font-medium text-slate-700">
                   {companies.find(c => c.id === selectedCompanyTab)?.name}
                 </span>
               </p>
+            )}
+            {selectedCompanyTab === 'unassigned' && (
+              <p className="text-sm text-amber-600 mt-1">Creating unassigned user (no company)</p>
             )}
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -652,21 +893,22 @@ export default function UserManagement() {
             </div>
             {isSuperAdmin && (
               <div className="space-y-2">
-                <Label>Company *</Label>
+                <Label>Company {!isSuperAdmin ? '*' : ''}</Label>
                 <Select
-                  value={formData.company_id}
-                  onValueChange={(value) => setFormData({ ...formData, company_id: value })}
+                  value={formData.company_id ? formData.company_id : 'unassigned'}
+                  onValueChange={(v) => setFormData({ ...formData, company_id: v === 'unassigned' ? '' : v })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select company" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="unassigned">Unassigned (no company)</SelectItem>
                     {companies.map(company => (
                       <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedCompanyTab !== 'all' && formData.company_id === selectedCompanyTab && (
+                {selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' && formData.company_id === selectedCompanyTab && (
                   <p className="text-xs text-slate-500">
                     Pre-filled from selected company tab
                   </p>
@@ -750,13 +992,14 @@ export default function UserManagement() {
               <div className="space-y-2">
                 <Label>Company</Label>
                 <Select
-                  value={formData.company_id}
-                  onValueChange={(value) => setFormData({ ...formData, company_id: value })}
+                  value={formData.company_id === '' || formData.company_id == null ? 'unassigned' : formData.company_id}
+                  onValueChange={(v) => setFormData({ ...formData, company_id: v === 'unassigned' ? '' : v })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="unassigned">Unassigned (no company)</SelectItem>
                     {companies.map(company => (
                       <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
                     ))}
@@ -773,7 +1016,16 @@ export default function UserManagement() {
             }}>Cancel</Button>
             <Button
               className="bg-[#7CB342] hover:bg-[#689F38]"
-              onClick={() => updateUserMutation.mutate({ id: selectedUser.id, ...formData })}
+              onClick={() => {
+                const companyId = formData.company_id === '' || formData.company_id == null ? '' : formData.company_id;
+                const company = companyId ? companies.find(c => c.id === companyId) : null;
+                updateUserMutation.mutate({
+                  id: selectedUser.id,
+                  ...formData,
+                  company_id: companyId,
+                  company_name: company?.name ?? null,
+                });
+              }}
               disabled={updateUserMutation.isPending}
             >
               {updateUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Changes'}
@@ -781,6 +1033,171 @@ export default function UserManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Reset Password Modal (super admin only) */}
+      <Dialog open={showResetPasswordModal} onOpenChange={(open) => {
+        if (!open) { setShowResetPasswordModal(false); setResetPasswordUser(null); setResetPasswordNewPassword(''); }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset password</DialogTitle>
+            {resetPasswordUser && (
+              <p className="text-sm text-slate-500">
+                Set a new password for <span className="font-medium text-slate-700">{resetPasswordUser.email}</span>
+              </p>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>New password *</Label>
+              <Input
+                type="text"
+                value={resetPasswordNewPassword}
+                onChange={(e) => setResetPasswordNewPassword(e.target.value)}
+                placeholder="Min 6 characters"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowResetPasswordModal(false); setResetPasswordUser(null); setResetPasswordNewPassword(''); }}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#7CB342] hover:bg-[#689F38]"
+              onClick={() => resetPasswordUser && resetPasswordMutation.mutate({ user_id: resetPasswordUser.id, new_password: resetPasswordNewPassword })}
+              disabled={resetPasswordMutation.isPending || !resetPasswordNewPassword || resetPasswordNewPassword.length < 6}
+            >
+              {resetPasswordMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update password'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign to company modal (unassigned users only) */}
+      <Dialog open={!!userToAssign} onOpenChange={(open) => {
+        if (!open) { setUserToAssign(null); setAssignToCompanyId(''); }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign to company</DialogTitle>
+            {userToAssign && (
+              <p className="text-sm text-slate-500">
+                Assign <span className="font-medium text-slate-700">{userToAssign.email}</span> to a company so they can log in.
+              </p>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Company *</Label>
+              <Select value={assignToCompanyId} onValueChange={setAssignToCompanyId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map(company => (
+                    <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setUserToAssign(null); setAssignToCompanyId(''); }}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#7CB342] hover:bg-[#689F38]"
+              disabled={updateUserMutation.isPending || !assignToCompanyId}
+              onClick={() => {
+                if (!userToAssign || !assignToCompanyId) return;
+                const company = companies.find(c => c.id === assignToCompanyId);
+                updateUserMutation.mutate(
+                  {
+                    id: userToAssign.id,
+                    full_name: userToAssign.full_name || '',
+                    phone: userToAssign.phone || '',
+                    job_title: userToAssign.job_title || '',
+                    role: userToAssign.role,
+                    company_id: assignToCompanyId,
+                    company_name: company?.name ?? '',
+                  },
+                  {
+                    onSuccess: () => {
+                      setUserToAssign(null);
+                      setAssignToCompanyId('');
+                    },
+                  }
+                );
+              }}
+            >
+              {updateUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Assign'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Confirmation */}
+      <AlertDialog open={!!userToDelete} onOpenChange={(open) => { if (!open) setUserToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user</AlertDialogTitle>
+            <AlertDialogDescription>
+              {userToDelete && (
+                <>This will permanently delete <span className="font-medium">{userToDelete.email}</span> and remove their access. This cannot be undone.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setUserToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => userToDelete && deleteUserMutation.mutate({ user_id: userToDelete.id })}
+            >
+              {deleteUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete user'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove from Company Confirmation */}
+      <AlertDialog open={!!userToRemoveFromCompany} onOpenChange={(open) => { if (!open) setUserToRemoveFromCompany(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from company</AlertDialogTitle>
+            <AlertDialogDescription>
+              {userToRemoveFromCompany && (
+                <>This will unassign <span className="font-medium">{userToRemoveFromCompany.email}</span> from their company. The user account stays active but they will not be able to log in until assigned to a company again.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setUserToRemoveFromCompany(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[#7CB342] hover:bg-[#689F38]"
+              disabled={updateUserMutation.isPending}
+              onClick={() => {
+                if (!userToRemoveFromCompany) return;
+                updateUserMutation.mutate(
+                  {
+                    id: userToRemoveFromCompany.id,
+                    full_name: userToRemoveFromCompany.full_name || '',
+                    phone: userToRemoveFromCompany.phone || '',
+                    job_title: userToRemoveFromCompany.job_title || '',
+                    role: userToRemoveFromCompany.role,
+                    company_id: '',
+                  },
+                  {
+                    onSuccess: () => setUserToRemoveFromCompany(null),
+                    onError: () => {},
+                  }
+                );
+              }}
+            >
+              {updateUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Remove from company'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

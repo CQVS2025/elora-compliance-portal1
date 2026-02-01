@@ -31,7 +31,8 @@ import {
   Lock,
   Copy,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -39,6 +40,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { formatErrorForToast, formatSuccessForToast } from '@/utils/errorMessages';
 
@@ -52,6 +63,7 @@ export default function CompanyManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showQuickSetupModal, setShowQuickSetupModal] = useState(false);
+  const [companyToDelete, setCompanyToDelete] = useState(null);
   const [quickSetupStep, setQuickSetupStep] = useState(1);
   const [quickSetupResult, setQuickSetupResult] = useState(null);
   const [selectedCompany, setSelectedCompany] = useState(null);
@@ -63,9 +75,6 @@ export default function CompanyManagement() {
     slug: '',
     email_domain: '',
     elora_customer_ref: '',
-    logo_url: '',
-    primary_color: '#1e3a5f',
-    secondary_color: '#3b82f6',
   });
 
   // Quick Setup form state
@@ -133,9 +142,9 @@ export default function CompanyManagement() {
           slug,
           email_domain: companyData.email_domain || null,
           elora_customer_ref: companyData.elora_customer_ref || null,
-          logo_url: companyData.logo_url || null,
-          primary_color: companyData.primary_color,
-          secondary_color: companyData.secondary_color,
+          logo_url: null,
+          primary_color: '#1e3a5f',
+          secondary_color: '#3b82f6',
           is_active: true,
         })
         .select()
@@ -149,9 +158,9 @@ export default function CompanyManagement() {
           company_id: data.id,
           client_email_domain: companyData.email_domain,
           company_name: companyData.name,
-          logo_url: companyData.logo_url,
-          primary_color: companyData.primary_color,
-          secondary_color: companyData.secondary_color,
+          logo_url: null,
+          primary_color: '#7CB342',
+          secondary_color: '#9CCC65',
         });
       }
 
@@ -246,6 +255,26 @@ export default function CompanyManagement() {
     },
     onError: (error) => {
       toast(formatErrorForToast(error, 'updating company status'));
+    },
+  });
+
+  // Delete company mutation (super admin only) — unassigns users then deletes company
+  const deleteCompanyMutation = useMutation({
+    mutationFn: async ({ company_id }) => {
+      const response = await supabaseClient.admin.deleteCompany({ company_id });
+      if (response?.error) throw new Error(response.error);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
+      queryClient.invalidateQueries(['adminUsers']);
+      setCompanyToDelete(null);
+      toast(formatSuccessForToast('delete', 'company'));
+    },
+    onError: (error) => {
+      toast(formatErrorForToast(error, 'deleting company'));
+      setCompanyToDelete(null);
     },
   });
 
@@ -501,6 +530,13 @@ export default function CompanyManagement() {
                             </>
                           )}
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-red-600 focus:text-red-600"
+                          onClick={() => setCompanyToDelete(company)}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete company
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -616,48 +652,6 @@ export default function CompanyManagement() {
                 onChange={(e) => setFormData({ ...formData, elora_customer_ref: e.target.value })}
                 placeholder="ELORA-12345"
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Logo URL</Label>
-              <Input
-                value={formData.logo_url}
-                onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                placeholder="https://example.com/logo.png"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Primary Color</Label>
-                <div className="flex gap-2">
-                  <input
-                    type="color"
-                    value={formData.primary_color}
-                    onChange={(e) => setFormData({ ...formData, primary_color: e.target.value })}
-                    className="w-10 h-10 rounded cursor-pointer"
-                  />
-                  <Input
-                    value={formData.primary_color}
-                    onChange={(e) => setFormData({ ...formData, primary_color: e.target.value })}
-                    className="flex-1"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Secondary Color</Label>
-                <div className="flex gap-2">
-                  <input
-                    type="color"
-                    value={formData.secondary_color}
-                    onChange={(e) => setFormData({ ...formData, secondary_color: e.target.value })}
-                    className="w-10 h-10 rounded cursor-pointer"
-                  />
-                  <Input
-                    value={formData.secondary_color}
-                    onChange={(e) => setFormData({ ...formData, secondary_color: e.target.value })}
-                    className="flex-1"
-                  />
-                </div>
-              </div>
             </div>
           </div>
           <DialogFooter>
@@ -1138,6 +1132,32 @@ export default function CompanyManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Company Confirmation */}
+      <AlertDialog open={!!companyToDelete} onOpenChange={(open) => { if (!open) setCompanyToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete company</AlertDialogTitle>
+            <AlertDialogDescription>
+              {companyToDelete && (
+                <>
+                  This will permanently delete <span className="font-medium">{companyToDelete.name}</span>. All users in this company will be unassigned (they can be reassigned later). This cannot be undone.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCompanyToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deleteCompanyMutation.isPending}
+              onClick={() => companyToDelete && deleteCompanyMutation.mutate({ company_id: companyToDelete.id })}
+            >
+              {deleteCompanyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete company'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

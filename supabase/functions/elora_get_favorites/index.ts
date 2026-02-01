@@ -13,10 +13,31 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createSupabaseAdminClient();
-    const body = await req.json();
-    const { userEmail } = body;
+    
+    // Parse request body
+    let body = {};
+    try {
+      body = await req.json();
+    } catch (e) {
+      // Body might be empty, try text
+      try {
+        const text = await req.text();
+        if (text) {
+          body = JSON.parse(text);
+        }
+      } catch (e2) {
+        console.log('Could not parse request body:', e2);
+      }
+    }
+    
+    // Extract userEmail - handle both direct and nested formats
+    let userEmail = body.userEmail;
+    if (typeof userEmail === 'object' && userEmail !== null) {
+      // Handle nested format: { userEmail: { userEmail: "..." } }
+      userEmail = userEmail.userEmail || userEmail.email || null;
+    }
 
-    if (!userEmail) {
+    if (!userEmail || typeof userEmail !== 'string') {
       return new Response(JSON.stringify({
         error: 'User email is required',
         data: []

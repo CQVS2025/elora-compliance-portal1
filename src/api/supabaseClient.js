@@ -20,7 +20,11 @@ export const supabaseClient = {
 
   // Favorites
   favorites: {
-    get: (userEmail) => callEdgeFunction('elora_get_favorites', { userEmail }),
+    get: (userEmail) => {
+      // userEmail should be a string, but handle object format just in case
+      const email = typeof userEmail === 'string' ? userEmail : (userEmail?.userEmail || userEmail);
+      return callEdgeFunction('elora_get_favorites', { userEmail: email });
+    },
     toggle: (params) => callEdgeFunction('elora_toggle_favorite', params),
   },
 
@@ -77,6 +81,14 @@ export const supabaseClient = {
     createCompanyWithUser: (params) => callEdgeFunction('createCompanyWithUser', params),
     createHeidelbergUser: (params) => callEdgeFunction('createHeidelbergUser', params),
     createUser: (params) => callEdgeFunction('createUser', params),
+    updateUserPassword: (params) => callEdgeFunction('adminUpdateUserPassword', params),
+    deleteUser: (params) => callEdgeFunction('adminDeleteUser', params),
+    deleteCompany: (params) => callEdgeFunction('adminDeleteCompany', params),
+  },
+
+  // User Account Functions
+  account: {
+    deleteMyAccount: () => callEdgeFunction('deleteMyAccount', {}),
   },
 
   // Database Tables (direct access)

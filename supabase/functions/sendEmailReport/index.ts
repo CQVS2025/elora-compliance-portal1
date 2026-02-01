@@ -1,76 +1,112 @@
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { createSupabaseAdminClient } from '../_shared/supabase.ts';
-import { Resend } from 'npm:resend@4.0.0';
+import { callEloraAPI } from '../_shared/elora-api.ts';
 
 /**
  * Email Report Generation and Sending Function
- * Supports instant "Email Me Now" and scheduled report delivery
+ * Uses Emailgun for delivery. Fetches fleet data from Elora API.
+ *
+ * Required Supabase secrets:
+ * - MAILGUN_API_KEY: Your Emailgun API key
+ * - MAILGUN_DOMAIN: Your sending domain (e.g. sandboxXXX.mailgun.org for sandbox)
+ * - MAILGUN_BASE_URL: (optional) Base URL, default https://api.mailgun.net (use https://api.eu.mailgun.net for EU)
  */
 
-// Initialize Resend with API key
-const resend = new Resend('re_7KDKHjRM_KsRBUbTj2zgjSUHupenSbCBy');
+async function sendViaEmailgun(
+  to: string,
+  subject: string,
+  html: string,
+  from: string,
+  attachment?: { filename: string; content: string }
+): Promise<{ id?: string; message?: string }> {
+  const apiKey = Deno.env.get('MAILGUN_API_KEY');
+  const domain = Deno.env.get('MAILGUN_DOMAIN');
+  const baseUrl = Deno.env.get('MAILGUN_BASE_URL') || 'https://api.mailgun.net';
+
+  if (!apiKey || !domain) {
+    throw new Error('MAILGUN_API_KEY and MAILGUN_DOMAIN must be set as Supabase secrets');
+  }
+
+  const url = `${baseUrl.replace(/\/$/, '')}/v3/${domain}/messages`;
+
+  const formData = new FormData();
+  formData.append('from', from);
+  formData.append('to', to);
+  formData.append('subject', subject);
+  formData.append('html', html);
+  if (attachment) {
+    const blob = new Blob([attachment.content], { type: 'text/csv' });
+    formData.append('attachment', blob, attachment.filename);
+  }
+
+  const auth = btoa(`api:${apiKey}`);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${auth}`,
+    },
+    body: formData,
+  });
+
+  const text = await response.text();
+  let json: { id?: string; message?: string; error?: string };
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`Emailgun error: ${response.status} ${text}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(json.message || json.error || text);
+  }
+
+  return json;
+}
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
   try {
     const supabase = createSupabaseAdminClient();
 
-    // Parse request body
     const body = await req.json();
-    const { userEmail, reportTypes, includeCharts, includeAiInsights, previewOnly } = body;
+    const { userEmail, reportTypes, includeCharts, previewOnly, reportData } = body;
 
     console.log('sendEmailReport invoked with:', {
       userEmail,
       reportTypes,
-      includeCharts,
-      includeAiInsights
+      hasReportData: !!reportData
     });
 
     if (!userEmail) {
-      console.error('Missing userEmail parameter');
       return new Response(JSON.stringify({ error: 'User email is required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Fetch user's branding based on email domain
     const emailDomain = userEmail.split('@')[1];
-    let branding = null;
+    let branding: { company_name?: string; logo_url?: string; primary_color?: string; secondary_color?: string } = {
+      company_name: 'ELORA Solutions',
+      logo_url: null,
+      primary_color: '#7CB342',
+      secondary_color: '#9CCC65'
+    };
 
     try {
       const { data: brandingResults } = await supabase
         .from('client_branding')
         .select('*')
         .eq('client_email_domain', emailDomain);
-
       if (brandingResults && brandingResults.length > 0) {
         branding = brandingResults[0];
-      } else {
-        // Default ELORA branding
-        branding = {
-          company_name: 'ELORA Solutions',
-          logo_url: null,
-          primary_color: '#7CB342',
-          secondary_color: '#9CCC65'
-        };
       }
-    } catch (error) {
-      console.error('Error fetching branding:', error);
-      // Use default branding
-      branding = {
-        company_name: 'ELORA Solutions',
-        logo_url: null,
-        primary_color: '#7CB342',
-        secondary_color: '#9CCC65'
-      };
+    } catch (e) {
+      console.warn('Branding fetch error:', e);
     }
 
-    // Fetch user details
-    console.log('Fetching user details for:', userEmail);
     const { data: users } = await supabase
       .from('user_profiles')
       .select('*')
@@ -78,210 +114,225 @@ Deno.serve(async (req) => {
     const user = users && users.length > 0 ? users[0] : null;
 
     if (!user) {
-      console.error('User not found:', userEmail);
       return new Response(JSON.stringify({ error: 'User not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    console.log('User found:', { id: user.id, email: user.email, role: user.role });
-
-    // Generate report data
-    const reports = {};
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    let reports: Record<string, unknown> = {};
+    const wantsCompliance = !reportTypes || reportTypes.length === 0 || reportTypes.includes('compliance');
+    const wantsCosts = !reportTypes || reportTypes.length === 0 || reportTypes.includes('costs');
 
-    // Fetch all necessary data
-    const { data: vehicles } = await supabase
-      .from('vehicles')
-      .select('*')
-      .order('updated_date', { ascending: false })
-      .limit(1000);
-    const { data: maintenanceRecords } = await supabase
-      .from('maintenance_records')
-      .select('*')
-      .order('service_date', { ascending: false })
-      .limit(1000);
+    if (reportData?.stats && reportData?.filteredVehicles) {
+      const stats = reportData.stats;
+      const vehicles = reportData.filteredVehicles || [];
+      const dateRange = reportData.dateRange || { start: '', end: '' };
+      const dateLabel = dateRange.start && dateRange.end
+        ? `${dateRange.start} - ${dateRange.end}`
+        : `${now.toLocaleDateString()}`;
 
-    // Filter data based on user permissions
-    let userVehicles = vehicles;
-    if (user.role !== 'admin') {
-      if (user.assigned_sites && user.assigned_sites.length > 0) {
-        userVehicles = vehicles.filter(v => user.assigned_sites.includes(v.site_id));
-      } else if (user.assigned_vehicles && user.assigned_vehicles.length > 0) {
-        userVehicles = vehicles.filter(v => user.assigned_vehicles.includes(v.id));
+      if (wantsCompliance) {
+        const compliantCount = vehicles.filter((v: { washes_completed?: number; target?: number }) =>
+          (v.washes_completed ?? 0) >= (v.target ?? 12)
+        ).length;
+        const atRiskCount = vehicles.length - compliantCount;
+        reports.compliance = {
+          summary: {
+            averageCompliance: stats.complianceRate ?? 0,
+            totalVehicles: stats.totalVehicles ?? vehicles.length,
+            compliantVehicles: compliantCount,
+            atRiskVehicles: atRiskCount,
+            alerts: atRiskCount > 0 ? [{
+              title: 'Low Compliance Alert',
+              message: `${atRiskCount} vehicle(s) are below the compliance threshold and require attention.`
+            }] : []
+          },
+          vehicles: (vehicles || []).slice(0, 20).map((v: { name?: string; site_name?: string; washes_completed?: number; target?: number }) => ({
+            name: v.name || 'Unknown',
+            site: v.site_name || 'N/A',
+            complianceRate: (v.target && v.target > 0)
+              ? Math.min(100, Math.round(((v.washes_completed ?? 0) / v.target) * 100))
+              : 0,
+            washesCompleted: v.washes_completed ?? 0,
+            targetWashes: v.target ?? 12,
+            status: (v.washes_completed ?? 0) >= (v.target ?? 12) ? 'Compliant' : 'At Risk'
+          })),
+          dateRange: dateLabel
+        };
       }
-    }
 
-    // Generate Compliance Report
-    if (!reportTypes || reportTypes.length === 0 || reportTypes.includes('compliance')) {
-      const complianceData = generateComplianceData(userVehicles, thirtyDaysAgo);
-      reports.compliance = complianceData;
-    }
+      if (wantsCosts) {
+        const totalWashes = stats.monthlyWashes ?? vehicles.reduce((s: number, v: { washes_completed?: number }) => s + (v.washes_completed ?? 0), 0);
+        reports.costs = {
+          summary: {
+            totalCost: 0,
+            monthlyAverage: 0,
+            recordCount: 0,
+            totalWashes,
+            washSummary: `Total washes in period: ${totalWashes}`
+          },
+          dateRange: dateLabel
+        };
+      }
+    } else {
+      let eloraCustomerRef: string | undefined;
+      if (user.company_id) {
+        const { data: company } = await supabase
+          .from('companies')
+          .select('elora_customer_ref')
+          .eq('id', user.company_id)
+          .single();
+        eloraCustomerRef = company?.elora_customer_ref;
+      }
 
-    // Generate Maintenance Report
-    if (!reportTypes || reportTypes.length === 0 || reportTypes.includes('maintenance')) {
-      const maintenanceData = generateMaintenanceData(userVehicles, maintenanceRecords);
-      reports.maintenance = maintenanceData;
-    }
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const startStr = thirtyDaysAgo.toISOString().slice(0, 10);
+      const endStr = now.toISOString().slice(0, 10);
 
-    // Generate Cost Analysis
-    if (!reportTypes || reportTypes.length === 0 || reportTypes.includes('costs')) {
-      const costData = generateCostData(maintenanceRecords, userVehicles, thirtyDaysAgo);
-      reports.costs = costData;
-    }
+      let vehicles: Array<Record<string, unknown>> = [];
+      let dashboardRows: Array<{ vehicleRef?: string; totalScans?: number; year?: number; month?: number }> = [];
 
-    // Generate AI Insights
-    if (includeAiInsights && (!reportTypes || reportTypes.length === 0 || reportTypes.includes('ai_insights'))) {
       try {
-        const aiInsights = await generateAIInsights(reports, userVehicles);
-        reports.aiInsights = aiInsights;
-      } catch (error) {
-        console.error('Error generating AI insights:', error);
-        reports.aiInsights = 'AI insights are currently unavailable.';
+        const vehiclesParams: Record<string, string> = { status: '1' };
+        if (eloraCustomerRef) vehiclesParams.customer = eloraCustomerRef;
+        const vehiclesData = await callEloraAPI('/vehicles', vehiclesParams);
+        vehicles = Array.isArray(vehiclesData) ? vehiclesData : (vehiclesData?.vehicles || []);
+      } catch (e) {
+        console.warn('Elora vehicles fetch error:', e);
+      }
+
+      try {
+        const dashboardData = await callEloraAPI('/dashboard', {
+          fromDate: startStr,
+          toDate: endStr,
+          ...(eloraCustomerRef ? { customer: eloraCustomerRef } : {})
+        });
+        const rows = dashboardData?.rows || dashboardData?.data?.rows || [];
+        dashboardRows = Array.isArray(rows) ? rows : [];
+      } catch (e) {
+        console.warn('Elora dashboard fetch error:', e);
+      }
+
+      const scansByVehicle = new Map<string, number>();
+      const startDate = new Date(startStr);
+      dashboardRows.forEach((row) => {
+        const rowDate = new Date(row.year ?? 2000, (row.month ?? 1) - 1);
+        if (rowDate < startDate || rowDate > now) return;
+        const ref = row.vehicleRef || '';
+        scansByVehicle.set(ref, (scansByVehicle.get(ref) || 0) + (row.totalScans || 0));
+      });
+
+      const enrichedVehicles = vehicles.map(v => {
+        const ref = (v.vehicleRef || v.id || '') as string;
+        const washes = scansByVehicle.get(ref) || 0;
+        const target = (v.washesPerWeek as number) || 12;
+        const rate = target > 0 ? Math.min(100, Math.round((washes / target) * 100)) : 0;
+        return {
+          ...v,
+          washes_completed: washes,
+          target,
+          compliance_rate: rate,
+          name: v.vehicleName || v.name || 'Unknown',
+          site_name: v.siteName
+        };
+      });
+
+      let userVehicles = enrichedVehicles;
+      if (user.role !== 'super_admin' && user.role !== 'admin') {
+        if (user.assigned_sites?.length) {
+          userVehicles = enrichedVehicles.filter((v: Record<string, unknown>) =>
+            user.assigned_sites.includes(v.siteId)
+          );
+        } else if (user.assigned_vehicles?.length) {
+          userVehicles = enrichedVehicles.filter((v: Record<string, unknown>) =>
+            user.assigned_vehicles.includes(v.vehicleRef || v.id)
+          );
+        }
+      }
+
+      if (wantsCompliance) {
+        reports.compliance = generateComplianceData(userVehicles, thirtyDaysAgo);
+      }
+      if (wantsCosts) {
+        const totalWashes = userVehicles.reduce((s: number, v: Record<string, unknown>) =>
+          s + ((v.washes_completed as number) || 0), 0
+        );
+        reports.costs = {
+          summary: {
+            totalCost: 0,
+            monthlyAverage: 0,
+            recordCount: 0,
+            totalWashes,
+            washSummary: `Total washes in period: ${totalWashes}`
+          },
+          dateRange: `${thirtyDaysAgo.toLocaleDateString()} - ${now.toLocaleDateString()}`
+        };
       }
     }
 
-    // Generate HTML email
-    console.log('Generating email HTML with branding:', {
-      company_name: branding.company_name,
-      primary_color: branding.primary_color
-    });
-    const emailHTML = generateEmailHTML(reports, branding, userEmail);
+    const hasCsv = !!(reportData?.filteredVehicles?.length);
+    const emailHTML = generateEmailHTML(reports, branding, userEmail, hasCsv);
 
     if (previewOnly) {
       return new Response(JSON.stringify({
         success: true,
         preview: true,
-        html: emailHTML
+        html: emailHTML,
+        data: reports
       }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Send email using Resend
-    console.log('Attempting to send email via Resend to:', userEmail);
-    console.log('Resend config:', {
-      from: 'Jonny <jonny@elora.com.au>',
-      to: userEmail,
-      hasHtmlContent: !!emailHTML,
-      htmlLength: emailHTML.length
-    });
+    const mailgunDomain = Deno.env.get('MAILGUN_DOMAIN') || 'sandbox.mailgun.org';
+    const fromAddr = `ELORA Compliance <postmaster@${mailgunDomain}>`;
+
+    const vehiclesForCsv = (reportData?.filteredVehicles || []).slice(0, 500);
+    const csvContent = reportData?.filteredVehicles?.length
+      ? buildVehicleCsv(vehiclesForCsv, reportData.dateRange)
+      : null;
+
+    const emailResult = await sendViaEmailgun(
+      userEmail,
+      `${branding.company_name || 'ELORA'} - Fleet Compliance Report`,
+      emailHTML,
+      fromAddr,
+      csvContent ? { filename: `fleet_compliance_${now.toISOString().slice(0, 10)}.csv`, content: csvContent } : undefined
+    );
 
     try {
-      const emailResult = await resend.emails.send({
-        from: 'Jonny <jonny@elora.com.au>',
-        to: userEmail,
-        subject: `${branding.company_name} - Fleet Compliance Report`,
-        html: emailHTML
-      });
-
-      console.log('Resend API response:', JSON.stringify(emailResult, null, 2));
-
-      // Check if the response indicates success
-      if (emailResult && emailResult.id) {
-        console.log('Email sent successfully! Resend ID:', emailResult.id);
-
-        // Update last_sent timestamp if this is a scheduled send
-        try {
-          const { data: prefs } = await supabase
-            .from('email_report_preferences')
-            .select('*')
-            .eq('user_email', userEmail);
-
-          if (prefs && prefs.length > 0) {
-            await supabase
-              .from('email_report_preferences')
-              .update({ last_sent: now.toISOString() })
-              .eq('id', prefs[0].id);
-          }
-        } catch (error) {
-          console.error('Error updating last_sent:', error);
-        }
-
-        return new Response(JSON.stringify({
-          success: true,
-          message: 'Email report sent successfully',
-          recipient: userEmail,
-          resendId: emailResult.id
-        }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      } else {
-        // No error thrown but no ID returned - unexpected response
-        console.error('Unexpected Resend response - no email ID:', emailResult);
-        return new Response(JSON.stringify({
-          error: 'Email sending failed - unexpected response from email service',
-          details: 'The email service did not confirm the email was sent. Please check your Resend dashboard.',
-          response: emailResult
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+      const { data: prefs } = await supabase
+        .from('email_report_preferences')
+        .select('*')
+        .eq('user_email', userEmail);
+      if (prefs && prefs.length > 0) {
+        await supabase
+          .from('email_report_preferences')
+          .update({ last_sent: now.toISOString() })
+          .eq('id', prefs[0].id);
       }
-
-    } catch (emailError) {
-      console.error('Resend API error:', emailError);
-      console.error('Error details:', {
-        message: emailError.message,
-        stack: emailError.stack,
-        name: emailError.name,
-        cause: emailError.cause
-      });
-
-      // Parse Resend error for helpful messages
-      let errorMessage = 'Failed to send email';
-      let errorDetails = emailError.message;
-      let statusCode = 500;
-
-      // Check for common Resend errors
-      if (emailError.message) {
-        const msg = emailError.message.toLowerCase();
-
-        if (msg.includes('domain') || msg.includes('verify') || msg.includes('dns')) {
-          errorMessage = 'Email domain not verified';
-          errorDetails = 'The domain elora.com.au needs to be verified in Resend. Please verify the domain and add DNS records in your Resend dashboard.';
-          statusCode = 403;
-        } else if (msg.includes('api key') || msg.includes('unauthorized') || msg.includes('authentication')) {
-          errorMessage = 'Email service authentication failed';
-          errorDetails = 'The Resend API key appears to be invalid or expired. Please check your Resend API key configuration.';
-          statusCode = 401;
-        } else if (msg.includes('rate limit') || msg.includes('quota')) {
-          errorMessage = 'Email rate limit exceeded';
-          errorDetails = 'You have exceeded your Resend email sending quota. Please check your Resend dashboard.';
-          statusCode = 429;
-        } else if (msg.includes('invalid email') || msg.includes('recipient')) {
-          errorMessage = 'Invalid email address';
-          errorDetails = `The recipient email address "${userEmail}" appears to be invalid.`;
-          statusCode = 400;
-        }
-      }
-
-      return new Response(JSON.stringify({
-        error: errorMessage,
-        details: errorDetails,
-        userEmail: userEmail,
-        technicalDetails: emailError.message,
-        hint: 'Check the Resend dashboard at https://resend.com/emails for more details'
-      }), {
-        status: statusCode,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+    } catch (e) {
+      console.warn('Update last_sent error:', e);
     }
 
-  } catch (error) {
-    console.error('Function error:', error);
-    console.error('Function error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    });
     return new Response(JSON.stringify({
-      error: 'Internal server error',
-      details: error.message
+      success: true,
+      message: 'Email report sent successfully',
+      recipient: userEmail,
+      id: emailResult.id
+    }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+
+  } catch (error: unknown) {
+    console.error('sendEmailReport error:', error);
+    const err = error instanceof Error ? error : new Error(String(error));
+    return new Response(JSON.stringify({
+      error: err.message
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -289,130 +340,78 @@ Deno.serve(async (req) => {
   }
 });
 
-// Helper function to generate compliance data
-function generateComplianceData(vehicles, startDate) {
-  const compliantVehicles = vehicles.filter(v => (v.compliance_rate || 0) >= 80);
-  const atRiskVehicles = vehicles.filter(v => (v.compliance_rate || 0) < 80);
+function buildVehicleCsv(
+  vehicles: Array<{ name?: string; site_name?: string; washes_completed?: number; target?: number; last_scan?: string }>,
+  dateRange?: { start?: string; end?: string }
+): string {
+  const headers = ['Vehicle Name', 'Site', 'Washes Completed', 'Target', 'Compliance %', 'Status', 'Last Wash'];
+  const rows = vehicles.map(v => {
+    const target = v.target ?? 12;
+    const completed = v.washes_completed ?? 0;
+    const pct = target > 0 ? Math.min(100, Math.round((completed / target) * 100)) : 0;
+    const status = completed >= target ? 'Compliant' : 'At Risk';
+    const lastWash = v.last_scan ? new Date(v.last_scan).toLocaleString() : 'Never';
+    return [v.name || 'Unknown', v.site_name || 'N/A', completed, target, `${pct}%`, status, lastWash];
+  });
+  const escape = (s: string) => /[,"\n]/.test(s) ? `"${String(s).replace(/"/g, '""')}"` : s;
+  const lines = [headers.map(escape).join(','), ...rows.map(r => r.map(v => escape(String(v))).join(','))];
+  const dateLabel = dateRange?.start && dateRange?.end ? `\nPeriod: ${dateRange.start} - ${dateRange.end}` : '';
+  return `ELORA Fleet Compliance Report${dateLabel}\n\n${lines.join('\n')}`;
+}
 
-  const totalCompliance = vehicles.reduce((sum, v) => sum + (v.compliance_rate || 0), 0);
-  const averageCompliance = vehicles.length > 0 ? Math.round(totalCompliance / vehicles.length) : 0;
+function generateComplianceData(
+  vehicles: Array<{ washes_completed?: number; target?: number; name?: string; site_name?: string }>,
+  startDate: Date
+) {
+  const targetDefault = 12;
+  const compliant = vehicles.filter(v =>
+    (v.washes_completed ?? 0) >= (v.target ?? targetDefault)
+  );
+  const atRisk = vehicles.filter(v =>
+    (v.washes_completed ?? 0) < (v.target ?? targetDefault)
+  );
+  const total = vehicles.length;
+  const complianceRate = total > 0 ? Math.round((compliant.length / total) * 100) : 0;
 
-  const alerts = [];
-  if (atRiskVehicles.length > 0) {
+  const alerts: Array<{ title: string; message: string }> = [];
+  if (atRisk.length > 0) {
     alerts.push({
       title: 'Low Compliance Alert',
-      message: `${atRiskVehicles.length} vehicle(s) are below the 80% compliance threshold and require attention.`,
-      type: 'warning'
+      message: `${atRisk.length} vehicle(s) are below the compliance threshold and require attention.`
     });
   }
 
   return {
     summary: {
-      averageCompliance,
-      totalVehicles: vehicles.length,
-      compliantVehicles: compliantVehicles.length,
-      atRiskVehicles: atRiskVehicles.length,
+      averageCompliance: complianceRate,
+      totalVehicles: total,
+      compliantVehicles: compliant.length,
+      atRiskVehicles: atRisk.length,
       alerts
     },
-    vehicles: vehicles.slice(0, 20).map(v => ({
-      name: v.name || 'Unknown',
-      site: v.site_name || 'N/A',
-      complianceRate: v.compliance_rate || 0,
-      washesCompleted: v.washes_completed || 0,
-      targetWashes: v.target_washes || 0,
-      status: (v.compliance_rate || 0) >= 80 ? 'Compliant' : 'At Risk'
-    })),
+    vehicles: vehicles.slice(0, 20).map(v => {
+      const target = v.target ?? 12;
+      const completed = v.washes_completed ?? 0;
+      const pct = target > 0 ? Math.min(100, Math.round((completed / target) * 100)) : 0;
+      return {
+        name: v.name || 'Unknown',
+        site: v.site_name || 'N/A',
+        complianceRate: pct,
+        washesCompleted: completed,
+        targetWashes: target,
+        status: completed >= target ? 'Compliant' : 'At Risk'
+      };
+    }),
     dateRange: `${startDate.toLocaleDateString()} - ${new Date().toLocaleDateString()}`
   };
 }
 
-// Helper function to generate maintenance data
-function generateMaintenanceData(vehicles, maintenanceRecords) {
-  const now = new Date();
-  const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-  const upcomingMaintenance = [];
-  let overdueCount = 0;
-
-  for (const record of maintenanceRecords) {
-    if (!record.next_service_date) continue;
-
-    const nextDate = new Date(record.next_service_date);
-    const daysUntil = Math.ceil((nextDate - now) / (1000 * 60 * 60 * 24));
-
-    if (daysUntil < 0) {
-      overdueCount++;
-    }
-
-    if (daysUntil <= 30) {
-      const vehicle = vehicles.find(v => v.id === record.vehicle_id);
-      upcomingMaintenance.push({
-        vehicleName: vehicle?.name || 'Unknown',
-        serviceType: record.service_type || 'Maintenance',
-        dueDate: nextDate.toLocaleDateString(),
-        daysUntil: Math.max(0, daysUntil),
-        status: daysUntil < 0 ? 'Overdue' : daysUntil <= 7 ? 'Urgent' : 'Scheduled'
-      });
-    }
-  }
-
-  // Sort by days until due (ascending)
-  upcomingMaintenance.sort((a, b) => a.daysUntil - b.daysUntil);
-
-  return {
-    summary: {
-      upcomingCount: upcomingMaintenance.length,
-      overdueCount
-    },
-    upcomingMaintenance: upcomingMaintenance.slice(0, 15),
-    dateRange: `${now.toLocaleDateString()} - ${thirtyDaysFromNow.toLocaleDateString()}`
-  };
-}
-
-// Helper function to generate cost data
-function generateCostData(maintenanceRecords, vehicles, startDate) {
-  const recentRecords = maintenanceRecords.filter(r => {
-    if (!r.service_date) return false;
-    const serviceDate = new Date(r.service_date);
-    return serviceDate >= startDate;
-  });
-
-  const totalCost = recentRecords.reduce((sum, r) => sum + (r.cost || 0), 0);
-  const monthlyAverage = Math.round(totalCost / (recentRecords.length > 0 ? 1 : 1));
-
-  return {
-    summary: {
-      totalCost: Math.round(totalCost),
-      monthlyAverage,
-      recordCount: recentRecords.length
-    },
-    dateRange: `${startDate.toLocaleDateString()} - ${new Date().toLocaleDateString()}`
-  };
-}
-
-// Helper function to generate AI insights
-async function generateAIInsights(reports, vehicles) {
-  const prompt = `Based on the following fleet data, provide 3-5 key insights and actionable recommendations:
-
-Compliance: ${reports.compliance?.summary?.averageCompliance || 0}% average, ${reports.compliance?.summary?.atRiskVehicles || 0} vehicles at risk
-Maintenance: ${reports.maintenance?.summary?.upcomingCount || 0} upcoming services, ${reports.maintenance?.summary?.overdueCount || 0} overdue
-Costs: $${reports.costs?.summary?.totalCost || 0} total maintenance costs
-Total Vehicles: ${vehicles.length}
-
-Focus on practical, actionable insights for fleet management.`;
-
-  try {
-    // TODO: Implement LLM invocation for AI insights
-    // For now, return a placeholder message
-    return 'AI insights generation requires LLM integration setup. This feature will be available once configured.';
-  } catch (error) {
-    console.error('LLM invocation error:', error);
-    return 'AI insights are temporarily unavailable. Please try again later.';
-  }
-}
-
-// Generate complete HTML email
-function generateEmailHTML(reports, branding, userEmail) {
+function generateEmailHTML(
+  reports: Record<string, unknown>,
+  branding: { company_name?: string; logo_url?: string; primary_color?: string; secondary_color?: string },
+  _userEmail: string,
+  hasCsvAttachment = false
+) {
   const primaryColor = branding?.primary_color || '#7CB342';
   const secondaryColor = branding?.secondary_color || '#9CCC65';
   const companyName = branding?.company_name || 'ELORA Solutions';
@@ -420,149 +419,77 @@ function generateEmailHTML(reports, branding, userEmail) {
 
   let content = `
     <p style="color: #64748b; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      This is your automated fleet compliance and management report. Below you'll find comprehensive insights into your fleet's performance.
+      Here is your fleet compliance report. Below you'll find insights into your fleet's performance.
+      ${hasCsvAttachment ? ' A CSV file with vehicle details is attached to this email.' : ''}
     </p>
   `;
 
-  // Compliance section
-  if (reports.compliance) {
-    const { summary, vehicles } = reports.compliance;
+  const c = reports.compliance as { summary?: { averageCompliance?: number; totalVehicles?: number; compliantVehicles?: number; atRiskVehicles?: number; alerts?: Array<{ title: string; message: string }> } } | undefined;
+  if (c?.summary) {
+    const s = c.summary;
     content += `
       <div style="margin: 40px 0 20px 0;">
-        <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          📊 Compliance Overview
-        </h2>
+        <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Compliance Overview</h2>
         <div style="height: 3px; width: 60px; background: linear-gradient(90deg, ${primaryColor} 0%, ${secondaryColor} 100%); border-radius: 2px; margin-top: 12px;"></div>
       </div>
-
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 30px;">
-        <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border-left: 4px solid ${primaryColor};">
-          <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Average Compliance</h3>
-          <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0 0 4px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${summary.averageCompliance}%</p>
-          <p style="color: #64748b; font-size: 14px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Across all vehicles</p>
+        <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid ${primaryColor};">
+          <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Compliance Rate</h3>
+          <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0;">${s.averageCompliance ?? 0}%</p>
+          <p style="color: #64748b; font-size: 14px; margin: 0;">% of vehicles meeting target</p>
         </div>
-        <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border-left: 4px solid ${secondaryColor};">
-          <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Total Vehicles</h3>
-          <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0 0 4px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${summary.totalVehicles}</p>
-          <p style="color: #64748b; font-size: 14px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">In your fleet</p>
+        <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid ${secondaryColor};">
+          <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Total Vehicles</h3>
+          <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0;">${s.totalVehicles ?? 0}</p>
+          <p style="color: #64748b; font-size: 14px; margin: 0;">In your fleet</p>
         </div>
       </div>
-
-      ${summary.alerts && summary.alerts.length > 0 ? summary.alerts.map(alert => `
+      ${(s.alerts && s.alerts.length > 0) ? s.alerts.map((a: { title: string; message: string }) => `
         <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 20px; margin: 20px 0;">
-          <h4 style="color: #92400e; font-size: 16px; font-weight: 600; margin: 0 0 8px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${alert.title}</h4>
-          <p style="color: #92400e; font-size: 14px; margin: 0; line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${alert.message}</p>
+          <h4 style="color: #92400e; font-size: 16px; font-weight: 600; margin: 0 0 8px 0;">${a.title}</h4>
+          <p style="color: #92400e; font-size: 14px; margin: 0;">${a.message}</p>
         </div>
       `).join('') : ''}
     `;
   }
 
-  // Maintenance section
-  if (reports.maintenance) {
-    const { summary, upcomingMaintenance } = reports.maintenance;
+  const costs = reports.costs as { summary?: { totalWashes?: number; washSummary?: string } } | undefined;
+  if (costs?.summary) {
+    const cs = costs.summary;
     content += `
       <div style="margin: 40px 0 20px 0;">
-        <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          🔧 Maintenance Status
-        </h2>
+        <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Cost & Usage Summary</h2>
         <div style="height: 3px; width: 60px; background: linear-gradient(90deg, ${primaryColor} 0%, ${secondaryColor} 100%); border-radius: 2px; margin-top: 12px;"></div>
       </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 30px;">
-        <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border-left: 4px solid ${primaryColor};">
-          <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Upcoming Services</h3>
-          <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0 0 4px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${summary.upcomingCount}</p>
-          <p style="color: #64748b; font-size: 14px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Next 30 days</p>
-        </div>
-        <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border-left: 4px solid #ef4444;">
-          <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Overdue Services</h3>
-          <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0 0 4px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${summary.overdueCount}</p>
-          <p style="color: #64748b; font-size: 14px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Need attention</p>
-        </div>
-      </div>
-
-      ${upcomingMaintenance && upcomingMaintenance.length > 0 ? `
-        <div style="overflow-x: auto; margin: 24px 0;">
-          <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
-            <thead>
-              <tr style="background: #f1f5f9;">
-                <th style="padding: 16px; text-align: left; font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Vehicle</th>
-                <th style="padding: 16px; text-align: left; font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Service Type</th>
-                <th style="padding: 16px; text-align: left; font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Due Date</th>
-                <th style="padding: 16px; text-align: left; font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Days Until</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${upcomingMaintenance.slice(0, 10).map((m, index) => `
-                <tr style="border-bottom: 1px solid #f1f5f9; ${index % 2 === 0 ? 'background: #ffffff;' : 'background: #f8fafc;'}">
-                  <td style="padding: 16px; font-size: 14px; color: #334155; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${m.vehicleName}</td>
-                  <td style="padding: 16px; font-size: 14px; color: #334155; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${m.serviceType}</td>
-                  <td style="padding: 16px; font-size: 14px; color: #334155; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${m.dueDate}</td>
-                  <td style="padding: 16px; font-size: 14px; color: #334155; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${m.daysUntil} days</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      ` : ''}
-    `;
-  }
-
-  // AI Insights section
-  if (reports.aiInsights) {
-    content += `
-      <div style="margin: 40px 0 20px 0;">
-        <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          🤖 AI-Generated Insights
-        </h2>
-        <div style="height: 3px; width: 60px; background: linear-gradient(90deg, ${primaryColor} 0%, ${secondaryColor} 100%); border-radius: 2px; margin-top: 12px;"></div>
-      </div>
-      <div style="background: #f8fafc; border-radius: 12px; padding: 24px; margin: 20px 0; border-left: 4px solid ${primaryColor};">
-        <p style="color: #334155; font-size: 14px; line-height: 1.8; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; white-space: pre-wrap;">${reports.aiInsights}</p>
+      <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid ${primaryColor}; margin-bottom: 30px;">
+        <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Total Washes (Period)</h3>
+        <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0;">${cs.totalWashes ?? 0}</p>
+        <p style="color: #64748b; font-size: 14px; margin: 0;">${cs.washSummary ?? 'In selected period'}</p>
       </div>
     `;
   }
 
-  // Wrap in complete email template
   return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta http-equiv="X-UA-Compatible" content="IE=edge">
       <title>Fleet Compliance Report</title>
     </head>
-    <body style="margin: 0; padding: 0; background: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-      <div style="max-width: 680px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%); padding: 40px 20px; text-align: center; border-radius: 12px 12px 0 0;">
-          ${logoUrl ? `
-            <div style="background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); display: inline-block; padding: 20px 40px; border-radius: 12px; margin-bottom: 20px;">
-              <img src="${logoUrl}" alt="${companyName}" style="max-height: 60px; max-width: 250px; display: block;" />
-            </div>
-          ` : ''}
-          <h1 style="color: white; margin: ${logoUrl ? '10px' : '0'} 0 0 0; font-size: 28px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            ${companyName}
-          </h1>
-          <p style="color: rgba(255, 255, 255, 0.9); margin: 10px 0 0 0; font-size: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            Compliance Portal Report
-          </p>
+    <body style="margin: 0; padding: 0; background: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <div style="max-width: 680px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%); padding: 40px 20px; text-align: center;">
+          ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" style="max-height: 60px; margin-bottom: 16px;" />` : ''}
+          <h1 style="color: white; margin: 0; font-size: 28px;">${companyName}</h1>
+          <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">Compliance Portal Report</p>
         </div>
-
-        <!-- Content -->
         <div style="padding: 40px 30px;">
           ${content}
         </div>
-
-        <!-- Footer -->
-        <div style="background: #f8fafc; padding: 30px 20px; text-align: center; border-radius: 0 0 12px 12px; margin-top: 40px; border-top: 2px solid #e2e8f0;">
-          <p style="color: #64748b; font-size: 14px; margin: 0 0 10px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            This is an automated report from ${companyName} Compliance Portal
-          </p>
-          <p style="color: #94a3b8; font-size: 12px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            © ${new Date().getFullYear()} ${companyName}. All rights reserved.
-          </p>
+        <div style="background: #f8fafc; padding: 30px 20px; text-align: center; border-top: 2px solid #e2e8f0;">
+          <p style="color: #64748b; font-size: 14px; margin: 0;">Report from ${companyName} Compliance Portal</p>
+          <p style="color: #94a3b8; font-size: 12px; margin: 10px 0 0 0;">© ${new Date().getFullYear()} ${companyName}</p>
         </div>
       </div>
     </body>

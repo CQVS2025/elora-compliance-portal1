@@ -1,3 +1,6 @@
+/**
+ * ACATC /api/vehicles supports: customer, site, vehicleId, rfid, status. We pass customer, site, status.
+ */
 Deno.serve(async (req) => {
   try {
     const apiKey = Deno.env.get("ELORA_API_KEY");
@@ -17,7 +20,8 @@ Deno.serve(async (req) => {
       ?? url.searchParams.get('site_id')
       ?? url.searchParams.get('site');
 
-    const params = new URLSearchParams({ status: '1' }); // active only
+    // Get ALL vehicles (active + inactive) - no status filter means API returns 1,2 by default
+    const params = new URLSearchParams({ status: '1,2' }); // active + inactive
     if (customerId && customerId !== 'all') {
       params.append('customer', customerId);
     }

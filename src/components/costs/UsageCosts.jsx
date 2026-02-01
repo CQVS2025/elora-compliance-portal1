@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { DollarSign, Calculator, Droplet, MapPin, Download, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { DollarSign, Calculator, Droplet, MapPin, Download, Search, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -203,7 +203,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  const { data: scans = [], isLoading } = useQuery({
+  const { data: scans = [], isLoading, isFetching } = useQuery({
     queryKey: ['costs-scans', selectedCustomer, selectedSite, dateRange.start, dateRange.end],
     queryFn: () => fetchScans({
       customerId: selectedCustomer,
@@ -394,7 +394,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-[#7CB342] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 text-[#7CB342] animate-spin mx-auto mb-4" />
           <p className="text-slate-600">Calculating costs...</p>
         </div>
       </div>
@@ -415,7 +415,15 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
   const { summary } = costData;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {isFetching && (
+        <div className="absolute inset-0 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
+          <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 px-6 py-3 rounded-xl shadow-lg">
+            <Loader2 className="w-5 h-5 text-[#7CB342] animate-spin" />
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Updating costs...</span>
+          </div>
+        </div>
+      )}
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
