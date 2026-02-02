@@ -20,7 +20,7 @@ import SectionCards from '@/components/SectionCards';
 import ChartAreaInteractive from '@/components/ChartAreaInteractive';
 import DataTable from '@/components/DataTable';
 import FilterSection from '@/components/dashboard/FilterSection';
-import FavoriteVehicles from '@/components/dashboard/FavoriteVehicles';
+import FavoriteVehicles, { FavoriteButton } from '@/components/dashboard/FavoriteVehicles';
 import VehiclePerformanceChart from '@/components/dashboard/VehiclePerformanceChart';
 import SiteManagement from '@/components/sites/SiteManagement';
 import ReportsDashboard from '@/components/reports/ReportsDashboard';
@@ -29,7 +29,6 @@ import BrandingManagement from '@/components/admin/BrandingManagement';
 import UsageCosts from '@/components/costs/UsageCosts';
 import MobileDashboard from './MobileDashboard';
 import DeviceHealth from '@/components/devices/DeviceHealth';
-import CostForecast from '@/components/analytics/CostForecast';
 import RefillAnalytics from '@/components/refills/RefillAnalytics';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import { usePermissions, useFilteredData, useAvailableTabs } from '@/components/auth/PermissionGuard';
@@ -484,8 +483,21 @@ export default function Dashboard() {
   const isDataLoading = vehiclesLoading || dashboardLoading;
 
   // Must be called unconditionally (before any early return) to satisfy Rules of Hooks
+  const userEmail = permissions.user?.email;
   const vehicleColumns = useMemo(
     () => [
+      {
+        id: 'favorite',
+        header: '',
+        cell: (row) => (
+          <FavoriteButton
+            vehicleRef={row.id ?? row.rfid}
+            vehicleName={row.name}
+            userEmail={userEmail}
+            className="shrink-0"
+          />
+        ),
+      },
       { id: 'name', header: 'Vehicle', accessorKey: 'name' },
       { id: 'rfid', header: 'RFID', accessorKey: 'rfid' },
       { id: 'site_name', header: 'Site', accessorKey: 'site_name' },
@@ -511,7 +523,7 @@ export default function Dashboard() {
         cell: (row) => (row.last_scan ? moment(row.last_scan).fromNow() : '—'),
       },
     ],
-    []
+    [userEmail]
   );
 
   if (isMobile && permissions.isDriver) {
@@ -600,17 +612,6 @@ export default function Dashboard() {
             userEmail={permissions.user?.email}
           />
         </div>
-
-        {/* Cost Forecast */}
-        {!permissions.hideCostForecast && (
-          <div className="mb-8">
-            <CostForecast
-              scans={filteredScans}
-              selectedCustomer={selectedCustomer}
-              selectedSite={selectedSite}
-            />
-          </div>
-        )}
 
         {/* Leaderboard Link */}
         {!permissions.hideLeaderboard && (

@@ -11,6 +11,7 @@ import { motion } from 'framer-motion';
 import DataPagination from '@/components/ui/DataPagination';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { scansOptions } from '@/query/options';
+import CostForecast from '@/components/analytics/CostForecast';
 
 // Pricing rules
 const PRICING_RULES = {
@@ -426,10 +427,16 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
 
   if (!scans.length) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <Droplet className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground text-lg">No wash data for selected period</p>
+      <div className="space-y-6">
+        {!permissions.hideCostForecast && (
+          <CostForecast scans={[]} selectedCustomer={selectedCustomer} selectedSite={selectedSite} />
+        )}
+        <div className="flex items-center justify-center py-12 rounded-xl border border-border bg-card">
+          <div className="text-center">
+            <Droplet className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground text-lg">No wash data for selected period</p>
+            <p className="text-sm text-muted-foreground mt-1">Adjust the date range to see cost data</p>
+          </div>
         </div>
       </div>
     );
@@ -439,6 +446,13 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
 
   return (
     <div className="space-y-6 relative">
+      {!permissions.hideCostForecast && (
+        <CostForecast
+          scans={scans}
+          selectedCustomer={selectedCustomer}
+          selectedSite={selectedSite}
+        />
+      )}
       {isFetching && (
         <div className="absolute inset-0 bg-background/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
           <div className="flex items-center gap-3 bg-card px-6 py-3 rounded-xl shadow-lg border border-border">

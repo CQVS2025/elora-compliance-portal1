@@ -47,13 +47,17 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 export default function RefillAnalytics({ refills, scans, sites, selectedCustomer, selectedSite, dateRange }) {
   const [productFilter, setProductFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [refSearch, setRefSearch] = useState('');
+  const [areaManagerFilter, setAreaManagerFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   // Reset to page 1 when filters or page size change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCustomer, selectedSite, productFilter, statusFilter, pageSize]);
+  }, [selectedCustomer, selectedSite, productFilter, statusFilter, refSearch, areaManagerFilter, dateFrom, dateTo, pageSize]);
 
   const uniqueProducts = useMemo(() => {
     const products = new Set(refills?.map(r => r.productName) || []);
@@ -63,6 +67,11 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
   const uniqueStatuses = useMemo(() => {
     const statuses = new Set(refills?.map(r => r.status) || []);
     return ['all', ...Array.from(statuses).sort()];
+  }, [refills]);
+
+  const uniqueAreaManagers = useMemo(() => {
+    const managers = new Set(refills?.map(r => r.areaManager).filter(Boolean) || []);
+    return ['all', ...Array.from(managers).sort()];
   }, [refills]);
 
   // Apply filters to refills (NO date filter - show all refills including future scheduled)
@@ -81,20 +90,36 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
     }
     
     const filtered = refills.filter(refill => {
-      // NO date filter - show ALL refills (past, present, and future scheduled)
-      // This matches the client's original system behavior
-      
       // Customer filter; include refills with null customer so nothing is hidden
       const matchesCustomer = !selectedCustomer || selectedCustomer === 'all' || refill.customer === selectedCustomer || refill.customer == null;
       
       // Site filter; include refills with null site so nothing is hidden
       const matchesSite = !selectedSite || selectedSite === 'all' || refill.site === selectedSite || refill.site == null;
       
-      // Product and status filters (component-specific)
+      // Product and status filters
       const matchesProduct = productFilter === 'all' || refill.productName === productFilter;
       const matchesStatus = statusFilter === 'all' || refill.status === statusFilter;
       
-      return matchesCustomer && matchesSite && matchesProduct && matchesStatus;
+      // Ref search (partial match, case-insensitive)
+      const refStr = String(refill.ref || '').toLowerCase();
+      const matchesRef = !refSearch.trim() || refStr.includes(refSearch.trim().toLowerCase());
+      
+      // Area manager filter
+      const matchesAreaManager = areaManagerFilter === 'all' || refill.areaManager === areaManagerFilter;
+      
+      // Date range filter (refill date)
+      let matchesDate = true;
+      if (dateFrom || dateTo) {
+        const refillDate = refill.date ? moment(refill.date) : null;
+        if (refillDate) {
+          if (dateFrom && refillDate.isBefore(moment(dateFrom).startOf('day'))) matchesDate = false;
+          if (dateTo && refillDate.isAfter(moment(dateTo).endOf('day'))) matchesDate = false;
+        } else {
+          matchesDate = false;
+        }
+      }
+      
+      return matchesCustomer && matchesSite && matchesProduct && matchesStatus && matchesRef && matchesAreaManager && matchesDate;
     });
     
     console.log('✅ REFILL FILTERING COMPLETE:', {
@@ -113,7 +138,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
     });
     
     return filtered;
-  }, [refills, selectedCustomer, selectedSite, productFilter, statusFilter]);
+  }, [refills, selectedCustomer, selectedSite, productFilter, statusFilter, refSearch, areaManagerFilter, dateFrom, dateTo]);
 
   const analysis = useMemo(() => {
     if (!filteredRefills?.length) return null;
@@ -500,9 +525,13 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
   const handleClearFilters = () => {
     setProductFilter('all');
     setStatusFilter('all');
+    setRefSearch('');
+    setAreaManagerFilter('all');
+    setDateFrom('');
+    setDateTo('');
   };
 
-  const hasActiveFilters = productFilter !== 'all' || statusFilter !== 'all';
+  const hasActiveFilters = productFilter !== 'all' || statusFilter !== 'all' || refSearch.trim() || areaManagerFilter !== 'all' || dateFrom || dateTo;
 
   if (!analysis) {
     return (
@@ -696,8 +725,8 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
         </Card>
       </div>
 
-      {/* Predictive Alerts */}
-      <Card>
+      {/* Predictive Alerts - commented out per request */}
+      {/* <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-primary" />
@@ -770,7 +799,6 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                       </div>
                     </div>
                     
-                    {/* Additional insights */}
                     <div className="mt-3 pt-3 border-t border-current/20 grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
                       <div>
                         <p className="text-muted-foreground">Consumed Since Refill</p>
@@ -811,7 +839,6 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
             ))}
           </div>
           
-          {/* Pagination */}
           {Math.ceil(analysis.predictions.length / pageSize) > 1 && (
             <DataPagination
               currentPage={currentPage}
@@ -823,7 +850,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
             />
           )}
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Data Visualizations */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1043,10 +1070,100 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
       {/* ALL REFILLS TABLE - Matching Client System */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Droplet className="w-5 h-5 text-primary" />
-            All Refills ({filteredRefills.length} total)
-          </CardTitle>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <Droplet className="w-5 h-5 text-primary" />
+                All Refills ({filteredRefills.length} total)
+              </CardTitle>
+              {hasActiveFilters && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearFilters}
+                  className="gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+            {/* Filters - inline above table */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Ref</label>
+                <Input
+                  placeholder="Search by ref..."
+                  value={refSearch}
+                  onChange={(e) => setRefSearch(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Product</label>
+                <Select value={productFilter} onValueChange={setProductFilter}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="All Products" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueProducts.map(product => (
+                      <SelectItem key={product} value={product}>
+                        {product === 'all' ? 'All Products' : product}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Status</label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueStatuses.map(status => (
+                      <SelectItem key={status} value={status}>
+                        {status === 'all' ? 'All Statuses' : status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Area Manager</label>
+                <Select value={areaManagerFilter} onValueChange={setAreaManagerFilter}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="All Managers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueAreaManagers.map(manager => (
+                      <SelectItem key={manager} value={manager}>
+                        {manager === 'all' ? 'All Managers' : manager}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Date From</label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Date To</label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

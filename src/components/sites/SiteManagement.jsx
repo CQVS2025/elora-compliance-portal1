@@ -1,24 +1,45 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from "@/api/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, Plus, MapPin, Phone, Mail, Building2, Edit, Trash2, AlertCircle, Truck } from 'lucide-react';
+import { Search, Building2, Edit, AlertCircle, Truck, ImageIcon, FilterX } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import SiteModal from './SiteModal';
 import AssignVehiclesModal from './AssignVehiclesModal';
-import { motion, AnimatePresence } from 'framer-motion';
 import DataPagination from '@/components/ui/DataPagination';
+import { usePermissions } from '@/components/auth/PermissionGuard';
+import { siteOverridesOptions } from '@/query/options';
 
 export default function SiteManagement({ customers, vehicles, selectedCustomer }) {
   const queryClient = useQueryClient();
+  const permissions = usePermissions();
+  const isSuperAdmin = permissions.isSuperAdmin ?? false;
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [customerFilter, setCustomerFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 12;
+  const itemsPerPage = 15;
 
   const { data: allSites = [], isLoading, error: sitesError } = useQuery({
     queryKey: ['sites'],
@@ -26,7 +47,6 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
       try {
         const response = await supabaseClient.elora.sites({});
         const data = response?.data ?? response ?? [];
-        // Map the API response to match the component's expected format
         return data.map(s => ({
           id: s.ref,
           name: s.siteName || s.name || 'Unnamed Site',
@@ -50,36 +70,47 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
     staleTime: 30000,
   });
 
-  // Apply customer filter from Dashboard; include sites with null customer_ref so nothing is hidden
-  const sites = useMemo(() => {
-    if (!selectedCustomer || selectedCustomer === 'all') return allSites;
-    return allSites.filter(s => s.customer_ref === selectedCustomer || s.customer_ref == null);
-  }, [allSites, selectedCustomer]);
+  const { data: siteOverrides = [] } = useQuery(siteOverridesOptions());
 
-  const deleteMutation = useMutation({
-    mutationFn: async (siteId) => {
-      // Note: Sites are managed via Elora API, deletion may need to be handled differently
-      // For now, we'll just invalidate the cache
-      console.warn('Site deletion via Elora API not yet implemented');
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['sites']);
-    }
-  });
+  const overrideMap = useMemo(() => {
+    const map = {};
+    (siteOverrides || []).forEach(o => { map[o.site_ref] = o; });
+    return map;
+  }, [siteOverrides]);
+
+  const sites = useMemo(() => {
+    return (allSites || []).map(site => {
+      const ov = overrideMap[site.id];
+      if (!ov) return site;
+      return {
+        ...site,
+        name: ov.name ?? site.name,
+        customer_ref: ov.customer_ref ?? site.customer_ref,
+        customer_name: ov.customer_name ?? site.customer_name,
+        street_address: ov.street_address,
+        address: ov.street_address ?? site.address,
+        city: ov.city ?? site.city,
+        state: ov.state ?? site.state,
+        postal_code: ov.postal_code ?? site.postal_code,
+        contact_person: ov.contact_person,
+        contact_name: ov.contact_person ?? site.contact_name,
+        contact_phone: ov.contact_phone ?? site.contact_phone,
+        contact_email: ov.contact_email ?? site.contact_email,
+        is_active: ov.is_active,
+        status: ov.is_active === false ? 'inactive' : (site.status || 'active'),
+        notes: ov.notes,
+        logo_url: ov.logo_url,
+      };
+    });
+  }, [allSites, overrideMap]);
+
+  const filteredByCustomer = useMemo(() => {
+    if (!selectedCustomer || selectedCustomer === 'all') return sites;
+    return sites.filter(s => s.customer_ref === selectedCustomer || s.customer_ref == null);
+  }, [sites, selectedCustomer]);
 
   const handleEdit = (site) => {
     setSelectedSite(site);
-    setModalOpen(true);
-  };
-
-  const handleDelete = async (site) => {
-    if (confirm(`Are you sure you want to delete "${site.name}"?`)) {
-      deleteMutation.mutate(site.id);
-    }
-  };
-
-  const handleAddNew = () => {
-    setSelectedSite(null);
     setModalOpen(true);
   };
 
@@ -92,15 +123,43 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
     return vehicles?.filter(v => v.site_id === siteId) || [];
   };
 
-  const filteredSites = useMemo(() => {
-    return (sites || []).filter(site =>
-      site.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (site.customer_name && site.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (site.city && site.city.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  }, [sites, searchQuery]);
+  const uniqueCustomers = useMemo(() => {
+    const names = new Set();
+    (filteredByCustomer || []).forEach(s => {
+      if (s.customer_name) names.add(s.customer_name);
+    });
+    return Array.from(names).sort();
+  }, [filteredByCustomer]);
 
-  // Pagination
+  const filteredSites = useMemo(() => {
+    let list = filteredByCustomer || [];
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(site =>
+        site.name?.toLowerCase().includes(q) ||
+        (site.customer_name && site.customer_name.toLowerCase().includes(q)) ||
+        (site.city && site.city.toLowerCase().includes(q)) ||
+        (site.address && site.address.toLowerCase().includes(q)) ||
+        (site.state && site.state.toLowerCase().includes(q))
+      );
+    }
+    if (statusFilter && statusFilter !== 'all') {
+      list = list.filter(s => (s.status || 'active') === statusFilter);
+    }
+    if (customerFilter && customerFilter !== 'all') {
+      list = list.filter(s => s.customer_name === customerFilter);
+    }
+    return list;
+  }, [filteredByCustomer, searchQuery, statusFilter, customerFilter]);
+
+  const hasActiveFilters = searchQuery || statusFilter !== 'all' || customerFilter !== 'all';
+  const clearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setCustomerFilter('all');
+    setCurrentPage(1);
+  };
+
   const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
   const paginatedSites = useMemo(() => {
     return filteredSites.slice(
@@ -109,10 +168,9 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
     );
   }, [filteredSites, currentPage, itemsPerPage]);
 
-  // Reset to page 1 when search or filters change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCustomer]);
+  }, [searchQuery, selectedCustomer, statusFilter, customerFilter]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -127,7 +185,8 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
     }
   };
 
-  // Show error state if sites failed to load
+  const empty = '—';
+
   if (sitesError) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4 bg-card rounded-2xl border border-destructive/30">
@@ -138,17 +197,13 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
         <p className="text-muted-foreground text-center max-w-md mb-6">
           {sitesError?.message || 'An error occurred while loading sites. Please try again.'}
         </p>
-        <Button 
-          onClick={() => queryClient.invalidateQueries(['sites'])} 
-          className=""
-        >
+        <Button onClick={() => queryClient.invalidateQueries(['sites'])}>
           Retry
         </Button>
       </div>
     );
   }
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4">
@@ -160,30 +215,55 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Site Management</h2>
           <p className="text-muted-foreground mt-1">Manage wash station locations and contact information</p>
         </div>
-        {/* <Button onClick={handleAddNew} className="">
-          <Plus className="w-4 h-4 mr-2" />
-          Add New Site
-        </Button> */}
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search sites by name, customer, or city..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 border-border"
-        />
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search sites by name, customer, or city..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 border-border h-9"
+          />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[140px] h-9">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={customerFilter} onValueChange={setCustomerFilter}>
+            <SelectTrigger className="w-[180px] h-9">
+              <SelectValue placeholder="Customer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Customers</SelectItem>
+              {uniqueCustomers.map((name) => (
+                <SelectItem key={name} value={name}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 gap-1.5 text-muted-foreground hover:text-foreground">
+              <FilterX className="w-4 h-4" />
+              Clear filters
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
@@ -232,103 +312,71 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
         </Card>
       </div>
 
-      {/* Site Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <AnimatePresence>
-          {paginatedSites.map((site, index) => (
-            <motion.div
-              key={site.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <Card className="hover:shadow-lg transition-shadow">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-foreground text-lg mb-1">{site.name}</h3>
-                      {site.customer_name && (
-                        <p className="text-sm text-muted-foreground">{site.customer_name}</p>
-                      )}
-                    </div>
-                    <Badge className={getStatusColor(site.status)}>
-                      {site.status}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    {(site.address || site.city || site.state) && (
-                      <div className="flex items-start gap-2">
-                        <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
-                        <div className="text-sm text-muted-foreground">
-                          {site.address && <p>{site.address}</p>}
-                          <p>
-                            {[site.city, site.state, site.postal_code].filter(Boolean).join(', ')}
-                          </p>
-                        </div>
+      <Card className="rounded-xl border border-border overflow-hidden">
+        <div className="rounded-lg border-0 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="w-24 py-3 pl-4">Logo</TableHead>
+                <TableHead className="min-w-[140px] py-3">Site</TableHead>
+                <TableHead className="min-w-[120px] py-3">Customer</TableHead>
+                <TableHead className="min-w-[160px] py-3">Address</TableHead>
+                <TableHead className="min-w-[140px] py-3">Contact</TableHead>
+                <TableHead className="w-20 py-3">Status</TableHead>
+                <TableHead className="w-24 py-3 text-center">Vehicles</TableHead>
+                {isSuperAdmin && <TableHead className="w-20 py-3 text-right">Actions</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedSites.map((site) => {
+                const addr = [site.address, [site.city, site.state, site.postal_code].filter(Boolean).join(', ')].filter(Boolean).join(' • ') || empty;
+                const contact = [site.contact_name, site.contact_phone, site.contact_email].filter(Boolean).join(' • ') || empty;
+                const vehicleCount = getAssignedVehicles(site.id).length;
+                return (
+                  <TableRow key={site.id} className="group">
+                    <TableCell className="py-3 pl-4 align-middle">
+                      <div className="flex items-center justify-center w-14 h-14 rounded-lg border border-border bg-muted/30 p-1 shrink-0">
+                        {site.logo_url ? (
+                          <img src={site.logo_url} alt="" className="h-full w-full object-contain" />
+                        ) : (
+                          <ImageIcon className="w-7 h-7 text-muted-foreground" />
+                        )}
                       </div>
+                    </TableCell>
+                    <TableCell className="py-2 align-middle font-medium">{site.name || empty}</TableCell>
+                    <TableCell className="py-2 align-middle text-muted-foreground">{site.customer_name || empty}</TableCell>
+                    <TableCell className="py-2 align-middle text-muted-foreground max-w-[200px] truncate" title={addr}>{addr}</TableCell>
+                    <TableCell className="py-2 align-middle text-muted-foreground max-w-[180px] truncate" title={contact}>{contact}</TableCell>
+                    <TableCell className="py-2 align-middle">
+                      <Badge className={getStatusColor(site.status)}>{site.status}</Badge>
+                    </TableCell>
+                    <TableCell className="py-2 align-middle text-center">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleAssignVehicles(site)}
+                        className="h-8 text-primary hover:bg-primary/10 -mx-1"
+                      >
+                        <Truck className="w-3.5 h-3.5 mr-1" />
+                        {vehicleCount}
+                      </Button>
+                    </TableCell>
+                    {isSuperAdmin && (
+                      <TableCell className="py-2 align-middle text-right">
+                        <Button size="sm" variant="outline" onClick={() => handleEdit(site)} className="h-8">
+                          <Edit className="w-3.5 h-3.5 mr-1" />
+                          Edit
+                        </Button>
+                      </TableCell>
                     )}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
 
-                    {site.contact_name && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">
-                          {site.contact_name}
-                          {site.contact_phone && ` • ${site.contact_phone}`}
-                        </p>
-                      </div>
-                    )}
-
-                    {site.contact_email && (
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">{site.contact_email}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-3 pt-3 border-t border-border">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleAssignVehicles(site)}
-                      className="w-full justify-start text-primary hover:text-primary hover:bg-primary/10"
-                    >
-                      <Truck className="w-4 h-4 mr-2" />
-                      <span>
-                        {getAssignedVehicles(site.id).length} vehicle{getAssignedVehicles(site.id).length !== 1 ? 's' : ''} assigned
-                      </span>
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleEdit(site)}
-                      className="flex-1"
-                    >
-                      <Edit className="w-3 h-3 mr-1" />
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDelete(site)}
-                      className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
-      {/* Pagination */}
       {totalPages > 1 && (
         <DataPagination
           currentPage={currentPage}
@@ -345,28 +393,16 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
             <Building2 className="w-12 h-12 text-muted-foreground" />
           </div>
           <h3 className="text-xl font-bold text-foreground mb-2">
-            {searchQuery ? 'No sites found' : 'Welcome! Add your first site'}
+            {hasActiveFilters ? 'No sites match your filters' : 'No sites available'}
           </h3>
           <p className="text-muted-foreground text-center max-w-md mb-6">
-            {searchQuery
-              ? `No sites match "${searchQuery}". Try a different search term.`
-              : 'Add your first wash station location to start managing your fleet operations.'
+            {hasActiveFilters
+              ? 'Try adjusting your search or filters.'
+              : 'Sites are loaded from the Elora API. Contact your administrator if you expect to see sites here.'
             }
           </p>
-          {!searchQuery && (
-            <div className="space-y-3 text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 max-w-md">
-              <p className="font-semibold text-foreground">Site Setup Guide:</p>
-              <ol className="list-decimal list-inside space-y-2">
-                <li>Create a site for each wash station location</li>
-                <li>Add contact information and address details</li>
-                <li>Assign vehicles to the appropriate site</li>
-                <li>Track wash activity by location</li>
-              </ol>
-              <Button onClick={handleAddNew} className="w-full mt-4">
-                <Plus className="w-4 h-4 mr-2" />
-                Add First Site
-              </Button>
-            </div>
+          {hasActiveFilters && (
+            <Button variant="outline" onClick={clearFilters}>Clear filters</Button>
           )}
         </div>
       )}
@@ -378,9 +414,10 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
           setSelectedSite(null);
         }}
         site={selectedSite}
-        customers={customers}
+        customers={customers || []}
         onSuccess={() => {
           queryClient.invalidateQueries(['sites']);
+          queryClient.invalidateQueries({ queryKey: ['siteOverrides'] });
         }}
       />
 

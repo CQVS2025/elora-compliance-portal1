@@ -88,7 +88,7 @@ export default function DataTable({
   searchPlaceholder = 'Search...',
   searchValue: controlledSearch,
   onSearchChange,
-  pageSize: controlledPageSize = 10,
+  pageSize: controlledPageSize,
   onPageSizeChange,
   columnVisibility: controlledColumnVisibility,
   onColumnVisibilityChange,
@@ -101,7 +101,7 @@ export default function DataTable({
 }) {
   const [internalSearch, setInternalSearch] = useState('');
   const [internalPage, setInternalPage] = useState(1);
-  const [internalPageSize, setInternalPageSize] = useState(controlledPageSize);
+  const [internalPageSize, setInternalPageSize] = useState(controlledPageSize ?? 10);
   const [internalColumnVisibility, setInternalColumnVisibility] = useState(
     () => columns.reduce((acc, col) => ({ ...acc, [col.id]: true }), {})
   );
@@ -109,7 +109,7 @@ export default function DataTable({
 
   const search = controlledSearch !== undefined ? controlledSearch : internalSearch;
   const setSearch = onSearchChange ?? setInternalSearch;
-  const pageSize = controlledPageSize ?? internalPageSize;
+  const pageSize = controlledPageSize !== undefined ? controlledPageSize : internalPageSize;
   const setPageSize = onPageSizeChange ?? setInternalPageSize;
   const columnVisibility = controlledColumnVisibility ?? internalColumnVisibility;
   const setColumnVisibility = onColumnVisibilityChange ?? setInternalColumnVisibility;

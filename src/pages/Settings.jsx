@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Trash2,
   Loader2,
-  Save,
   Globe,
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
@@ -29,7 +28,6 @@ export default function Settings() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -63,23 +61,6 @@ export default function Settings() {
     }
   };
 
-  const handleSaveSettings = async () => {
-    if (!user) {
-      toast.error('You must be logged in to save settings.', { description: 'Error' });
-      return;
-    }
-    setIsSaving(true);
-    try {
-      localStorage.setItem(`settings_${user.id}`, JSON.stringify(settings));
-      toast.success('Settings Saved', { description: 'Your preferences have been updated successfully.' });
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      toast.error('Failed to save settings. Please try again.', { description: 'Error' });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleDeleteAccount = async () => {
     if (!user) {
       toast.error('You must be logged in to delete your account.', { description: 'Error' });
@@ -110,25 +91,10 @@ export default function Settings() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Page header with Save */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground mt-1">Manage your account preferences</p>
-        </div>
-        <Button onClick={handleSaveSettings} disabled={isSaving} className="shrink-0">
-          {isSaving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              Save
-            </>
-          )}
-        </Button>
+      {/* Page header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground mt-1">Manage your account preferences</p>
       </div>
 
       <Separator />

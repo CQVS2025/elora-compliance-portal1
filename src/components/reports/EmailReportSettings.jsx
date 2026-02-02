@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
+import { roleTabSettingsOptions } from '@/query/options';
+import { getDefaultEmailReportTypes } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
 import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Bell } from 'lucide-react';
 import html2canvas from 'html2canvas';
@@ -11,7 +13,7 @@ import { toast } from '@/lib/toast';
 
 export default function EmailReportSettings({ reportData, onSetDateRange, isReportDataUpdating = false }) {
   const queryClient = useQueryClient();
-  const { user: currentUser, isLoading: userLoading } = useAuth();
+  const { user: currentUser, userProfile, isLoading: userLoading } = useAuth();
   const [userError, setUserError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -65,16 +67,40 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     duration_count: 1
   });
 
-  // Update form when preferences load
+  // All report types (filtered by role's allowed types)
+  const ALL_REPORT_TYPES = [
+    { id: 'compliance', label: 'Compliance Summary', icon: '📊', description: 'Vehicle compliance rates and wash tracking' },
+    { id: 'costs', label: 'Cost Analysis', icon: '💰', description: 'Cost and financial trends' }
+  ];
+
+  const { data: roleTabSettings = {} } = useQuery(roleTabSettingsOptions());
+  const allowedEmailReportTypeIds = useMemo(() => {
+    const role = userProfile?.role;
+    if (!role) return ['compliance', 'costs'];
+    const stored = roleTabSettings[role];
+    if (stored?.visible_email_report_types !== undefined && stored?.visible_email_report_types !== null) {
+      return stored.visible_email_report_types;
+    }
+    return getDefaultEmailReportTypes(userProfile);
+  }, [userProfile, roleTabSettings]);
+
+  const reportTypes = useMemo(() =>
+    ALL_REPORT_TYPES.filter(r => allowedEmailReportTypeIds.includes(r.id)),
+    [allowedEmailReportTypeIds]
+  );
+
+  // Update form when preferences load (filter report_types to allowed for this role)
   useEffect(() => {
     if (preferences) {
+      const prefsTypes = preferences.report_types || [];
+      const filtered = prefsTypes.filter(id => allowedEmailReportTypeIds.includes(id));
       setFormData(prev => ({
         ...prev,
-        report_types: preferences.report_types || [],
+        report_types: filtered,
         include_charts: preferences.include_charts !== false
       }));
     }
-  }, [preferences]);
+  }, [preferences, allowedEmailReportTypeIds]);
 
   // Compute date range from duration and apply to dashboard filters
   const getDateRangeFromDuration = (type, count) => {
@@ -154,12 +180,6 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     }
   };
 
-  // Available report types
-  const reportTypes = [
-    { id: 'compliance', label: 'Compliance Summary', icon: '📊', description: 'Vehicle compliance rates and wash tracking' },
-    { id: 'costs', label: 'Cost Analysis', icon: '💰', description: 'Cost and financial trends' }
-  ];
-
   // Handle report type toggle
   const handleReportTypeToggle = (reportId) => {
     setFormData(prev => ({
@@ -237,8 +257,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       return;
     }
 
-    if (formData.report_types.length === 0) {
-      console.warn('[handleSendNow] No report types selected');
+    const effectiveReportTypes = formData.report_types.filter(id => allowedEmailReportTypeIds.includes(id));
+    if (effectiveReportTypes.length === 0) {
+      console.warn('[handleSendNow] No report types selected or allowed for role');
       alert('Please select at least one report type to send');
       return;
     }
@@ -247,13 +268,13 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     try {
       console.log('[handleSendNow] Sending email report with params:', {
         userEmail,
-        reportTypes: formData.report_types,
+        reportTypes: effectiveReportTypes,
         includeCharts: formData.include_charts
       });
 
       await supabaseClient.reports.send({
         userEmail,
-        reportTypes: formData.report_types,
+        reportTypes: effectiveReportTypes,
         includeCharts: formData.include_charts,
         reportData: reportData || null
       });
@@ -391,8 +412,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
   };
 
   const buildEnhancedReportHtml = async (reportData, clientBranding = null, includeCharts = true) => {
+    const requested = formData.report_types.length > 0 ? formData.report_types : allowedEmailReportTypeIds;
     const selectedReports = [...new Set(
-      formData.report_types.length > 0 ? formData.report_types : ['compliance', 'costs']
+      requested.filter(id => allowedEmailReportTypeIds.includes(id))
     )];
 
     // Use client branding if provided, otherwise use default colors
@@ -914,14 +936,21 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
             <Mail className="w-5 h-5 text-muted-foreground" />
             <h2 className="text-lg font-semibold text-foreground">Select Reports to Include</h2>
           </div>
-          <button
-            onClick={handleAllReportsToggle}
-            className="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
-          >
-            {reportTypes.every(r => formData.report_types.includes(r.id)) ? 'Deselect All' : 'Select All'}
-          </button>
+          {reportTypes.length > 0 && (
+            <button
+              onClick={handleAllReportsToggle}
+              className="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+            >
+              {reportTypes.every(r => formData.report_types.includes(r.id)) ? 'Deselect All' : 'Select All'}
+            </button>
+          )}
         </div>
 
+        {reportTypes.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">
+            No report types are available for your role. Contact your administrator to enable report types.
+          </p>
+        ) : (
         <div className="grid gap-4">
           {reportTypes.map((report) => (
             <label
@@ -948,6 +977,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
             </label>
           ))}
         </div>
+        )}
       </div>
 
       {/* Updating data notice — block send/export until report data is ready */}

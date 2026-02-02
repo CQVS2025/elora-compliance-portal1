@@ -120,10 +120,37 @@ Deno.serve(async (req) => {
       });
     }
 
+    const userRole = user.role || 'user';
+    const defaultAllowedByRole: Record<string, string[]> = {
+      super_admin: ['compliance', 'costs'],
+      admin: ['compliance', 'costs'],
+      manager: ['compliance', 'costs'],
+      user: ['compliance', 'costs'],
+      batcher: ['compliance', 'costs'],
+      driver: ['compliance'],
+      viewer: ['compliance', 'costs'],
+    };
+    let allowedReportTypes: string[] = defaultAllowedByRole[userRole] ?? ['compliance', 'costs'];
+    try {
+      const { data: roleSettings } = await supabase
+        .from('role_tab_settings')
+        .select('visible_email_report_types')
+        .eq('role', userRole)
+        .single();
+      if (roleSettings?.visible_email_report_types && Array.isArray(roleSettings.visible_email_report_types) && roleSettings.visible_email_report_types.length > 0) {
+        allowedReportTypes = roleSettings.visible_email_report_types;
+      }
+    } catch (e) {
+      console.warn('Role tab settings fetch error:', e);
+    }
+
+    const requestedTypes = Array.isArray(reportTypes) && reportTypes.length > 0 ? reportTypes : allowedReportTypes;
+    const filteredReportTypes = requestedTypes.filter((t: string) => allowedReportTypes.includes(t));
+
     const now = new Date();
     let reports: Record<string, unknown> = {};
-    const wantsCompliance = !reportTypes || reportTypes.length === 0 || reportTypes.includes('compliance');
-    const wantsCosts = !reportTypes || reportTypes.length === 0 || reportTypes.includes('costs');
+    const wantsCompliance = filteredReportTypes.includes('compliance');
+    const wantsCosts = filteredReportTypes.includes('costs');
 
     if (reportData?.stats && reportData?.filteredVehicles) {
       const stats = reportData.stats;

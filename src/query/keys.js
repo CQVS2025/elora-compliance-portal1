@@ -166,6 +166,8 @@ export const queryKeys = {
     brandingByCustomDomain: (domain) => ['branding', 'customDomain', domain],
     // Role-based tab visibility overrides (super admin only)
     roleTabSettings: () => ['roleTabSettings'],
+    // Site overrides (super admin edits; keyed by site_ref)
+    siteOverrides: () => ['siteOverrides'],
   },
 };
 

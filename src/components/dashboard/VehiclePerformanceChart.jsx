@@ -7,12 +7,15 @@ const chartConfig = { washes: { label: 'Washes', color: 'hsl(var(--primary))' } 
 
 export default function VehiclePerformanceChart({ vehicles }) {
   const data = [...vehicles]
-    .sort((a, b) => b.washes_completed - a.washes_completed)
+    .sort((a, b) => (b.washes_completed ?? 0) - (a.washes_completed ?? 0))
     .slice(0, 10)
-    .map(v => ({
-      name: v.name,
-      washes: v.washes_completed,
-    }));
+    .map(v => {
+      const displayName = [v.name, v.site_name].filter(Boolean).join(' • ') || v.rfid || 'Unknown';
+      return {
+        name: displayName,
+        washes: v.washes_completed ?? 0,
+      };
+    });
 
   return (
     <Card className="overflow-hidden">
@@ -46,8 +49,8 @@ export default function VehiclePerformanceChart({ vehicles }) {
               dataKey="name"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 12, fontWeight: 600 }}
-              width={80}
+              tick={{ fontSize: 11, fontWeight: 600 }}
+              width={120}
             />
             <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={{ fill: 'hsl(var(--primary) / 0.08)' }} />
             <Bar

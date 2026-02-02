@@ -331,8 +331,10 @@ export function useAvailableTabs(allTabs) {
 
     // Second, check role-based tab overrides (Super Admin config)
     const role = userProfile?.role;
-    if (role && roleTabOverrides[role] && roleTabOverrides[role].length > 0) {
-      return allTabs.filter(tab => roleTabOverrides[role].includes(tab.value));
+    const roleData = role && roleTabOverrides[role];
+    const visibleTabs = Array.isArray(roleData) ? roleData : roleData?.visible_tabs;
+    if (role && visibleTabs && visibleTabs.length > 0) {
+      return allTabs.filter(tab => visibleTabs.includes(tab.value));
     }
 
     // Fallback to default role-based tabs from permissions.js

@@ -232,6 +232,19 @@ export function getAccessibleTabs(userProfile) {
 }
 
 /**
+ * Get default email report types allowed for a role (when no Super Admin override).
+ * Roles with email-reports tab get both; driver only gets compliance.
+ */
+export function getDefaultEmailReportTypes(userProfile) {
+  if (!userProfile) return ['compliance', 'costs'];
+  const role = userProfile.role;
+  const hasEmailReports = getAccessibleTabs(userProfile).includes('email-reports');
+  if (!hasEmailReports) return [];
+  if (role === 'driver') return ['compliance'];
+  return ['compliance', 'costs'];
+}
+
+/**
  * Check if user can access a specific tab
  */
 export function canAccessTab(userProfile, tabName) {

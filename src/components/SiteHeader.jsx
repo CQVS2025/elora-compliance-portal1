@@ -1,7 +1,9 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { ModeToggle } from '@/components/mode-toggle';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -16,7 +18,12 @@ import { cn } from '@/lib/utils';
  * Dashboard header with sidebar trigger, optional breadcrumbs, page title, dark mode toggle, and optional actions.
  * Matches dashboard-01 structure. When breadcrumbs is provided (e.g. admin section), shows breadcrumb nav for back navigation.
  */
-export default function SiteHeader({ title, description, breadcrumbs, children, className }) {
+export default function SiteHeader({ title, description, breadcrumbs, showBackButton, backTo, children, className }) {
+  const navigate = useNavigate();
+  const isAdminNested = breadcrumbs && breadcrumbs.length > 1;
+  const displayBack = showBackButton ?? isAdminNested;
+  const backTarget = backTo ?? (isAdminNested ? '/admin' : null);
+
   return (
     <header
       className={cn(
@@ -25,6 +32,20 @@ export default function SiteHeader({ title, description, breadcrumbs, children, 
       )}
     >
       <SidebarTrigger className="-ml-1" aria-label="Toggle sidebar" />
+      {displayBack && (backTarget ? (
+        <Button variant="outline" size="sm" className="gap-2 shrink-0" asChild>
+          <Link to={backTarget}>
+            <ArrowLeft className="w-4 h-4" />
+            Go back
+          </Link>
+        </Button>
+      ) : (
+        <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={() => navigate(-1)}>
+          <ArrowLeft className="w-4 h-4" />
+          Go back
+        </Button>
+      ))}
+      {displayBack && <div className="h-4 w-px bg-border" aria-hidden />}
       <div className="h-4 w-px bg-border" aria-hidden />
       <div className="flex flex-col min-w-0 gap-1">
         {breadcrumbs && breadcrumbs.length > 0 && (

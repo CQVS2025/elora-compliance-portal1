@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
-import { getAccessibleTabs } from '@/lib/permissions';
+import { getAccessibleTabs, getDefaultEmailReportTypes } from '@/lib/permissions';
 import { roleTabSettingsOptions } from '@/query/options';
 import { useSaveRoleTabSettings, useResetRoleTabSettings } from '@/query/mutations/roleTabSettings';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,6 +10,11 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Shield, Loader2, RotateCcw } from 'lucide-react';
 import { toast } from '@/lib/toast';
+
+const EMAIL_REPORT_TYPES = [
+  { id: 'compliance', label: 'Compliance Summary' },
+  { id: 'costs', label: 'Cost Analysis' },
+];
 
 const ALL_TABS = [
   { value: 'compliance', label: 'Compliance' },
@@ -57,17 +62,38 @@ export default function RoleTabSettings() {
 
   const getTabsForRole = useCallback(
     (role) => {
-      if (localOverrides[role]) return localOverrides[role];
-      if (roleOverrides[role]?.length > 0) return roleOverrides[role];
+      const local = localOverrides[role];
+      if (local?.tabs) return local.tabs;
+      const stored = roleOverrides[role];
+      const storedTabs = Array.isArray(stored) ? stored : stored?.visible_tabs;
+      if (storedTabs?.length > 0) return storedTabs;
       return getDefaultTabsForRole(role);
     },
     [roleOverrides, localOverrides]
   );
 
-  const isTabEnabled = (role, tabValue) => getTabsForRole(role).includes(tabValue);
+  const getEmailReportTypesForRole = useCallback(
+    (role) => {
+      const local = localOverrides[role];
+      if (local?.emailReportTypes !== undefined) return local.emailReportTypes;
+      const stored = roleOverrides[role];
+      if (stored?.visible_email_report_types !== undefined && stored?.visible_email_report_types !== null) {
+        return stored.visible_email_report_types;
+      }
+      return getDefaultEmailReportTypes({ role });
+    },
+    [roleOverrides, localOverrides]
+  );
 
-  const hasOverride = (role) =>
-    roleOverrides[role]?.length > 0 || (localOverrides[role] && Object.keys(localOverrides).includes(role));
+  const isTabEnabled = (role, tabValue) => getTabsForRole(role).includes(tabValue);
+  const isEmailReportEnabled = (role, reportId) => getEmailReportTypesForRole(role).includes(reportId);
+
+  const hasOverride = (role) => {
+    const stored = roleOverrides[role];
+    const hasStoredTabs = (Array.isArray(stored) ? stored : stored?.visible_tabs)?.length > 0;
+    const hasStoredEmail = stored?.visible_email_report_types !== undefined && stored?.visible_email_report_types !== null;
+    return hasStoredTabs || hasStoredEmail || !!localOverrides[role];
+  };
 
   const handleToggle = (role, tabValue, enabled) => {
     const currentTabs = getTabsForRole(role);
@@ -77,20 +103,28 @@ export default function RoleTabSettings() {
     } else {
       newTabs = currentTabs.filter((t) => t !== tabValue);
     }
-    setLocalOverrides((prev) => ({ ...prev, [role]: newTabs }));
+    setLocalOverrides((prev) => ({ ...prev, [role]: { ...prev[role], tabs: newTabs } }));
+  };
+
+  const handleEmailReportToggle = (role, reportId, enabled) => {
+    const current = getEmailReportTypesForRole(role);
+    const newTypes = enabled
+      ? [...current, reportId]
+      : current.filter((id) => id !== reportId);
+    setLocalOverrides((prev) => ({ ...prev, [role]: { ...prev[role], emailReportTypes: newTypes } }));
   };
 
   const handleSave = async (role) => {
-    const tabs = localOverrides[role];
-    if (!tabs) return;
+    const tabs = getTabsForRole(role);
+    const emailReportTypes = getEmailReportTypesForRole(role);
     try {
-      await saveMutation.mutateAsync({ role, visibleTabs: tabs });
+      await saveMutation.mutateAsync({ role, visibleTabs: tabs, visibleEmailReportTypes: emailReportTypes });
       setLocalOverrides((prev) => {
         const next = { ...prev };
         delete next[role];
         return next;
       });
-      toast.success(`Tabs saved for ${ROLES.find((r) => r.value === role)?.label}`);
+      toast.success(`Settings saved for ${ROLES.find((r) => r.value === role)?.label}`);
     } catch (err) {
       toast.error(err?.message || 'Failed to save');
     }
@@ -137,6 +171,7 @@ export default function RoleTabSettings() {
           {ROLES.map((roleConfig) => {
             const role = roleConfig.value;
             const defaultTabs = getDefaultTabsForRole(role);
+            const defaultEmailReports = getDefaultEmailReportTypes({ role });
             const hasLocalChanges = localOverrides[role] !== undefined;
 
             return (
@@ -191,22 +226,50 @@ export default function RoleTabSettings() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-4">
-                    {ALL_TABS.map((tab) => (
-                      <div
-                        key={tab.value}
-                        className="flex items-center justify-between p-3 rounded-lg border border-border"
-                      >
-                        <span className="text-sm font-medium text-foreground">
-                          {tab.label}
-                        </span>
-                        <Switch
-                          checked={isTabEnabled(role, tab.value)}
-                          onCheckedChange={(checked) => handleToggle(role, tab.value, checked)}
-                        />
-                      </div>
-                    ))}
+                <CardContent className="space-y-6">
+                  <div>
+                    <h4 className="text-sm font-medium text-foreground mb-3">Tab Visibility</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-4">
+                      {ALL_TABS.map((tab) => (
+                        <div
+                          key={tab.value}
+                          className="flex items-center justify-between p-3 rounded-lg border border-border"
+                        >
+                          <span className="text-sm font-medium text-foreground">
+                            {tab.label}
+                          </span>
+                          <Switch
+                            checked={isTabEnabled(role, tab.value)}
+                            onCheckedChange={(checked) => handleToggle(role, tab.value, checked)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-foreground mb-3">Email Report Types (Select Reports to Include)</h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Which report sections can this role include when sending email reports? Disabled types will not appear in the Email Reports page and will not be included in generated documents.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {EMAIL_REPORT_TYPES.map((report) => (
+                        <div
+                          key={report.id}
+                          className="flex items-center justify-between p-3 rounded-lg border border-border"
+                        >
+                          <span className="text-sm font-medium text-foreground">
+                            {report.label}
+                          </span>
+                          <Switch
+                            checked={isEmailReportEnabled(role, report.id)}
+                            onCheckedChange={(checked) => handleEmailReportToggle(role, report.id, checked)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Default: {defaultEmailReports.join(', ') || 'none'}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
