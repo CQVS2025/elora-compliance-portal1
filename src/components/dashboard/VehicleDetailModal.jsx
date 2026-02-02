@@ -15,24 +15,24 @@ export default function VehicleDetailModal({ vehicle, open, onClose }) {
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
-              <Truck className="w-5 h-5 text-slate-600" />
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+              <Truck className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
               <span className="text-xl font-bold">{vehicle.name}</span>
-              <p className="text-sm font-mono text-slate-500">{vehicle.rfid}</p>
+              <p className="text-sm font-mono text-muted-foreground">{vehicle.rfid}</p>
             </div>
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
           {/* Status Badge */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50">
-            <span className="text-sm font-medium text-slate-600">Compliance Status</span>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-muted">
+            <span className="text-sm font-medium text-muted-foreground">Compliance Status</span>
             <Badge 
               className={`px-4 py-1.5 text-sm font-semibold ${
                 isCompliant 
-                  ? 'bg-emerald-500 text-white' 
+                  ? 'bg-primary text-primary-foreground' 
                   : 'bg-red-500 text-white'
               }`}
             >
@@ -47,55 +47,55 @@ export default function VehicleDetailModal({ vehicle, open, onClose }) {
           {/* Progress */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-600">Wash Progress</span>
-              <span className="font-semibold text-slate-800">
+              <span className="text-muted-foreground">Wash Progress</span>
+              <span className="font-semibold text-foreground">
                 {vehicle.washes_completed} / {vehicle.target}
               </span>
             </div>
-            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-3 bg-muted rounded-full overflow-hidden">
               <div 
                 className="h-full rounded-full transition-all duration-500"
                 style={{ 
                   width: `${progress}%`,
-                  background: 'linear-gradient(90deg, #7CB342 0%, #9CCC65 100%)'
+                  background: 'linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.85) 100%)'
                 }}
               />
             </div>
-            <p className="text-xs text-slate-500 text-right">{progress}% complete</p>
+            <p className="text-xs text-muted-foreground text-right">{progress}% complete</p>
           </div>
 
           {/* Details Grid */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-slate-50">
-              <div className="flex items-center gap-2 text-slate-500 mb-1">
+            <div className="p-4 rounded-xl bg-muted">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <MapPin className="w-4 h-4" />
                 <span className="text-xs uppercase tracking-wide">Site</span>
               </div>
-              <p className="font-semibold text-slate-800">{vehicle.site_name}</p>
+              <p className="font-semibold text-foreground">{vehicle.site_name}</p>
             </div>
             
-            <div className="p-4 rounded-xl bg-slate-50">
-              <div className="flex items-center gap-2 text-slate-500 mb-1">
+            <div className="p-4 rounded-xl bg-muted">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <Target className="w-4 h-4" />
                 <span className="text-xs uppercase tracking-wide">Target</span>
               </div>
-              <p className="font-semibold text-slate-800">{vehicle.target} washes</p>
+              <p className="font-semibold text-foreground">{vehicle.target} washes</p>
             </div>
             
-            <div className="p-4 rounded-xl bg-slate-50">
-              <div className="flex items-center gap-2 text-slate-500 mb-1">
+            <div className="p-4 rounded-xl bg-muted">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <Activity className="w-4 h-4" />
                 <span className="text-xs uppercase tracking-wide">Completed</span>
               </div>
-              <p className="font-semibold text-slate-800">{vehicle.washes_completed} washes</p>
+              <p className="font-semibold text-foreground">{vehicle.washes_completed} washes</p>
             </div>
             
-            <div className="p-4 rounded-xl bg-slate-50">
-              <div className="flex items-center gap-2 text-slate-500 mb-1">
+            <div className="p-4 rounded-xl bg-muted">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <Calendar className="w-4 h-4" />
                 <span className="text-xs uppercase tracking-wide">Last Scan</span>
               </div>
-              <p className="font-semibold text-slate-800">{moment(vehicle.last_scan).fromNow()}</p>
+              <p className="font-semibold text-foreground">{moment(vehicle.last_scan).fromNow()}</p>
             </div>
           </div>
 

@@ -7,12 +7,11 @@ import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Bell } from 'lucide-
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Chart } from 'chart.js/auto';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/lib/toast';
 
-export default function EmailReportSettings({ reportData, onSetDateRange }) {
+export default function EmailReportSettings({ reportData, onSetDateRange, isReportDataUpdating = false }) {
   const queryClient = useQueryClient();
   const { user: currentUser, isLoading: userLoading } = useAuth();
-  const { toast } = useToast();
   const [userError, setUserError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -148,17 +147,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
           onConflict: 'user_email'
         });
 
-      toast({
-        title: "Settings Updated",
-        description: `Email notifications ${enabled ? 'enabled' : 'disabled'} successfully.`,
-      });
+      toast.success('Settings Updated', { description: `Email notifications ${enabled ? 'enabled' : 'disabled'} successfully.` });
     } catch (error) {
       console.error('Error saving email notifications:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update email notifications. Please try again.",
-        variant: "destructive",
-      });
+      toast.error('Failed to update email notifications. Please try again.', { description: 'Error' });
     }
   };
 
@@ -321,7 +313,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
           labels: ['Compliant', 'At Risk'],
           datasets: [{
             data: total > 0 ? [compliant, atRisk] : [1],
-            backgroundColor: total > 0 ? [primaryColor || '#7CB342', '#ef4444'] : ['#e2e8f0'],
+            backgroundColor: total > 0 ? [primaryColor || 'hsl(var(--primary))', '#ef4444'] : ['#e2e8f0'],
             borderWidth: 3,
             borderColor: '#fff',
             hoverOffset: 4
@@ -357,8 +349,8 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
             label: hasBoth ? 'Value' : 'Total Washes',
             data: values,
             backgroundColor: hasBoth
-              ? [primaryColor || '#7CB342', '#10b981']
-              : primaryColor || '#7CB342',
+              ? [primaryColor || 'hsl(var(--primary))', '#10b981']
+              : primaryColor || 'hsl(var(--primary))',
             borderRadius: 6,
             borderSkipped: false
           }]
@@ -404,7 +396,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
     )];
 
     // Use client branding if provided, otherwise use default colors
-    const primaryColor = clientBranding?.primary_color || '#7CB342';
+    const primaryColor = clientBranding?.primary_color || 'hsl(var(--primary))';
     const secondaryColor = clientBranding?.secondary_color || '#9CCC65';
     const companyName = clientBranding?.company_name || 'ELORA';
     const logoUrl = clientBranding?.logo_url || null;
@@ -626,7 +618,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
           branding = {
             company_name: 'ELORA',
             logo_url: null,
-            primary_color: '#7CB342',
+            primary_color: '',
             secondary_color: '#9CCC65'
           };
         }
@@ -635,7 +627,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
         branding = {
           company_name: 'ELORA',
           logo_url: null,
-          primary_color: '#7CB342',
+          primary_color: '',
           secondary_color: '#9CCC65'
         };
       }
@@ -777,22 +769,22 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
   if (userError && !userLoading) {
     return (
       <div className="max-w-4xl mx-auto p-6">
-        <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-lg">
+        <div className="bg-destructive/10 border-l-4 border-destructive p-6 rounded-lg">
           <div className="flex items-start">
             <div className="flex-shrink-0">
-              <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-6 w-6 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
             <div className="ml-4 flex-1">
-              <h3 className="text-lg font-semibold text-red-800 mb-2">Failed to Load User Information</h3>
-              <p className="text-red-700 mb-4">
+              <h3 className="text-lg font-semibold text-destructive mb-2">Failed to Load User Information</h3>
+              <p className="text-foreground mb-4">
                 We couldn't load your user information. This might be due to a temporary connection issue.
               </p>
-              <p className="text-sm text-red-600 mb-4">Error: {userError}</p>
+              <p className="text-sm text-destructive mb-4">Error: {userError}</p>
               <button
                 onClick={handleRetryUserLoad}
-                className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-semibold py-2 px-4 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -810,10 +802,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-elora-primary mx-auto mb-4" />
-          <p className="text-slate-600">Loading email report settings...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading email report settings...</p>
           {retryCount > 0 && (
-            <p className="text-slate-500 text-sm mt-2">Retrying... (attempt {retryCount + 1})</p>
+            <p className="text-muted-foreground text-sm mt-2">Retrying... (attempt {retryCount + 1})</p>
           )}
         </div>
       </div>
@@ -823,34 +815,34 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-elora-primary to-elora-primary-light text-white rounded-xl p-8 shadow-lg">
+      <div className="bg-gradient-to-r from-primary to-primary/90 text-primary-foreground rounded-xl p-8 shadow-lg">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-white/20 backdrop-blur-sm rounded-lg">
+          <div className="p-3 bg-primary-foreground/10 backdrop-blur-sm rounded-lg">
             <Mail className="w-8 h-8" />
           </div>
           <div>
             <h1 className="text-3xl font-bold mb-2">Email Report Settings</h1>
-            <p className="text-white/90">Request and configure email reports</p>
+            <p className="text-primary-foreground/90">Request and configure email reports</p>
           </div>
         </div>
       </div>
 
       {/* Success Message */}
       {successMessage && (
-        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg flex items-center gap-3">
-          <CheckCircle className="w-5 h-5 text-green-500" />
-          <p className="text-green-800 font-medium">{successMessage}</p>
+        <div className="bg-primary/10 border-l-4 border-primary p-4 rounded-lg flex items-center gap-3">
+          <CheckCircle className="w-5 h-5 text-primary" />
+          <p className="text-foreground font-medium">{successMessage}</p>
         </div>
       )}
 
 
       {/* Report Duration - data range for the email */}
-      <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
+      <div className="bg-card rounded-xl shadow-md p-6 border border-border">
         <div className="flex items-center gap-3 mb-4">
-          <Clock className="w-5 h-5 text-slate-600" />
-          <h2 className="text-lg font-semibold text-slate-800">Report Duration</h2>
+          <Clock className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-lg font-semibold text-foreground">Report Duration</h2>
         </div>
-        <p className="text-sm text-slate-600 mb-6">
+        <p className="text-sm text-muted-foreground mb-6">
           Select the date range for the report data. The filters above will update to match.
         </p>
         <div className="space-y-4">
@@ -878,8 +870,8 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
                 }}
                 className={`px-4 py-2.5 rounded-lg border-2 transition-all text-sm font-medium ${
                   formData.duration_type === opt.id
-                    ? 'border-elora-primary bg-elora-primary/5 text-elora-primary'
-                    : 'border-slate-200 text-slate-600 hover:border-elora-primary/50'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:border-primary/50'
                 }`}
               >
                 {opt.label}
@@ -888,7 +880,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
           </div>
           {(formData.duration_type === 'days' || formData.duration_type === 'weeks' || formData.duration_type === 'months') && (
             <div className="flex items-center gap-3 flex-wrap">
-              <label className="text-sm font-medium text-slate-600">
+              <label className="text-sm font-medium text-muted-foreground">
                 {formData.duration_type === 'days' && 'Number of days:'}
                 {formData.duration_type === 'weeks' && 'Number of weeks:'}
                 {formData.duration_type === 'months' && 'Number of months:'}
@@ -903,9 +895,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
                   setFormData(prev => ({ ...prev, duration_count: val }));
                   applyDurationToFilters(formData.duration_type, val);
                 }}
-                className="w-20 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-elora-primary focus:border-transparent"
+                className="w-20 px-3 py-2 border border-input bg-background text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
-              <span className="text-sm text-slate-500">
+              <span className="text-sm text-muted-foreground">
                 {formData.duration_type === 'days' && `Last ${formData.duration_count} day${formData.duration_count > 1 ? 's' : ''}`}
                 {formData.duration_type === 'weeks' && `Last ${formData.duration_count} week${formData.duration_count > 1 ? 's' : ''}`}
                 {formData.duration_type === 'months' && `Last ${formData.duration_count} month${formData.duration_count > 1 ? 's' : ''}`}
@@ -916,15 +908,15 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
       </div>
 
       {/* Report Types Selection */}
-      <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
+      <div className="bg-card rounded-xl shadow-md p-6 border border-border">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Mail className="w-5 h-5 text-slate-600" />
-            <h2 className="text-lg font-semibold text-slate-800">Select Reports to Include</h2>
+            <Mail className="w-5 h-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold text-foreground">Select Reports to Include</h2>
           </div>
           <button
             onClick={handleAllReportsToggle}
-            className="px-4 py-2 text-sm font-medium text-elora-primary hover:bg-elora-primary/5 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
           >
             {reportTypes.every(r => formData.report_types.includes(r.id)) ? 'Deselect All' : 'Select All'}
           </button>
@@ -936,35 +928,47 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
               key={report.id}
               className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
                 formData.report_types.includes(report.id)
-                  ? 'border-elora-primary bg-elora-primary/5'
-                  : 'border-slate-200 hover:border-elora-primary/30'
+                  ? 'border-primary bg-primary/10'
+                  : 'border-border hover:border-primary/30'
               }`}
             >
               <input
                 type="checkbox"
                 checked={formData.report_types.includes(report.id)}
                 onChange={() => handleReportTypeToggle(report.id)}
-                className="mt-1 w-5 h-5 text-elora-primary border-slate-300 rounded focus:ring-elora-primary"
+                className="mt-1 w-5 h-5 text-primary border-input rounded focus:ring-primary"
               />
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xl">{report.icon}</span>
-                  <span className="font-semibold text-slate-800">{report.label}</span>
+                  <span className="font-semibold text-foreground">{report.label}</span>
                 </div>
-                <p className="text-sm text-slate-600">{report.description}</p>
+                <p className="text-sm text-muted-foreground">{report.description}</p>
               </div>
             </label>
           ))}
         </div>
       </div>
 
+      {/* Updating data notice — block send/export until report data is ready */}
+      {isReportDataUpdating && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 dark:bg-amber-500/10 dark:border-amber-500/40 p-4 mb-4">
+          <Loader2 className="w-5 h-5 shrink-0 animate-spin text-amber-600 dark:text-amber-400" />
+          <div>
+            <p className="font-medium text-amber-900 dark:text-amber-200">Data is updating</p>
+            <p className="text-sm text-amber-800/90 dark:text-amber-200/90">Please wait for the report data above to finish loading. You can then send the email or export to PDF.</p>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="flex flex-col md:flex-row gap-4">
         <button
           onClick={handleSendNow}
-          disabled={sendingNow || userLoading || !userEmail || formData.report_types.length === 0}
-          className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 px-6 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+          disabled={sendingNow || userLoading || isReportDataUpdating || !userEmail || formData.report_types.length === 0}
+          className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-4 px-6 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
           title={
+            isReportDataUpdating ? 'Please wait for data to finish updating' :
             userLoading ? 'Loading user information...' :
             !userEmail ? 'User email not available' :
             formData.report_types.length === 0 ? 'Please select at least one report type' :
@@ -981,6 +985,11 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
               <Loader2 className="w-5 h-5 animate-spin" />
               Loading...
             </>
+          ) : isReportDataUpdating ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Wait for data...
+            </>
           ) : (
             <>
               <Send className="w-5 h-5" />
@@ -991,9 +1000,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
 
         <button
           onClick={handleExportPdf}
-          disabled={exportingPdf || userLoading || !userEmail || formData.report_types.length === 0}
-          className="flex-1 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-semibold py-4 px-6 rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+          disabled={exportingPdf || userLoading || isReportDataUpdating || !userEmail || formData.report_types.length === 0}
+          className="flex-1 bg-card border border-border hover:bg-accent text-foreground font-semibold py-4 px-6 rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
           title={
+            isReportDataUpdating ? 'Please wait for data to finish updating' :
             userLoading ? 'Loading user information...' :
             !userEmail ? 'User email not available' :
             formData.report_types.length === 0 ? 'Please select at least one report type' :
@@ -1004,6 +1014,11 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
               Exporting...
+            </>
+          ) : isReportDataUpdating ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Wait for data...
             </>
           ) : (
             <>
@@ -1034,10 +1049,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
       />
 
       {/* Info Box */}
-      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
-        <p className="text-sm text-blue-800">
+      <div className="bg-primary/10 border-l-4 border-primary p-4 rounded-lg">
+        <p className="text-sm text-foreground">
           <strong>Note:</strong> The report uses the date range and filters (customer, site) selected above. Reports will be sent to{' '}
-          <strong className="text-blue-900">{userEmail || 'your email'}</strong>.{' '}
+          <strong className="text-primary">{userEmail || 'your email'}</strong>.{' '}
         </p>
       </div>
     </div>

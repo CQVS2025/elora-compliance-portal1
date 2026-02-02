@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
-import { supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import {
-  ArrowLeft,
   Shield,
   ChevronRight,
   Trash2,
   Loader2,
   Save,
-  Globe
+  Globe,
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/lib/toast';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +27,6 @@ import {
 
 export default function Settings() {
   const { user, logout } = useAuth();
-  const { toast } = useToast();
   const navigate = useNavigate();
 
   const [isSaving, setIsSaving] = useState(false);
@@ -36,7 +35,6 @@ export default function Settings() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [settings, setSettings] = useState({
-    // Display Preferences
     timezone: 'Australia/Sydney',
     language: 'en',
     region: 'Australia',
@@ -51,17 +49,12 @@ export default function Settings() {
       setIsLoading(false);
       return;
     }
-
     setIsLoading(true);
     try {
-      // Load user preferences from profile or local storage
       const savedSettings = localStorage.getItem(`settings_${user.id}`);
       if (savedSettings) {
         const parsed = JSON.parse(savedSettings);
-        setSettings(prev => ({
-          ...prev,
-          ...parsed
-        }));
+        setSettings((prev) => ({ ...prev, ...parsed }));
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -72,31 +65,16 @@ export default function Settings() {
 
   const handleSaveSettings = async () => {
     if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to save settings.",
-        variant: "destructive",
-      });
+      toast.error('You must be logged in to save settings.', { description: 'Error' });
       return;
     }
-
     setIsSaving(true);
-
     try {
-      // Save to local storage
       localStorage.setItem(`settings_${user.id}`, JSON.stringify(settings));
-
-      toast({
-        title: "Settings Saved",
-        description: "Your preferences have been updated successfully.",
-      });
+      toast.success('Settings Saved', { description: 'Your preferences have been updated successfully.' });
     } catch (error) {
       console.error('Error saving settings:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save settings. Please try again.",
-        variant: "destructive",
-      });
+      toast.error('Failed to save settings. Please try again.', { description: 'Error' });
     } finally {
       setIsSaving(false);
     }
@@ -104,180 +82,130 @@ export default function Settings() {
 
   const handleDeleteAccount = async () => {
     if (!user) {
-      toast({
-        title: "Error",
-        description: "You must be logged in to delete your account.",
-        variant: "destructive",
-      });
+      toast.error('You must be logged in to delete your account.', { description: 'Error' });
       return;
     }
-
     setIsDeleting(true);
-
     try {
       const response = await supabaseClient.account.deleteMyAccount();
-      
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      toast({
-        title: "Account Deleted",
-        description: "Your account has been permanently deleted.",
-      });
-
-      // Logout and redirect to login
+      if (response.error) throw new Error(response.error);
+      toast.success('Account Deleted', { description: 'Your account has been permanently deleted.' });
       await logout();
       navigate('/Login');
     } catch (error) {
       console.error('Error deleting account:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete account. Please try again.",
-        variant: "destructive",
-      });
+      toast.error(error.message || 'Failed to delete account. Please try again.', { description: 'Error' });
       setIsDeleting(false);
     }
   };
 
-  // Setting Row component
-  const SettingRow = ({ icon: Icon, title, description, children, iconColor = "text-gray-600 dark:text-gray-400" }) => (
-    <div className="flex items-center justify-between py-4">
-      <div className="flex items-center gap-4">
-        <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-zinc-800
-                       flex items-center justify-center">
-          <Icon className={`w-5 h-5 ${iconColor}`} />
-        </div>
-        <div>
-          <p className="font-medium">{title}</p>
-          {description && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
-          )}
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-          <p className="text-gray-500 dark:text-gray-400">Loading settings...</p>
-        </div>
+      <div className="p-6 flex flex-col items-center justify-center min-h-[280px] gap-4">
+        <Loader2 className="h-8 w-8 text-primary animate-spin" />
+        <p className="text-sm text-muted-foreground">Loading settings...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-zinc-950">
-      {/* Header */}
-      <div className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
-                      border-b border-gray-200/20 dark:border-zinc-800/50">
-        <div className="max-w-2xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400
-                                   hover:text-gray-900 dark:hover:text-white transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-            <span className="font-medium">Back to Dashboard</span>
-          </Link>
-          <button
-            onClick={handleSaveSettings}
-            disabled={isSaving}
-            className="h-10 px-5 rounded-full bg-emerald-500 text-white
-                      font-semibold text-sm hover:bg-emerald-600
-                      active:scale-95 transition-all duration-150
-                      shadow-lg shadow-emerald-500/30
-                      disabled:opacity-50 disabled:cursor-not-allowed
-                      flex items-center gap-2"
-          >
-            {isSaving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
+    <div className="p-6 space-y-6">
+      {/* Page header with Save */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+          <p className="text-muted-foreground mt-1">Manage your account preferences</p>
         </div>
+        <Button onClick={handleSaveSettings} disabled={isSaving} className="shrink-0">
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              Save
+            </>
+          )}
+        </Button>
       </div>
 
-      {/* Content */}
-      <main className="max-w-2xl mx-auto px-6 py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="space-y-6"
-        >
-          {/* Page Title */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-1">Settings</h1>
-            <p className="text-gray-500 dark:text-gray-400">Manage your account preferences</p>
-          </div>
+      <Separator />
 
-          {/* Privacy & Security Section */}
-          <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
-                         rounded-2xl border border-gray-200/20 dark:border-zinc-800/50
-                         shadow-lg shadow-black/5 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200/50 dark:border-zinc-800/50">
-              <h2 className="font-semibold text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wide">
-                Account
-              </h2>
+      {/* Account section */}
+      <Card className="border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Account</CardTitle>
+          <CardDescription>Privacy, security, and regional preferences</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-0">
+          <div className="flex items-center justify-between py-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <Shield className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Privacy & Security</p>
+                <p className="text-sm text-muted-foreground">Manage password and security options</p>
+              </div>
             </div>
-            <div className="px-6 divide-y divide-gray-200/50 dark:divide-zinc-800/50">
-              <SettingRow
-                icon={Shield}
-                title="Privacy & Security"
-                iconColor="text-emerald-500"
-              >
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              </SettingRow>
-
-              <SettingRow
-                icon={Globe}
-                title="Language & Region"
-                description="English (Australia)"
-                iconColor="text-blue-500"
-              >
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              </SettingRow>
-            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
           </div>
+          <Separator />
+          <div className="flex items-center justify-between py-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <Globe className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Language & Region</p>
+                <p className="text-sm text-muted-foreground">English (Australia)</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
 
-          {/* Danger Zone */}
-          <div className="backdrop-blur-xl bg-red-50 dark:bg-red-500/10
-                         rounded-2xl border border-red-200/50 dark:border-red-500/20
-                         overflow-hidden">
-            <div className="px-6 py-4">
-              <SettingRow
-                icon={Trash2}
-                title="Delete Account"
-                description="Permanently delete your account and data"
-                iconColor="text-red-500"
-              >
-                <button 
-                  onClick={() => setShowDeleteDialog(true)}
-                  className="h-10 px-4 rounded-full bg-red-500/10 text-red-500
-                            font-semibold text-sm hover:bg-red-500/20
-                            transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 inline-block animate-spin mr-2" />
-                      Deleting...
-                    </>
-                  ) : (
-                    'Delete'
-                  )}
-                </button>
-              </SettingRow>
+      {/* Danger zone */}
+      <Card className="border-border border-destructive/30 bg-destructive/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base text-destructive">Delete Account</CardTitle>
+          <CardDescription>
+            Permanently delete your account and all associated data. This cannot be undone.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+              <Trash2 className="h-5 w-5 text-destructive" />
+            </div>
+            <div>
+              <p className="font-medium text-foreground">Permanently delete your account and data</p>
+              <p className="text-sm text-muted-foreground">All your data will be removed from our systems.</p>
             </div>
           </div>
-        </motion.div>
-      </main>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              'Delete'
+            )}
+          </Button>
+        </CardContent>
+      </Card>
 
-      {/* Delete Account Confirmation Dialog */}
+      {/* Delete confirmation dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -292,11 +220,11 @@ export default function Settings() {
             <AlertDialogAction
               onClick={handleDeleteAccount}
               disabled={isDeleting}
-              className="bg-red-500 hover:bg-red-600 focus:ring-red-500"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeleting ? (
                 <>
-                  <Loader2 className="w-4 h-4 inline-block animate-spin mr-2" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Deleting...
                 </>
               ) : (

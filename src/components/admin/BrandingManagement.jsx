@@ -7,7 +7,9 @@ import {
   Palette,
   Save,
   Loader2,
+  Upload,
 } from 'lucide-react';
+import { uploadCompanyLogo, removeCompanyLogoFromStorage } from '@/lib/companyLogoUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,11 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/lib/toast';
 
 export default function BrandingManagement() {
   const { userProfile } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const isSuperAdmin = userProfile?.role === 'super_admin';
@@ -33,11 +34,12 @@ export default function BrandingManagement() {
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
   const companyId = isSuperAdmin ? selectedCompanyId : userProfile?.company_id;
 
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [formData, setFormData] = useState({
     company_name: '',
     logo_url: '',
-    primary_color: '#7CB342',
-    secondary_color: '#9CCC65',
+    primary_color: '',
+    secondary_color: '',
   });
 
   // Fetch companies list for super_admin, or single company for admin
@@ -135,8 +137,8 @@ export default function BrandingManagement() {
         client_email_domain: userProfile?.email?.split('@')[1] || 'default',
         company_name: data.company_name,
         logo_url: data.logo_url || null,
-        primary_color: data.primary_color || '#7CB342',
-        secondary_color: data.secondary_color || '#9CCC65',
+        primary_color: data.primary_color || '',
+        secondary_color: data.secondary_color || '',
       };
 
       if (branding?.id) {
@@ -153,36 +155,43 @@ export default function BrandingManagement() {
       queryClient.invalidateQueries(['companyBranding', companyId]);
       queryClient.invalidateQueries(['companyData', companyId]);
       queryClient.invalidateQueries(['adminCompaniesForBranding']);
-      toast({ 
-        title: 'Branding Saved', 
-        description: 'Your branding settings have been updated successfully.' 
-      });
+      toast.success('Branding Saved', { description: 'Your branding settings have been updated successfully.' });
     },
     onError: (error) => {
-      toast({ 
-        title: 'Error', 
-        description: error.message, 
-        variant: 'destructive' 
-      });
+      toast.error(error.message, { description: 'Error' });
     },
   });
 
   const handleSave = () => {
     if (!companyId) {
-      toast({ 
-        title: 'Error', 
-        description: 'Please select a company first.', 
-        variant: 'destructive' 
-      });
+      toast.error('Please select a company first.', { description: 'Error' });
       return;
     }
     saveMutation.mutate(formData);
   };
 
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !companyId) return;
+    setIsUploadingLogo(true);
+    try {
+      const existingUrl = formData.logo_url;
+      const url = await uploadCompanyLogo(file, { companyId });
+      if (existingUrl) await removeCompanyLogoFromStorage(existingUrl);
+      setFormData((prev) => ({ ...prev, logo_url: url }));
+      toast.success('Logo uploaded', { description: 'Save changes to apply.' });
+    } catch (err) {
+      toast.error(err.message || 'Please try again.', { description: 'Upload failed' });
+    } finally {
+      setIsUploadingLogo(false);
+      event.target.value = '';
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
       </div>
     );
   }
@@ -195,11 +204,11 @@ export default function BrandingManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Palette className="w-5 h-5 text-emerald-500" />
+          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <Palette className="w-5 h-5 text-primary" />
             Company Branding
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             {isSuperAdmin 
               ? 'Manage branding for all companies' 
               : 'Customize the portal appearance for your company'}
@@ -208,7 +217,7 @@ export default function BrandingManagement() {
         <Button
           onClick={handleSave}
           disabled={saveMutation.isPending || !companyId}
-          className="bg-emerald-500 hover:bg-emerald-600"
+          className="bg-primary hover:bg-primary/90"
         >
           {saveMutation.isPending ? (
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -237,7 +246,7 @@ export default function BrandingManagement() {
                       ) : (
                         <div 
                           className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold"
-                          style={{ backgroundColor: selectedCompany.primary_color || '#7CB342' }}
+                          style={{ backgroundColor: selectedCompany.primary_color || 'hsl(var(--primary))' }}
                         >
                           {selectedCompany.name?.charAt(0)}
                         </div>
@@ -256,7 +265,7 @@ export default function BrandingManagement() {
                       ) : (
                         <div 
                           className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold"
-                          style={{ backgroundColor: company.primary_color || '#7CB342' }}
+                          style={{ backgroundColor: company.primary_color || 'hsl(var(--primary))' }}
                         >
                           {company.name?.charAt(0)}
                         </div>
@@ -273,7 +282,7 @@ export default function BrandingManagement() {
 
       {/* Admin Company Display */}
       {isAdmin && selectedCompany && (
-        <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+        <Card className="bg-primary/5 border-primary/20">
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
@@ -282,14 +291,14 @@ export default function BrandingManagement() {
                 ) : (
                   <div 
                     className="w-8 h-8 rounded flex items-center justify-center text-white text-sm font-bold"
-                    style={{ backgroundColor: selectedCompany.primary_color || '#7CB342' }}
+                    style={{ backgroundColor: selectedCompany.primary_color || 'hsl(var(--primary))' }}
                   >
                     {selectedCompany.name?.charAt(0)}
                   </div>
                 )}
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-white">{selectedCompany.name}</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Managing branding for your company</p>
+                  <p className="font-medium text-foreground">{selectedCompany.name}</p>
+                  <p className="text-xs text-muted-foreground">Managing branding for your company</p>
                 </div>
               </div>
             </div>
@@ -315,24 +324,44 @@ export default function BrandingManagement() {
             </div>
 
             <div className="space-y-2">
-              <Label>Logo URL</Label>
-              <Input
-                value={formData.logo_url}
-                onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                placeholder="https://example.com/logo.png"
-              />
-              {formData.logo_url && (
-                <div className="p-4 bg-gray-100 dark:bg-zinc-800 rounded-lg mt-2">
-                  <img 
-                    src={formData.logo_url} 
-                    alt="Logo preview" 
-                    className="h-16 object-contain" 
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
+              <Label>Company Logo</Label>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted/50">
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                    <span>{isUploadingLogo ? 'Uploading…' : 'Choose image'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      disabled={isUploadingLogo}
+                      onChange={handleLogoUpload}
+                    />
+                  </label>
+                  {formData.logo_url && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFormData((prev) => ({ ...prev, logo_url: '' }))}
+                    >
+                      Remove
+                    </Button>
+                  )}
                 </div>
-              )}
+                {formData.logo_url && (
+                  <div className="p-4 bg-muted rounded-lg">
+                    <img
+                      src={formData.logo_url}
+                      alt="Logo preview"
+                      className="h-16 object-contain"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -348,7 +377,7 @@ export default function BrandingManagement() {
                   <Input
                     value={formData.primary_color}
                     onChange={(e) => setFormData({ ...formData, primary_color: e.target.value })}
-                    placeholder="#7CB342"
+                    placeholder="#2563eb"
                   />
                 </div>
               </div>

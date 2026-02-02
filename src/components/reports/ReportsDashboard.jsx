@@ -44,14 +44,14 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
     return Array.from(siteMap.entries()).map(([id, name]) => ({ id, name }));
   }, [vehicles]);
 
-  // Filter data based on site (date filtering already done by Dashboard)
+  // Filter data based on site; include scans/vehicles with null siteRef/site_id so nothing is hidden
   const filteredData = useMemo(() => {
     const filteredScans = selectedSite && selectedSite !== 'all'
-      ? scans?.filter(scan => scan.siteRef === selectedSite) || []
-      : scans || [];
+      ? (scans?.filter(scan => scan.siteRef === selectedSite || scan.siteRef == null) ?? [])
+      : scans ?? [];
 
     const filteredVehicles = selectedSite && selectedSite !== 'all'
-      ? vehicles.filter(v => v.site_id === selectedSite)
+      ? vehicles.filter(v => v.site_id === selectedSite || v.site_id == null)
       : vehicles;
 
     return { filteredScans, filteredVehicles };
@@ -125,7 +125,7 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
   }, [filteredData.filteredScans, dateRange]);
 
 
-  const COLORS = ['#7CB342', '#9CCC65', '#689F38', '#558B2F', '#33691E', '#827717', '#CDDC39'];
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
   // Export Functions
   const exportToCSV = (data, filename) => {
@@ -161,8 +161,8 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
       {/* Header with Filters */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Fleet Reports & Analytics</h2>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Advanced analytics with predictive insights</p>
+          <h2 className="text-2xl font-bold text-foreground">Fleet Reports & Analytics</h2>
+          <p className="text-muted-foreground mt-1">Advanced analytics with predictive insights</p>
         </div>
         
         <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
@@ -179,50 +179,50 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
 
       {/* Key Metrics - 2 cards aligned side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl shadow-lg shadow-black/[0.03]" onClick={() => setDrillDownModal({ open: true, type: 'compliance', data: filteredData.filteredVehicles })}>
+        <Card className="cursor-pointer hover:shadow-lg transition-shadow bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]" onClick={() => setDrillDownModal({ open: true, type: 'compliance', data: filteredData.filteredVehicles })}>
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-gray-400">Compliance Rate</p>
-                <p className="text-3xl font-bold text-slate-800 dark:text-white mt-1">{complianceStats.complianceRate}%</p>
+                <p className="text-sm text-muted-foreground">Compliance Rate</p>
+                <p className="text-3xl font-bold text-foreground mt-1">{complianceStats.complianceRate}%</p>
                 <div className="flex items-center gap-1 mt-2">
                   {complianceStats.trend === 'good' ? (
-                    <TrendingUp className="w-4 h-4 text-emerald-600" />
+                    <TrendingUp className="w-4 h-4 text-primary" />
                   ) : (
                     <TrendingDown className="w-4 h-4 text-red-600" />
                   )}
-                  <span className={`text-xs ${complianceStats.trend === 'good' ? 'text-emerald-600' : 'text-red-600'}`}>
+                  <span className={`text-xs ${complianceStats.trend === 'good' ? 'text-primary' : 'text-red-600'}`}>
                     {complianceStats.compliantVehicles}/{complianceStats.totalVehicles} compliant
                   </span>
                 </div>
               </div>
               <div className="flex flex-col items-center gap-1">
                 <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                  complianceStats.trend === 'good' ? 'bg-emerald-100' : 'bg-red-100'
+                  complianceStats.trend === 'good' ? 'bg-primary/10' : 'bg-red-100'
                 }`}>
                   <CheckCircle className={`w-6 h-6 ${
-                    complianceStats.trend === 'good' ? 'text-emerald-600' : 'text-red-600'
+                    complianceStats.trend === 'good' ? 'text-primary' : 'text-red-600'
                   }`} />
                 </div>
-                <ZoomIn className="w-3 h-3 text-slate-400" />
+                <ZoomIn className="w-3 h-3 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
         </Card>
 
 
-        <Card className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl shadow-lg shadow-black/[0.03]">
+        <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-gray-400">Total Washes</p>
-                <p className="text-3xl font-bold text-slate-800 dark:text-white mt-1">
+                <p className="text-sm text-muted-foreground">Total Washes</p>
+                <p className="text-3xl font-bold text-foreground mt-1">
                   {filteredData.filteredScans.length}
                 </p>
-                <p className="text-xs text-slate-500 mt-2">In selected period</p>
+                <p className="text-xs text-muted-foreground mt-2">In selected period</p>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-[#7CB342]/10 flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-[#7CB342]" />
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-primary" />
               </div>
             </div>
           </CardContent>
@@ -232,23 +232,23 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
 
       {/* Charts - Side by side on large screens */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl shadow-lg shadow-black/[0.03]">
+        <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
           <CardHeader>
-            <CardTitle className="text-lg text-gray-900 dark:text-white">Wash Activity Trend</CardTitle>
+            <CardTitle className="text-lg text-foreground">Wash Activity Trend</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={complianceTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
                 <Line 
                   type="monotone" 
                   dataKey="scans" 
-                  stroke="#7CB342" 
+                  stroke="hsl(var(--primary))" 
                   strokeWidth={2}
-                  dot={{ fill: '#7CB342', r: 4 }}
+                  dot={{ fill: 'hsl(var(--primary))', r: 4 }}
                   name="Washes"
                 />
               </LineChart>
@@ -256,9 +256,9 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           </CardContent>
         </Card>
 
-        <Card className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl shadow-lg shadow-black/[0.03]">
+        <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
           <CardHeader>
-            <CardTitle className="text-lg flex items-center justify-between text-gray-900 dark:text-white">
+            <CardTitle className="text-lg flex items-center justify-between text-foreground">
               <span>Wash Frequency by Site</span>
               <Button 
                 size="sm" 
@@ -272,11 +272,11 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={washFrequencyBySite} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis dataKey="site" type="category" width={120} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="washes" fill="#9CCC65" name="Washes" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis dataKey="site" type="category" width={120} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                <Bar dataKey="washes" fill="hsl(var(--primary))" name="Washes" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

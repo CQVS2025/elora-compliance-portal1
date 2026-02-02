@@ -44,7 +44,7 @@ function TabNavItem({ tab, isActive, onClick }) {
       {isActive && (
         <motion.div
           layoutId="tab-nav-pill"
-          className="absolute inset-0 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/30"
+          className="absolute inset-0 bg-primary rounded-full shadow-md"
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
         />
       )}
@@ -86,7 +86,7 @@ export function TabNavUnderline({ tabs, activeTab, onChange, className = '' }) {
             transition-colors duration-200
             ${
               activeTab === tab.value
-                ? 'text-emerald-600 dark:text-emerald-400'
+                ? 'text-primary'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
             }
           `}
@@ -95,7 +95,7 @@ export function TabNavUnderline({ tabs, activeTab, onChange, className = '' }) {
           {activeTab === tab.value && (
             <motion.div
               layoutId="tab-underline"
-              className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500"
+              className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             />
           )}
@@ -175,7 +175,7 @@ export function PeriodSelector({ periods, activePeriod, onChange, className = ''
           {activePeriod === period && (
             <motion.div
               layoutId="period-selector-active"
-              className="absolute inset-0 bg-emerald-500 rounded-full shadow-sm"
+              className="absolute inset-0 bg-primary rounded-full shadow-sm"
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             />
           )}

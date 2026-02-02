@@ -50,10 +50,10 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
     staleTime: 30000,
   });
 
-  // Apply customer filter from Dashboard
+  // Apply customer filter from Dashboard; include sites with null customer_ref so nothing is hidden
   const sites = useMemo(() => {
     if (!selectedCustomer || selectedCustomer === 'all') return allSites;
-    return allSites.filter(s => s.customer_ref === selectedCustomer);
+    return allSites.filter(s => s.customer_ref === selectedCustomer || s.customer_ref == null);
   }, [allSites, selectedCustomer]);
 
   const deleteMutation = useMutation({
@@ -117,30 +117,30 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
   const getStatusColor = (status) => {
     switch (status) {
       case 'active':
-        return 'bg-emerald-500 text-white';
+        return 'bg-primary text-primary-foreground';
       case 'inactive':
-        return 'bg-slate-500 text-white';
+        return 'bg-muted/500 text-white';
       case 'maintenance':
         return 'bg-orange-500 text-white';
       default:
-        return 'bg-slate-500 text-white';
+        return 'bg-muted/500 text-white';
     }
   };
 
   // Show error state if sites failed to load
   if (sitesError) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 px-4 bg-white rounded-2xl border border-red-100">
+      <div className="flex flex-col items-center justify-center py-16 px-4 bg-card rounded-2xl border border-destructive/30">
         <div className="w-24 h-24 mb-6 rounded-full bg-red-100 flex items-center justify-center">
           <AlertCircle className="w-12 h-12 text-red-500" />
         </div>
-        <h3 className="text-xl font-bold text-slate-800 mb-2">Failed to Load Sites</h3>
-        <p className="text-slate-600 text-center max-w-md mb-6">
+        <h3 className="text-xl font-bold text-foreground mb-2">Failed to Load Sites</h3>
+        <p className="text-muted-foreground text-center max-w-md mb-6">
           {sitesError?.message || 'An error occurred while loading sites. Please try again.'}
         </p>
         <Button 
           onClick={() => queryClient.invalidateQueries(['sites'])} 
-          className="bg-[#7CB342] hover:bg-[#689F38]"
+          className=""
         >
           Retry
         </Button>
@@ -152,8 +152,8 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4">
-        <div className="w-12 h-12 border-4 border-[#7CB342] border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-600">Loading sites...</p>
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-muted-foreground">Loading sites...</p>
       </div>
     );
   }
@@ -163,23 +163,23 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Site Management</h2>
-          <p className="text-slate-600 mt-1">Manage wash station locations and contact information</p>
+          <h2 className="text-2xl font-bold text-foreground">Site Management</h2>
+          <p className="text-muted-foreground mt-1">Manage wash station locations and contact information</p>
         </div>
-        <Button onClick={handleAddNew} className="bg-[#7CB342] hover:bg-[#689F38]">
+        {/* <Button onClick={handleAddNew} className="">
           <Plus className="w-4 h-4 mr-2" />
           Add New Site
-        </Button>
+        </Button> */}
       </div>
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search sites by name, customer, or city..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 border-slate-200"
+          className="pl-10 border-border"
         />
       </div>
 
@@ -188,12 +188,12 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-[#7CB342]/10 flex items-center justify-center">
-                <Building2 className="w-5 h-5 text-[#7CB342]" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Building2 className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">{sites?.length || 0}</p>
-                <p className="text-sm text-slate-600">Total Sites</p>
+                <p className="text-2xl font-bold text-foreground">{sites?.length || 0}</p>
+                <p className="text-sm text-muted-foreground">Total Sites</p>
               </div>
             </div>
           </CardContent>
@@ -202,14 +202,14 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                <Building2 className="w-5 h-5 text-emerald-600" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Building2 className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">
+                <p className="text-2xl font-bold text-foreground">
                   {(sites || []).filter(s => s.status === 'active').length}
                 </p>
-                <p className="text-sm text-slate-600">Active Sites</p>
+                <p className="text-sm text-muted-foreground">Active Sites</p>
               </div>
             </div>
           </CardContent>
@@ -222,10 +222,10 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
                 <AlertCircle className="w-5 h-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">
+                <p className="text-2xl font-bold text-foreground">
                   {(sites || []).filter(s => s.status === 'maintenance').length}
                 </p>
-                <p className="text-sm text-slate-600">In Maintenance</p>
+                <p className="text-sm text-muted-foreground">In Maintenance</p>
               </div>
             </div>
           </CardContent>
@@ -247,9 +247,9 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <h3 className="font-bold text-slate-800 text-lg mb-1">{site.name}</h3>
+                      <h3 className="font-bold text-foreground text-lg mb-1">{site.name}</h3>
                       {site.customer_name && (
-                        <p className="text-sm text-slate-600">{site.customer_name}</p>
+                        <p className="text-sm text-muted-foreground">{site.customer_name}</p>
                       )}
                     </div>
                     <Badge className={getStatusColor(site.status)}>
@@ -260,8 +260,8 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
                   <div className="space-y-2 mb-4">
                     {(site.address || site.city || site.state) && (
                       <div className="flex items-start gap-2">
-                        <MapPin className="w-4 h-4 text-slate-400 mt-0.5" />
-                        <div className="text-sm text-slate-600">
+                        <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
+                        <div className="text-sm text-muted-foreground">
                           {site.address && <p>{site.address}</p>}
                           <p>
                             {[site.city, site.state, site.postal_code].filter(Boolean).join(', ')}
@@ -272,8 +272,8 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
 
                     {site.contact_name && (
                       <div className="flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-slate-400" />
-                        <p className="text-sm text-slate-600">
+                        <Phone className="w-4 h-4 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
                           {site.contact_name}
                           {site.contact_phone && ` • ${site.contact_phone}`}
                         </p>
@@ -282,18 +282,18 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
 
                     {site.contact_email && (
                       <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-slate-400" />
-                        <p className="text-sm text-slate-600">{site.contact_email}</p>
+                        <Mail className="w-4 h-4 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">{site.contact_email}</p>
                       </div>
                     )}
                   </div>
 
-                  <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="mt-3 pt-3 border-t border-border">
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => handleAssignVehicles(site)}
-                      className="w-full justify-start text-[#7CB342] hover:text-[#689F38] hover:bg-[#7CB342]/10"
+                      className="w-full justify-start text-primary hover:text-primary hover:bg-primary/10"
                     >
                       <Truck className="w-4 h-4 mr-2" />
                       <span>
@@ -340,29 +340,29 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
       )}
 
       {filteredSites.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 px-4 bg-white rounded-2xl border border-slate-100">
-          <div className="w-24 h-24 mb-6 rounded-full bg-slate-100 flex items-center justify-center">
-            <Building2 className="w-12 h-12 text-slate-400" />
+        <div className="flex flex-col items-center justify-center py-16 px-4 bg-card rounded-2xl border border-border">
+          <div className="w-24 h-24 mb-6 rounded-full bg-muted flex items-center justify-center">
+            <Building2 className="w-12 h-12 text-muted-foreground" />
           </div>
-          <h3 className="text-xl font-bold text-slate-800 mb-2">
+          <h3 className="text-xl font-bold text-foreground mb-2">
             {searchQuery ? 'No sites found' : 'Welcome! Add your first site'}
           </h3>
-          <p className="text-slate-600 text-center max-w-md mb-6">
+          <p className="text-muted-foreground text-center max-w-md mb-6">
             {searchQuery
               ? `No sites match "${searchQuery}". Try a different search term.`
               : 'Add your first wash station location to start managing your fleet operations.'
             }
           </p>
           {!searchQuery && (
-            <div className="space-y-3 text-sm text-slate-600 bg-slate-50 rounded-lg p-4 max-w-md">
-              <p className="font-semibold text-slate-800">Site Setup Guide:</p>
+            <div className="space-y-3 text-sm text-muted-foreground bg-muted/50 rounded-lg p-4 max-w-md">
+              <p className="font-semibold text-foreground">Site Setup Guide:</p>
               <ol className="list-decimal list-inside space-y-2">
                 <li>Create a site for each wash station location</li>
                 <li>Add contact information and address details</li>
                 <li>Assign vehicles to the appropriate site</li>
                 <li>Track wash activity by location</li>
               </ol>
-              <Button onClick={handleAddNew} className="w-full mt-4 bg-[#7CB342] hover:bg-[#689F38]">
+              <Button onClick={handleAddNew} className="w-full mt-4">
                 <Plus className="w-4 h-4 mr-2" />
                 Add First Site
               </Button>

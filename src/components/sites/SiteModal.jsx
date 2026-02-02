@@ -7,10 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabaseClient } from "@/api/supabaseClient";
 import { Loader2 } from 'lucide-react';
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "@/lib/toast";
 
 export default function SiteModal({ open, onClose, site, customers, onSuccess }) {
-  const { toast } = useToast();
   const [formData, setFormData] = useState({
     name: '',
     customer_id: '',
@@ -93,11 +92,7 @@ export default function SiteModal({ open, onClose, site, customers, onSuccess })
       onClose();
     } catch (error) {
       console.error('Error saving site:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save site. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Failed to save site. Please try again.", { description: "Error" });
     } finally {
       setLoading(false);
     }
@@ -185,7 +180,7 @@ export default function SiteModal({ open, onClose, site, customers, onSuccess })
             </div>
 
             <div className="col-span-2 border-t pt-4 mt-2">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3">Contact Information</h3>
+              <h3 className="text-sm font-semibold text-foreground mb-3">Contact Information</h3>
             </div>
 
             <div>
@@ -245,7 +240,7 @@ export default function SiteModal({ open, onClose, site, customers, onSuccess })
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="bg-[#7CB342] hover:bg-[#689F38]">
+            <Button type="submit" disabled={loading} className="">
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {site ? 'Update Site' : 'Create Site'}
             </Button>

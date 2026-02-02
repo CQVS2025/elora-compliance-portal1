@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Truck, Mail, Lock, AlertCircle } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/lib/toast';
 import { getUserFriendlyError } from '@/utils/errorMessages';
 
 // Default branding
@@ -27,7 +27,6 @@ const DEFAULT_BRANDING = {
 export default function Login() {
   const navigate = useNavigate();
   const { login, resetPassword, authError } = useAuth();
-  const { toast } = useToast();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -72,20 +71,12 @@ export default function Login() {
       const friendly = getUserFriendlyError(message);
       setError(friendly);
       if (type === 'user_unassigned') {
-        toast({
-          title: 'Not Assigned to a Company',
-          description: 'You are not assigned to any company. Please contact your administrator.',
-          variant: 'destructive',
-        });
+        toast.error('You are not assigned to any company. Please contact your administrator.', { description: 'Not Assigned to a Company' });
       } else if (type === 'account_deactivated') {
-        toast({
-          title: 'Account Deactivated',
-          description: 'Your account has been deactivated. Please contact your administrator.',
-          variant: 'destructive',
-        });
+        toast.error('Your account has been deactivated. Please contact your administrator.', { description: 'Account Deactivated' });
       }
     } catch (_) {}
-  }, [toast]);
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -96,10 +87,7 @@ export default function Login() {
       const result = await login(email, password);
 
       if (result.success) {
-        toast({
-          title: "Welcome back!",
-          description: "Logging you in...",
-        });
+        toast.success("Welcome back!", { description: "Logging you in..." });
         navigate('/');
       } else {
         // Check for deactivated account error specifically
@@ -108,19 +96,11 @@ export default function Login() {
         
         // Show special toast for deactivated accounts
         if (errorMessage.toLowerCase().includes('deactivated') || authError?.type === 'account_deactivated') {
-          toast({
-            title: "Account Deactivated",
-            description: "Your account has been deactivated. Please contact your administrator.",
-            variant: "destructive",
-          });
+          toast.error("Your account has been deactivated. Please contact your administrator.", { description: "Account Deactivated" });
         }
         // Show special toast for unassigned user (no company)
         if (errorMessage.toLowerCase().includes('not assigned') || errorMessage.toLowerCase().includes('unassigned') || authError?.type === 'user_unassigned') {
-          toast({
-            title: "Not Assigned to a Company",
-            description: "You are not assigned to any company. Please contact your administrator.",
-            variant: "destructive",
-          });
+          toast.error("You are not assigned to any company. Please contact your administrator.", { description: "Not Assigned to a Company" });
         }
       }
     } catch (err) {
@@ -144,10 +124,7 @@ export default function Login() {
       const result = await resetPassword(email);
 
       if (result.success) {
-        toast({
-          title: "Email Sent",
-          description: "Check your inbox for password reset instructions.",
-        });
+        toast.success("Email Sent", { description: "Check your inbox for password reset instructions." });
         setShowForgotPassword(false);
       } else {
         setError(getUserFriendlyError(result.error || 'Failed to send reset email'));

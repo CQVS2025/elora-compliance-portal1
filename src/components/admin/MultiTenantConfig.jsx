@@ -184,15 +184,15 @@ export default function MultiTenantConfig() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Settings className="w-6 h-6 text-[#7CB342]" />
+          <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <Settings className="w-6 h-6 text-primary" />
             Multi-Tenant Configuration
           </h2>
-          <p className="text-slate-600 mt-1">
+          <p className="text-muted-foreground mt-1">
             Manage user access and customer restrictions without editing code
           </p>
         </div>
-        <Button onClick={handleAddNew} className="bg-[#7CB342] hover:bg-[#689F38]">
+        <Button onClick={handleAddNew} className="">
           <Plus className="w-4 h-4 mr-2" />
           Add User Config
         </Button>
@@ -219,12 +219,12 @@ export default function MultiTenantConfig() {
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search by email or customer name..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 border-slate-200"
+          className="pl-10 border-border"
         />
       </div>
 
@@ -237,8 +237,8 @@ export default function MultiTenantConfig() {
                 <Users className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">{mockUserConfigs.length}</p>
-                <p className="text-sm text-slate-600">Total Configs</p>
+                <p className="text-2xl font-bold text-foreground">{mockUserConfigs.length}</p>
+                <p className="text-sm text-muted-foreground">Total Configs</p>
               </div>
             </div>
           </CardContent>
@@ -251,10 +251,10 @@ export default function MultiTenantConfig() {
                 <Lock className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">
+                <p className="text-2xl font-bold text-foreground">
                   {mockUserConfigs.filter(c => c.lockCustomerFilter).length}
                 </p>
-                <p className="text-sm text-slate-600">Restricted Users</p>
+                <p className="text-sm text-muted-foreground">Restricted Users</p>
               </div>
             </div>
           </CardContent>
@@ -263,14 +263,14 @@ export default function MultiTenantConfig() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <CheckCircle className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">
+                <p className="text-2xl font-bold text-foreground">
                   {mockUserConfigs.filter(c => !c.lockCustomerFilter).length}
                 </p>
-                <p className="text-sm text-slate-600">Full Access</p>
+                <p className="text-sm text-muted-foreground">Full Access</p>
               </div>
             </div>
           </CardContent>
@@ -283,10 +283,10 @@ export default function MultiTenantConfig() {
                 <Settings className="w-5 h-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">
+                <p className="text-2xl font-bold text-foreground">
                   {new Set(mockUserConfigs.map(c => c.restrictedCustomer).filter(Boolean)).size}
                 </p>
-                <p className="text-sm text-slate-600">Unique Customers</p>
+                <p className="text-sm text-muted-foreground">Unique Customers</p>
               </div>
             </div>
           </CardContent>
@@ -316,7 +316,7 @@ export default function MultiTenantConfig() {
                     <Badge className={
                       config.lockCustomerFilter
                         ? 'bg-amber-500 text-white'
-                        : 'bg-emerald-500 text-white'
+                        : 'bg-primary text-primary-foreground'
                     }>
                       {config.configType}
                     </Badge>
@@ -329,27 +329,27 @@ export default function MultiTenantConfig() {
                       {config.lockCustomerFilter ? (
                         <Lock className="w-4 h-4 text-amber-600" />
                       ) : (
-                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        <CheckCircle className="w-4 h-4 text-primary" />
                       )}
-                      <span className="text-slate-600">
+                      <span className="text-muted-foreground">
                         {config.lockCustomerFilter ? 'Locked to customer' : 'All customers accessible'}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2 text-sm">
                       {config.showAllData ? (
-                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        <CheckCircle className="w-4 h-4 text-primary" />
                       ) : (
                         <XCircle className="w-4 h-4 text-red-600" />
                       )}
-                      <span className="text-slate-600">
+                      <span className="text-muted-foreground">
                         {config.showAllData ? 'Can see all data' : 'Restricted data access'}
                       </span>
                     </div>
 
                     {/* Visible Tabs */}
                     <div>
-                      <p className="text-xs text-slate-500 mb-2">Visible Tabs:</p>
+                      <p className="text-xs text-muted-foreground mb-2">Visible Tabs:</p>
                       <div className="flex flex-wrap gap-1">
                         {config.visibleTabs.map(tab => (
                           <Badge key={tab} variant="outline" className="text-xs">
@@ -360,7 +360,7 @@ export default function MultiTenantConfig() {
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <div className="flex items-center gap-2 pt-2 border-t border-border">
                       <Button
                         size="sm"
                         variant="outline"
@@ -390,8 +390,8 @@ export default function MultiTenantConfig() {
 
       {filteredConfigs.length === 0 && (
         <div className="text-center py-12">
-          <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-600">
+          <Users className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
+          <p className="text-muted-foreground">
             {searchQuery ? 'No configurations found matching your search' : 'No user configurations yet. Add your first configuration to get started.'}
           </p>
         </div>
@@ -472,7 +472,7 @@ export default function MultiTenantConfig() {
                 placeholder="e.g., HEIDELBERG MATERIALS"
                 className="mt-1"
               />
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Leave blank for unrestricted access. Customer name must match database exactly.
               </p>
             </div>
@@ -536,13 +536,13 @@ export default function MultiTenantConfig() {
             {/* Generated Code Preview */}
             <div>
               <Label className="mb-2 block">Generated Configuration</Label>
-              <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-xs overflow-x-auto">
+              <pre className="bg-muted text-foreground p-4 rounded-lg text-xs overflow-x-auto">
                 {generateConfigCode(formData)}
               </pre>
-              <p className="text-xs text-slate-500 mt-2">
-                Copy this code and add it to <code className="bg-slate-100 px-1 rounded">
+              <p className="text-xs text-muted-foreground mt-2">
+                Copy this code and add it to <code className="bg-muted px-1 rounded">
                   USER_SPECIFIC_CONFIG
-                </code> in <code className="bg-slate-100 px-1 rounded">
+                </code> in <code className="bg-muted px-1 rounded">
                   /src/components/auth/PermissionGuard.jsx
                 </code>
               </p>
@@ -553,7 +553,7 @@ export default function MultiTenantConfig() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} className="bg-[#7CB342] hover:bg-[#689F38]">
+            <Button onClick={handleSave} className="">
               <Save className="w-4 h-4 mr-2" />
               Save Configuration
             </Button>

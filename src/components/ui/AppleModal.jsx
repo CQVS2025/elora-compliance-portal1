@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
-import AppleButton from './AppleButton';
+import { X, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 /**
  * Apple-style Modal Component
@@ -73,9 +73,7 @@ export default function AppleModal({
             onClick={(e) => e.stopPropagation()}
             className={`
               relative w-full ${sizes[size]}
-              bg-white dark:bg-zinc-900
-              rounded-3xl
-              shadow-2xl shadow-black/20
+              rounded-xl border bg-card text-card-foreground shadow-lg
               overflow-hidden
             `}
           >
@@ -85,30 +83,20 @@ export default function AppleModal({
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     {title && (
-                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                      <h2 className="text-2xl font-bold text-foreground">
                         {title}
                       </h2>
                     )}
                     {description && (
-                      <p className="mt-1 text-gray-500 dark:text-gray-400">
+                      <p className="mt-1 text-muted-foreground">
                         {description}
                       </p>
                     )}
                   </div>
                   {showCloseButton && (
-                    <button
-                      onClick={onClose}
-                      className="
-                        w-8 h-8 rounded-full
-                        flex items-center justify-center
-                        text-gray-400 hover:text-gray-600
-                        dark:text-gray-500 dark:hover:text-gray-300
-                        hover:bg-gray-100 dark:hover:bg-zinc-800
-                        transition-colors
-                      "
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
+                    <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
+                      <X className="h-5 w-5" />
+                    </Button>
                   )}
                 </div>
               </div>
@@ -153,16 +141,17 @@ export function ConfirmDialog({
       size="sm"
       footer={
         <>
-          <AppleButton variant="secondary" onClick={onClose} disabled={loading}>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>
             {cancelText}
-          </AppleButton>
-          <AppleButton
-            variant={variant === 'destructive' ? 'destructiveSolid' : 'primary'}
+          </Button>
+          <Button
+            variant={variant === 'destructive' ? 'destructive' : 'default'}
             onClick={onConfirm}
-            loading={loading}
+            disabled={loading}
           >
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {confirmText}
-          </AppleButton>
+          </Button>
         </>
       }
     />
@@ -205,21 +194,19 @@ export function Sheet({ isOpen, onClose, title, children }) {
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className="
               absolute bottom-0 left-0 right-0
-              bg-white dark:bg-zinc-900
-              rounded-t-3xl
-              max-h-[85vh] overflow-hidden
-              shadow-2xl shadow-black/20
+              rounded-t-xl border border-b-0 bg-card text-card-foreground
+              max-h-[85vh] overflow-hidden shadow-lg
             "
           >
             {/* Handle */}
             <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-zinc-600" />
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
             </div>
 
             {/* Header */}
             {title && (
-              <div className="px-6 pb-4 border-b border-gray-100 dark:border-zinc-800">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <div className="px-6 pb-4 border-b border-border">
+                <h2 className="text-lg font-semibold text-foreground">
                   {title}
                 </h2>
               </div>

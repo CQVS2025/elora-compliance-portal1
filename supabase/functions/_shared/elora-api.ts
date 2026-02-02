@@ -29,5 +29,14 @@ export async function callEloraAPI(endpoint: string, params?: Record<string, str
   }
 
   const json = await response.json();
-  return json.data || json;
+  // Preserve paginated response shape { total, page, pageSize, pageCount, data }
+  if (
+    json &&
+    typeof json === 'object' &&
+    Array.isArray(json.data) &&
+    ('total' in json || 'page' in json)
+  ) {
+    return json;
+  }
+  return json.data ?? json;
 }

@@ -13,7 +13,6 @@ import DataPagination from '@/components/ui/DataPagination';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import {
   Building2,
-  ArrowLeft,
   Search,
   Plus,
   Edit,
@@ -50,13 +49,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
-import { formatErrorForToast, formatSuccessForToast } from '@/utils/errorMessages';
+import { toast, toastError, toastSuccess } from '@/lib/toast';
+import { uploadCompanyLogo, removeCompanyLogoFromStorage } from '@/lib/companyLogoUpload';
 
 export default function CompanyManagement() {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,6 +66,8 @@ export default function CompanyManagement() {
   const [quickSetupResult, setQuickSetupResult] = useState(null);
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingQuickSetupLogo, setIsUploadingQuickSetupLogo] = useState(false);
   const itemsPerPage = 12;
 
   const [formData, setFormData] = useState({
@@ -142,7 +142,7 @@ export default function CompanyManagement() {
           slug,
           email_domain: companyData.email_domain || null,
           elora_customer_ref: companyData.elora_customer_ref || null,
-          logo_url: null,
+          logo_url: companyData.logo_url || null,
           primary_color: '#1e3a5f',
           secondary_color: '#3b82f6',
           is_active: true,
@@ -158,9 +158,9 @@ export default function CompanyManagement() {
           company_id: data.id,
           client_email_domain: companyData.email_domain,
           company_name: companyData.name,
-          logo_url: null,
-          primary_color: '#7CB342',
-          secondary_color: '#9CCC65',
+          logo_url: companyData.logo_url || null,
+          primary_color: null,
+          secondary_color: null,
         });
       }
 
@@ -174,10 +174,10 @@ export default function CompanyManagement() {
       queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setShowCreateModal(false);
       resetForm();
-      toast(formatSuccessForToast('create', 'company'));
+      toastSuccess('create', 'company');
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'creating company'));
+      toastError(error, 'creating company');
     },
   });
 
@@ -228,10 +228,10 @@ export default function CompanyManagement() {
       queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setShowEditModal(false);
       setSelectedCompany(null);
-      toast(formatSuccessForToast('update', 'company'));
+      toastSuccess('update', 'company');
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'updating company'));
+      toastError(error, 'updating company');
     },
   });
 
@@ -251,10 +251,10 @@ export default function CompanyManagement() {
       queryClient.refetchQueries({ queryKey: ['adminCompaniesDetail'] });
       queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       const action = variables.is_active ? 'activate' : 'deactivate';
-      toast(formatSuccessForToast(action, 'company'));
+      toastSuccess(action, 'company');
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'updating company status'));
+      toastError(error, 'updating company status');
     },
   });
 
@@ -270,38 +270,41 @@ export default function CompanyManagement() {
       queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
       queryClient.invalidateQueries(['adminUsers']);
       setCompanyToDelete(null);
-      toast(formatSuccessForToast('delete', 'company'));
+      toastSuccess('delete', 'company');
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'deleting company'));
+      toastError(error, 'deleting company');
       setCompanyToDelete(null);
     },
   });
 
   // Quick Setup mutation - creates company with admin user
+  // API response shape: { success, message, company: { id, name, email_domain, slug }, user: { id, email, full_name, role }, branding: { primary_color, secondary_color, login_tagline }, login_credentials: { email, password: "(as provided)" } }
   const quickSetupMutation = useMutation({
     mutationFn: async (data) => {
       const response = await supabaseClient.admin.createCompanyWithUser(data);
-      if (response.error) {
-        throw new Error(response.error);
+      if (response?.error) {
+        throw new Error(typeof response.error === 'string' ? response.error : response.error?.message);
       }
-      return response.data;
+      // Edge Function returns payload at top level (no .data wrapper)
+      return response?.data ?? response;
     },
     onSuccess: (data) => {
-      // Invalidate and refetch company queries
+      if (!data) return;
+      const company = data.company ?? {};
+      const user = data.user ?? {};
+      const branding = data.branding ?? {};
       queryClient.invalidateQueries({ queryKey: ['adminCompaniesDetail'] });
       queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
       queryClient.refetchQueries({ queryKey: ['adminCompaniesDetail'] });
       queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
-      setQuickSetupResult(data);
-      setQuickSetupStep(3); // Move to success step
-      toast({
-        title: 'All Set!',
-        description: `${data.company.name} is ready to use.`
-      });
+      setQuickSetupResult({ company, user, branding, login_credentials: data.login_credentials ?? {} });
+      setQuickSetupStep(3);
+      const companyName = company.name || 'Company';
+      toast.success('All Set!', { description: `${companyName} is ready to use.` });
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'setting up company'));
+      toastError(error, 'setting up company');
     },
   });
 
@@ -331,7 +334,7 @@ export default function CompanyManagement() {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    toast(formatSuccessForToast('copy', ''));
+    toastSuccess('copy', '');
   };
 
   const resetForm = () => {
@@ -344,6 +347,45 @@ export default function CompanyManagement() {
       primary_color: '#1e3a5f',
       secondary_color: '#3b82f6',
     });
+  };
+
+  const handleLogoUpload = async (event, isQuickSetup = false) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const setUploading = isQuickSetup ? setIsUploadingQuickSetupLogo : setIsUploadingLogo;
+    setUploading(true);
+    try {
+      const companyId = !isQuickSetup && selectedCompany?.id ? selectedCompany.id : null;
+      const url = await uploadCompanyLogo(file, { companyId });
+      if (isQuickSetup) {
+        setQuickSetupData((prev) => ({ ...prev, logo_url: url }));
+      } else {
+        if (selectedCompany?.logo_url) await removeCompanyLogoFromStorage(selectedCompany.logo_url);
+        setFormData((prev) => ({ ...prev, logo_url: url }));
+      }
+      toast.success('Logo uploaded', { description: 'Image saved. Save the form to apply.' });
+    } catch (err) {
+      toast.error(err.message || 'Please try again.', { description: 'Upload failed' });
+    } finally {
+      setUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleCreateLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsUploadingLogo(true);
+    try {
+      const url = await uploadCompanyLogo(file, { companyId: null });
+      setFormData((prev) => ({ ...prev, logo_url: url }));
+      toast.success('Logo uploaded', { description: 'Image saved. Create company to apply.' });
+    } catch (err) {
+      toast.error(err.message || 'Please try again.', { description: 'Upload failed' });
+    } finally {
+      setIsUploadingLogo(false);
+      event.target.value = '';
+    }
   };
 
   const handleEdit = (company) => {
@@ -366,12 +408,12 @@ export default function CompanyManagement() {
   // Show error if query failed
   if (queryError) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="w-full max-w-md">
+      <div className="p-6 flex items-center justify-center min-h-[200px]">
+        <Card className="w-full max-w-md border-border">
           <CardContent className="pt-6 text-center">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Error Loading Companies</h2>
-            <p className="text-slate-600 mb-4">{queryError.message}</p>
+            <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-foreground mb-2">Error Loading Companies</h2>
+            <p className="text-muted-foreground mb-4">{queryError.message}</p>
             <Button onClick={() => window.location.reload()}>Retry</Button>
           </CardContent>
         </Card>
@@ -402,77 +444,46 @@ export default function CompanyManagement() {
   }, [searchQuery]);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/10"
-              onClick={() => navigate('/admin')}
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Admin
+    <div className="p-6 space-y-6">
+      {/* Filters */}
+      <Card className="border-border">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search companies..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button onClick={() => setShowQuickSetupModal(true)}>
+              <Zap className="w-4 h-4 mr-2" />
+              Quick Setup
             </Button>
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Building2 className="w-6 h-6" />
-                Company Management
-              </h1>
-              <p className="text-slate-300 text-sm">Manage companies and branding</p>
-            </div>
+            <Button onClick={() => setShowCreateModal(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Company
+            </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Companies Grid */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Filters */}
-        <Card className="mb-6">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Search companies..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <Button
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={() => setShowQuickSetupModal(true)}
-              >
-                <Zap className="w-4 h-4 mr-2" />
-                Quick Setup
-              </Button>
-              <Button
-                className="bg-[#7CB342] hover:bg-[#689F38]"
-                onClick={() => setShowCreateModal(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Company
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Companies Grid */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-[#7CB342] animate-spin" />
-          </div>
-        ) : filteredCompanies.length === 0 ? (
-          <div className="text-center py-12 text-slate-500">
-            No companies found.
-          </div>
-        ) : (
+      ) : filteredCompanies.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          No companies found.
+        </div>
+      ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {paginatedCompanies.map(company => (
-              <Card key={company.id} className="hover:shadow-lg transition-shadow">
+              <Card key={company.id} className="border-border hover:bg-muted/30 transition-colors">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -493,7 +504,7 @@ export default function CompanyManagement() {
                       <div>
                         <CardTitle className="text-lg">{company.name}</CardTitle>
                         {company.email_domain && (
-                          <p className="text-sm text-slate-500">@{company.email_domain}</p>
+                          <p className="text-sm text-muted-foreground">@{company.email_domain}</p>
                         )}
                       </div>
                     </div>
@@ -531,7 +542,7 @@ export default function CompanyManagement() {
                           )}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          className="text-red-600 focus:text-red-600"
+                          className="text-destructive focus:text-destructive"
                           onClick={() => setCompanyToDelete(company)}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
@@ -545,30 +556,30 @@ export default function CompanyManagement() {
                   <div className="space-y-3">
                     <Button
                       variant="outline"
-                      className="w-full justify-between hover:bg-slate-50"
+                      className="w-full justify-between hover:bg-muted/50"
                       onClick={() => navigate(`/admin/users?company=${company.id}`)}
                     >
                       <span className="flex items-center gap-2">
                         <Users className="w-4 h-4" />
                         View Users
                       </span>
-                      <Badge className="bg-[#7CB342] text-white">{company.userCount}</Badge>
+                      <Badge variant="secondary">{company.userCount}</Badge>
                     </Button>
 
                     {company.elora_customer_ref && (
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-500 flex items-center gap-1">
+                        <span className="text-muted-foreground flex items-center gap-1">
                           <Link className="w-4 h-4" />
                           Elora Ref
                         </span>
-                        <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded">
+                        <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
                           {company.elora_customer_ref}
                         </span>
                       </div>
                     )}
 
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500 flex items-center gap-1">
+                      <span className="text-muted-foreground flex items-center gap-1">
                         <Palette className="w-4 h-4" />
                         Branding
                       </span>
@@ -586,9 +597,9 @@ export default function CompanyManagement() {
 
                     <div className="pt-2">
                       {company.is_active !== false ? (
-                        <Badge className="bg-green-100 text-green-800">Active</Badge>
+                        <Badge variant="default">Active</Badge>
                       ) : (
-                        <Badge className="bg-red-100 text-red-800">Inactive</Badge>
+                        <Badge variant="secondary">Inactive</Badge>
                       )}
                     </div>
                   </div>
@@ -610,13 +621,13 @@ export default function CompanyManagement() {
             )}
           </>
         )}
-      </div>
 
       {/* Create Company Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Create New Company</DialogTitle>
+            <DialogDescription className="sr-only">Create a new company with name, slug, and optional logo.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -646,20 +657,59 @@ export default function CompanyManagement() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Elora Customer Reference</Label>
+              <Label>ACATC Customer Reference *</Label>
               <Input
                 value={formData.elora_customer_ref}
                 onChange={(e) => setFormData({ ...formData, elora_customer_ref: e.target.value })}
-                placeholder="ELORA-12345"
+                placeholder="e.g. 20191002210559S12659"
               />
+              <p className="text-xs text-muted-foreground">Required. Must match the customer ref in ACATC. Users of this company will only see data for this customer.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Company Logo</Label>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted/50">
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                    <span>{isUploadingLogo ? 'Uploading…' : 'Choose image'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      disabled={isUploadingLogo}
+                      onChange={handleCreateLogoUpload}
+                    />
+                  </label>
+                  {formData.logo_url && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFormData((prev) => ({ ...prev, logo_url: '' }))}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                {formData.logo_url && (
+                  <div className="h-16 w-32 rounded border border-border bg-muted/30 flex items-center justify-center overflow-hidden">
+                    <img src={formData.logo_url} alt="Logo preview" className="max-h-14 max-w-28 object-contain" />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>Cancel</Button>
             <Button
-              className="bg-[#7CB342] hover:bg-[#689F38]"
-              onClick={() => createCompanyMutation.mutate(formData)}
-              disabled={createCompanyMutation.isPending || !formData.name}
+              onClick={() => {
+                if (!formData.elora_customer_ref?.trim()) {
+                  toast.error('ACATC Customer Reference is required.', { description: 'Enter the customer ref from ACATC (e.g. 20191002210559S12659).' });
+                  return;
+                }
+                createCompanyMutation.mutate(formData);
+              }}
+              disabled={createCompanyMutation.isPending || !formData.name || !formData.elora_customer_ref?.trim()}
             >
               {createCompanyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Company'}
             </Button>
@@ -672,6 +722,7 @@ export default function CompanyManagement() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Company</DialogTitle>
+            <DialogDescription className="sr-only">Edit company details and logo.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -698,18 +749,46 @@ export default function CompanyManagement() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Elora Customer Reference</Label>
+              <Label>ACATC Customer Reference *</Label>
               <Input
                 value={formData.elora_customer_ref}
                 onChange={(e) => setFormData({ ...formData, elora_customer_ref: e.target.value })}
+                placeholder="e.g. 20191002210559S12659"
               />
+              <p className="text-xs text-muted-foreground">Required. Must match the customer ref in ACATC. Users of this company will only see data for this customer.</p>
             </div>
             <div className="space-y-2">
-              <Label>Logo URL</Label>
-              <Input
-                value={formData.logo_url}
-                onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-              />
+              <Label>Company Logo</Label>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted/50">
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                    <span>{isUploadingLogo ? 'Uploading…' : 'Choose image'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      disabled={isUploadingLogo}
+                      onChange={(e) => handleLogoUpload(e, false)}
+                    />
+                  </label>
+                  {formData.logo_url && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFormData((prev) => ({ ...prev, logo_url: '' }))}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                {formData.logo_url && (
+                  <div className="h-16 w-32 rounded border border-border bg-muted/30 flex items-center justify-center overflow-hidden">
+                    <img src={formData.logo_url} alt="Logo preview" className="max-h-14 max-w-28 object-contain" />
+                  </div>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -749,9 +828,14 @@ export default function CompanyManagement() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
             <Button
-              className="bg-[#7CB342] hover:bg-[#689F38]"
-              onClick={() => updateCompanyMutation.mutate({ id: selectedCompany.id, ...formData })}
-              disabled={updateCompanyMutation.isPending}
+              onClick={() => {
+                if (!formData.elora_customer_ref?.trim()) {
+                  toast.error('ACATC Customer Reference is required.', { description: 'Enter the customer ref from ACATC (e.g. 20191002210559S12659).' });
+                  return;
+                }
+                updateCompanyMutation.mutate({ id: selectedCompany.id, ...formData });
+              }}
+              disabled={updateCompanyMutation.isPending || !formData.elora_customer_ref?.trim()}
             >
               {updateCompanyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Changes'}
             </Button>
@@ -764,7 +848,7 @@ export default function CompanyManagement() {
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Zap className="w-5 h-5 text-blue-600" />
+              <Zap className="w-5 h-5 text-primary" />
               Quick Setup - New Company with Admin
             </DialogTitle>
             <DialogDescription>
@@ -778,20 +862,20 @@ export default function CompanyManagement() {
               <div key={step} className="flex items-center">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                   quickSetupStep >= step
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-200 text-slate-500'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
                 }`}>
                   {quickSetupStep > step ? <Check className="w-4 h-4" /> : step}
                 </div>
                 {step < 3 && (
                   <div className={`w-12 h-1 mx-1 ${
-                    quickSetupStep > step ? 'bg-blue-600' : 'bg-slate-200'
+                    quickSetupStep > step ? 'bg-primary' : 'bg-muted'
                   }`} />
                 )}
               </div>
             ))}
           </div>
-          <div className="flex justify-center gap-8 text-xs text-slate-500 mb-4">
+          <div className="flex justify-center gap-8 text-xs text-muted-foreground mb-4">
             <span>Company</span>
             <span>Admin User</span>
             <span>Complete</span>
@@ -800,8 +884,8 @@ export default function CompanyManagement() {
           {/* Step 1: Company Details */}
           {quickSetupStep === 1 && (
             <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
-                <Building2 className="w-4 h-4 inline mr-2" />
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm text-foreground">
+                <Building2 className="w-4 h-4 inline mr-2 text-primary" />
                 Enter the company details and branding colors.
               </div>
 
@@ -826,20 +910,46 @@ export default function CompanyManagement() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Elora Customer Reference</Label>
+                  <Label>ACATC Customer Reference *</Label>
                   <Input
                     value={quickSetupData.elora_customer_ref}
                     onChange={(e) => setQuickSetupData({ ...quickSetupData, elora_customer_ref: e.target.value })}
-                    placeholder="HM-001"
+                    placeholder="e.g. 20191002210559S12659"
                   />
+                  <p className="text-xs text-muted-foreground">Required. Must match the customer ref in ACATC.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Logo URL</Label>
-                  <Input
-                    value={quickSetupData.logo_url}
-                    onChange={(e) => setQuickSetupData({ ...quickSetupData, logo_url: e.target.value })}
-                    placeholder="https://company.com/logo.svg"
-                  />
+                  <Label>Company Logo</Label>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted/50">
+                        <Upload className="h-4 w-4 text-muted-foreground" />
+                        <span>{isUploadingQuickSetupLogo ? 'Uploading…' : 'Choose image'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          disabled={isUploadingQuickSetupLogo}
+                          onChange={(e) => handleLogoUpload(e, true)}
+                        />
+                      </label>
+                      {quickSetupData.logo_url && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setQuickSetupData((prev) => ({ ...prev, logo_url: '' }))}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                    {quickSetupData.logo_url && (
+                      <div className="h-16 w-32 rounded border border-border bg-muted/30 flex items-center justify-center overflow-hidden">
+                        <img src={quickSetupData.logo_url} alt="Logo preview" className="max-h-14 max-w-28 object-contain" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -888,8 +998,8 @@ export default function CompanyManagement() {
               </div>
 
               {/* Color Preview */}
-              <div className="border rounded-lg p-4 bg-slate-50">
-                <Label className="text-xs text-slate-500 mb-2 block">Branding Preview</Label>
+              <div className="border border-border rounded-lg p-4 bg-muted/50">
+                <Label className="text-xs text-muted-foreground mb-2 block">Branding Preview</Label>
                 <div
                   className="h-12 rounded-lg flex items-center justify-center text-white font-medium"
                   style={{ background: `linear-gradient(135deg, ${quickSetupData.primary_color} 0%, ${quickSetupData.secondary_color} 100%)` }}
@@ -903,8 +1013,8 @@ export default function CompanyManagement() {
           {/* Step 2: Admin User */}
           {quickSetupStep === 2 && (
             <div className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
-                <UserPlus className="w-4 h-4 inline mr-2" />
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm text-foreground">
+                <UserPlus className="w-4 h-4 inline mr-2 text-primary" />
                 Create the first admin user who can log in and manage this company.
               </div>
 
@@ -912,7 +1022,7 @@ export default function CompanyManagement() {
                 <div className="space-y-2">
                   <Label>Email Address *</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       type="email"
                       value={quickSetupData.admin_email}
@@ -925,7 +1035,7 @@ export default function CompanyManagement() {
                 <div className="space-y-2">
                   <Label>Password *</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       type="text"
                       value={quickSetupData.admin_password}
@@ -934,7 +1044,7 @@ export default function CompanyManagement() {
                       className="pl-10"
                     />
                   </div>
-                  <p className="text-xs text-slate-500">Save this password - you'll need it to log in!</p>
+                  <p className="text-xs text-muted-foreground">Save this password - you'll need it to log in!</p>
                 </div>
               </div>
 
@@ -967,24 +1077,24 @@ export default function CompanyManagement() {
               </div>
 
               {/* Summary Preview */}
-              <div className="border rounded-lg p-4 bg-slate-50 mt-4">
-                <Label className="text-xs text-slate-500 mb-3 block">Setup Summary</Label>
+              <div className="border border-border rounded-lg p-4 bg-muted/50 mt-4">
+                <Label className="text-xs text-muted-foreground mb-3 block">Setup Summary</Label>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-slate-500">Company</p>
-                    <p className="font-medium">{quickSetupData.company_name}</p>
+                    <p className="text-muted-foreground">Company</p>
+                    <p className="font-medium text-foreground">{quickSetupData.company_name}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Email Domain</p>
-                    <p className="font-medium">@{quickSetupData.email_domain}</p>
+                    <p className="text-muted-foreground">Email Domain</p>
+                    <p className="font-medium text-foreground">@{quickSetupData.email_domain}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Admin Email</p>
-                    <p className="font-medium">{quickSetupData.admin_email}</p>
+                    <p className="text-muted-foreground">Admin Email</p>
+                    <p className="font-medium text-foreground">{quickSetupData.admin_email}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Admin Name</p>
-                    <p className="font-medium">{quickSetupData.admin_full_name || 'Admin User'}</p>
+                    <p className="text-muted-foreground">Admin Name</p>
+                    <p className="font-medium text-foreground">{quickSetupData.admin_full_name || 'Admin User'}</p>
                   </div>
                 </div>
               </div>
@@ -994,38 +1104,38 @@ export default function CompanyManagement() {
           {/* Step 3: Success */}
           {quickSetupStep === 3 && quickSetupResult && (
             <div className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                <CheckCircle2 className="w-12 h-12 text-green-600 mx-auto mb-3" />
-                <h3 className="text-lg font-semibold text-green-800">Setup Complete!</h3>
-                <p className="text-green-700 mt-1">
-                  {quickSetupResult.company.name} is ready to use.
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-6 text-center">
+                <CheckCircle2 className="w-12 h-12 text-primary mx-auto mb-3" />
+                <h3 className="text-lg font-semibold text-foreground">Setup Complete!</h3>
+                <p className="text-muted-foreground mt-1">
+                  {quickSetupResult.company?.name ?? quickSetupResult.company_name ?? 'Company'} is ready to use.
                 </p>
               </div>
 
               {/* Login Credentials */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-slate-100 px-4 py-2 font-medium text-sm flex items-center gap-2">
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="bg-muted px-4 py-2 font-medium text-sm flex items-center gap-2 text-foreground">
                   <Lock className="w-4 h-4" />
                   Login Credentials
                 </div>
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Email</p>
-                      <p className="font-mono">{quickSetupResult.user.email}</p>
+                      <p className="text-xs text-muted-foreground">Email</p>
+                      <p className="font-mono text-foreground">{quickSetupResult.user?.email ?? quickSetupData.admin_email ?? ''}</p>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => copyToClipboard(quickSetupResult.user.email)}
+                      onClick={() => copyToClipboard(quickSetupResult.user?.email ?? quickSetupData.admin_email ?? '')}
                     >
                       <Copy className="w-4 h-4" />
                     </Button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-500">Password</p>
-                      <p className="font-mono">{quickSetupData.admin_password}</p>
+                      <p className="text-xs text-muted-foreground">Password</p>
+                      <p className="font-mono text-foreground">{quickSetupData.admin_password}</p>
                     </div>
                     <Button
                       variant="ghost"
@@ -1039,43 +1149,43 @@ export default function CompanyManagement() {
               </div>
 
               {/* Company Details */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-slate-100 px-4 py-2 font-medium text-sm flex items-center gap-2">
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="bg-muted px-4 py-2 font-medium text-sm flex items-center gap-2 text-foreground">
                   <Building2 className="w-4 h-4" />
                   Company Details
                 </div>
                 <div className="p-4 grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-slate-500">Company Name</p>
-                    <p className="font-medium">{quickSetupResult.company.name}</p>
+                    <p className="text-muted-foreground">Company Name</p>
+                    <p className="font-medium text-foreground">{quickSetupResult.company?.name ?? quickSetupData.company_name ?? ''}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Email Domain</p>
-                    <p className="font-medium">@{quickSetupResult.company.email_domain}</p>
+                    <p className="text-muted-foreground">Email Domain</p>
+                    <p className="font-medium text-foreground">@{quickSetupResult.company?.email_domain ?? quickSetupData.email_domain ?? ''}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Admin User</p>
-                    <p className="font-medium">{quickSetupResult.user.full_name}</p>
+                    <p className="text-muted-foreground">Admin User</p>
+                    <p className="font-medium text-foreground">{quickSetupResult.user?.full_name ?? quickSetupData.admin_full_name ?? ''}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Role</p>
-                    <Badge className="bg-purple-100 text-purple-800">Admin</Badge>
+                    <p className="text-muted-foreground">Role</p>
+                    <Badge variant="secondary">Admin</Badge>
                   </div>
                 </div>
               </div>
 
               {/* Branding Preview */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-slate-100 px-4 py-2 font-medium text-sm flex items-center gap-2">
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="bg-muted px-4 py-2 font-medium text-sm flex items-center gap-2 text-foreground">
                   <Palette className="w-4 h-4" />
                   Branding
                 </div>
                 <div className="p-4">
                   <div
                     className="h-16 rounded-lg flex items-center justify-center text-white font-medium"
-                    style={{ background: `linear-gradient(135deg, ${quickSetupResult.branding.primary_color} 0%, ${quickSetupResult.branding.secondary_color} 100%)` }}
+                    style={{ background: `linear-gradient(135deg, ${quickSetupResult.branding?.primary_color ?? quickSetupData.primary_color ?? '#003DA5'} 0%, ${quickSetupResult.branding?.secondary_color ?? quickSetupData.secondary_color ?? '#00A3E0'} 100%)` }}
                   >
-                    {quickSetupResult.branding.login_tagline || quickSetupResult.company.name}
+                    {quickSetupResult.branding?.login_tagline || quickSetupResult.company?.name || quickSetupData.company_name || 'Company'}
                   </div>
                 </div>
               </div>
@@ -1087,9 +1197,8 @@ export default function CompanyManagement() {
               <>
                 <Button variant="outline" onClick={handleQuickSetupClose}>Cancel</Button>
                 <Button
-                  className="bg-blue-600 hover:bg-blue-700"
                   onClick={() => setQuickSetupStep(2)}
-                  disabled={!quickSetupData.company_name || !quickSetupData.email_domain}
+                  disabled={!quickSetupData.company_name || !quickSetupData.email_domain || !quickSetupData.elora_customer_ref?.trim()}
                 >
                   Next: Admin User
                 </Button>
@@ -1100,13 +1209,19 @@ export default function CompanyManagement() {
               <>
                 <Button variant="outline" onClick={() => setQuickSetupStep(1)}>Back</Button>
                 <Button
-                  className="bg-green-600 hover:bg-green-700"
-                  onClick={() => quickSetupMutation.mutate(quickSetupData)}
+                  onClick={() => {
+                    if (!quickSetupData.elora_customer_ref?.trim()) {
+                      toast.error('ACATC Customer Reference is required.', { description: 'Go back and enter the customer ref from ACATC (e.g. 20191002210559S12659).' });
+                      return;
+                    }
+                    quickSetupMutation.mutate(quickSetupData);
+                  }}
                   disabled={
                     quickSetupMutation.isPending ||
                     !quickSetupData.admin_email ||
                     !quickSetupData.admin_password ||
-                    quickSetupData.admin_password.length < 6
+                    quickSetupData.admin_password.length < 6 ||
+                    !quickSetupData.elora_customer_ref?.trim()
                   }
                 >
                   {quickSetupMutation.isPending ? (
@@ -1125,7 +1240,7 @@ export default function CompanyManagement() {
             )}
 
             {quickSetupStep === 3 && (
-              <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleQuickSetupClose}>
+              <Button onClick={handleQuickSetupClose}>
                 Done
               </Button>
             )}
@@ -1149,7 +1264,7 @@ export default function CompanyManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setCompanyToDelete(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={deleteCompanyMutation.isPending}
               onClick={() => companyToDelete && deleteCompanyMutation.mutate({ company_id: companyToDelete.id })}
             >

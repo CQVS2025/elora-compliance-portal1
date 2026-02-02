@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabaseClient } from "@/api/supabaseClient";
 import { Loader2, Camera, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "@/lib/toast";
 import { useAuth } from "@/lib/AuthContext";
 
 const ISSUE_TYPES = [
@@ -27,7 +27,6 @@ const SEVERITY_LEVELS = [
 ];
 
 export default function MobileIssueReport({ open, onClose, vehicles, preselectedVehicle }) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -94,11 +93,7 @@ export default function MobileIssueReport({ open, onClose, vehicles, preselected
       onClose();
     } catch (error) {
       console.error('Error reporting issue:', error);
-      toast({
-        title: "Error",
-        description: "Failed to report issue. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Failed to report issue. Please try again.", { description: "Error" });
     } finally {
       setLoading(false);
     }

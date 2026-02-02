@@ -28,7 +28,10 @@ export function getUserFriendlyError(error, context = '') {
     return 'Server is not responding. Please try again in a moment.';
   }
 
-  // Authentication errors
+  // Authentication errors — distinguish company deactivation (super_admin turned off company) from individual account deactivation
+  if (lowerError.includes('company') && lowerError.includes('deactivated')) {
+    return 'Your company has been deactivated. Please contact your administrator.';
+  }
   if (lowerError.includes('deactivated') || lowerError.includes('account has been deactivated')) {
     return 'Your account has been deactivated. Please contact your administrator to reactivate it.';
   }

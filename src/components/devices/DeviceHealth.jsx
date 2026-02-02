@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import moment from 'moment';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import DataPagination from '@/components/ui/DataPagination';
 
 // NEW: Import queryOptions with tenant isolation
@@ -68,15 +69,15 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
     return { online, offline, healthScore, total: devices.length };
   }, [devices]);
 
-  // Filter devices
+  // Filter devices; safe null so rows with null fields are not excluded
   const filteredDevices = useMemo(() => {
     if (!searchQuery) return devices;
     const query = searchQuery.toLowerCase();
-    return devices.filter(d => 
-      d.customerName?.toLowerCase().includes(query) ||
-      d.siteName?.toLowerCase().includes(query) ||
-      d.computerName?.toLowerCase().includes(query) ||
-      d.deviceRef?.toLowerCase().includes(query)
+    return devices.filter(d =>
+      (d.customerName ?? '').toLowerCase().includes(query) ||
+      (d.siteName ?? '').toLowerCase().includes(query) ||
+      (d.computerName ?? '').toLowerCase().includes(query) ||
+      (d.deviceRef ?? '').toLowerCase().includes(query)
     );
   }, [devices, searchQuery]);
 
@@ -115,7 +116,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
     return Object.values(siteMap).sort((a, b) => (b.online + b.offline) - (a.online + a.offline)).slice(0, 10);
   }, [devices]);
 
-  // Firmware versions distribution
+  // Firmware versions distribution for pie chart
   const firmwareDistribution = useMemo(() => {
     const versionMap = {};
     devices.forEach(d => {
@@ -123,9 +124,23 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
       versionMap[version] = (versionMap[version] || 0) + 1;
     });
     return Object.entries(versionMap)
-      .map(([version, count]) => ({ version, count }))
+      .map(([version, count]) => ({ version, count, fill: `var(--color-${version.replace(/[^a-z0-9]/gi, '_')})` }))
       .sort((a, b) => b.count - a.count);
   }, [devices]);
+
+  // Chart config for firmware pie: one entry per version with theme colors
+  const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+  const firmwareChartConfig = useMemo(() => {
+    const config = {};
+    firmwareDistribution.forEach((entry, i) => {
+      const key = entry.version.replace(/[^a-z0-9]/gi, '_');
+      config[key] = {
+        label: entry.version,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+      };
+    });
+    return config;
+  }, [firmwareDistribution]);
 
   const getDeviceStatus = (device) => {
     if (!device.lastScanAt) return { label: 'Offline', color: 'bg-red-100 text-red-800', icon: XCircle };
@@ -139,12 +154,10 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
 
 
 
-  const COLORS = ['#7CB342', '#EF4444', '#F59E0B', '#3B82F6'];
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-12 h-12 text-[#7CB342] animate-spin" />
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
       </div>
     );
   }
@@ -152,10 +165,10 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
   return (
     <div className="space-y-6 relative">
       {isFetching && (
-        <div className="absolute inset-0 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
-          <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 px-6 py-3 rounded-xl shadow-lg">
-            <Loader2 className="w-5 h-5 text-[#7CB342] animate-spin" />
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Updating devices...</span>
+        <div className="absolute inset-0 bg-background/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
+          <div className="flex items-center gap-3 bg-card px-6 py-3 rounded-xl shadow-lg border border-border">
+            <Loader2 className="w-5 h-5 text-primary animate-spin" />
+            <span className="text-sm font-medium text-foreground">Updating devices...</span>
           </div>
         </div>
       )}
@@ -165,12 +178,12 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Fleet Health</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.healthScore}%</p>
+                <p className="text-sm text-muted-foreground">Fleet Health</p>
+                <p className="text-3xl font-bold text-foreground mt-1">{stats.healthScore}%</p>
                 <Progress value={stats.healthScore} className="mt-2 h-2" />
               </div>
-              <div className="w-12 h-12 rounded-lg bg-[#7CB342]/10 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-[#7CB342]" />
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-primary" />
               </div>
             </div>
           </CardContent>
@@ -180,27 +193,12 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Total Devices</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total}</p>
-                <p className="text-xs text-slate-500 mt-2">Active controllers</p>
+                <p className="text-sm text-muted-foreground">Total Devices</p>
+                <p className="text-3xl font-bold text-foreground mt-1">{stats.total}</p>
+                <p className="text-xs text-muted-foreground mt-2">Active controllers</p>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Server className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600">Online</p>
-                <p className="text-3xl font-bold text-green-600 mt-1">{stats.online}</p>
-                <p className="text-xs text-slate-500 mt-2">Last 24 hours</p>
-              </div>
-              <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-green-600" />
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Server className="w-6 h-6 text-primary" />
               </div>
             </div>
           </CardContent>
@@ -210,12 +208,27 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Offline</p>
-                <p className="text-3xl font-bold text-red-600 mt-1">{stats.offline}</p>
-                <p className="text-xs text-slate-500 mt-2">Needs attention</p>
+                <p className="text-sm text-muted-foreground">Online</p>
+                <p className="text-3xl font-bold text-primary mt-1">{stats.online}</p>
+                <p className="text-xs text-muted-foreground mt-2">Last 24 hours</p>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-red-100 flex items-center justify-center">
-                <XCircle className="w-6 h-6 text-red-600" />
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Offline</p>
+                <p className="text-3xl font-bold text-destructive mt-1">{stats.offline}</p>
+                <p className="text-xs text-muted-foreground mt-2">Needs attention</p>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-destructive/10 flex items-center justify-center">
+                <XCircle className="w-6 h-6 text-destructive" />
               </div>
             </div>
           </CardContent>
@@ -233,12 +246,12 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={devicesBySite}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="site" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={100} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="online" stackId="a" fill="#10B981" name="Online" />
-                <Bar dataKey="offline" stackId="a" fill="#EF4444" name="Offline" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="site" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} angle={-45} textAnchor="end" height={100} />
+                <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                <Bar dataKey="online" stackId="a" fill="hsl(var(--primary))" name="Online" />
+                <Bar dataKey="offline" stackId="a" fill="hsl(var(--destructive))" name="Offline" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -247,26 +260,55 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Firmware Versions</CardTitle>
+            <p className="text-sm text-muted-foreground">Distribution by version</p>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ChartContainer config={firmwareChartConfig} className="mx-auto aspect-square h-[300px] w-full max-w-[300px]">
               <PieChart>
+                <ChartTooltip content={<ChartTooltipContent nameKey="version" />} />
                 <Pie
                   data={firmwareDistribution}
                   dataKey="count"
                   nameKey="version"
                   cx="50%"
                   cy="50%"
-                  outerRadius={100}
-                  label={(entry) => `${entry.version} (${entry.count})`}
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={2}
+                  strokeWidth={1}
+                  stroke="hsl(var(--background))"
                 >
-                  {firmwareDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
+                  {firmwareDistribution.map((entry, index) => {
+                    const key = entry.version.replace(/[^a-z0-9]/gi, '_');
+                    return (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={CHART_COLORS[index % CHART_COLORS.length]}
+                        className="outline-none"
+                      />
+                    );
+                  })}
                 </Pie>
-                <Tooltip />
               </PieChart>
-            </ResponsiveContainer>
+            </ChartContainer>
+            {firmwareDistribution.length > 0 && (
+              <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs">
+                {firmwareDistribution.slice(0, 8).map((entry, i) => (
+                  <div key={entry.version} className="flex items-center gap-1.5">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                    />
+                    <span className="text-muted-foreground">
+                      {entry.version} <span className="font-medium text-foreground">{entry.count}</span>
+                    </span>
+                  </div>
+                ))}
+                {firmwareDistribution.length > 8 && (
+                  <span className="text-muted-foreground">+{firmwareDistribution.length - 8} more</span>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -277,7 +319,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Device Monitor</CardTitle>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search devices..."
                 value={searchQuery}
@@ -294,7 +336,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
               const StatusIcon = status.icon;
 
               return (
-                <div key={idx} className="p-4 bg-white rounded-lg border border-slate-200 hover:shadow-md transition-shadow">
+                <div key={idx} className="p-4 bg-card rounded-lg border border-border hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
                       <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${status.color.replace('text', 'bg').replace('800', '100')}`}>
@@ -303,18 +345,18 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
                       
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-slate-800">{device.computerName || device.deviceRef}</h3>
+                          <h3 className="font-semibold text-foreground">{device.computerName || device.deviceRef}</h3>
                           <Badge className={status.color}>{status.label}</Badge>
                         </div>
                         
-                        <div className="flex items-center gap-4 text-sm text-slate-600">
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Server className="w-3 h-3" />
                             {device.siteName}
                           </span>
                           <span>{device.customerName}</span>
                           {device.version && (
-                            <span className="text-xs px-2 py-0.5 bg-slate-100 rounded">v{device.version}</span>
+                            <span className="text-xs px-2 py-0.5 bg-muted rounded">v{device.version}</span>
                           )}
                         </div>
                       </div>
@@ -322,7 +364,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
 
                     <div className="text-right">
                       {device.lastScanAt && (
-                        <div className="flex items-center gap-1 text-sm text-slate-600">
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
                           <Clock className="w-4 h-4" />
                           <span>{moment(device.lastScanAt).fromNow()}</span>
                         </div>

@@ -46,12 +46,44 @@ export async function getUserCompanyId() {
   return profile?.company_id;
 }
 
+// In dev (localhost), use same-origin proxy to avoid CORS preflight; Supabase gateway may not return OK for OPTIONS.
+function useEdgeFunctionProxy() {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1';
+}
+
 // Helper function to call Supabase Edge Functions
 export async function callEdgeFunction(functionName, body = {}) {
   try {
-    const { data, error } = await supabase.functions.invoke(functionName, {
-      body,
-    });
+    let data = null;
+    let error = null;
+
+    if (useEdgeFunctionProxy()) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${window.location.origin}/api/supabase-functions/${functionName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
+          'apikey': supabaseAnonKey,
+        },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
+      }
+      if (!res.ok) {
+        error = { message: data?.error || data?.message || res.statusText, context: { status: res.status } };
+      }
+    } else {
+      const result = await supabase.functions.invoke(functionName, { body });
+      data = result.data;
+      error = result.error;
+    }
 
     console.log(`Edge function ${functionName} response:`, { data, error });
 

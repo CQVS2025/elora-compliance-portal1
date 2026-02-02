@@ -6,10 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabaseClient } from "@/api/supabaseClient";
 import { Loader2 } from 'lucide-react';
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "@/lib/toast";
 
 export default function VehicleModal({ open, onClose, vehicle, sites, onSuccess }) {
-  const { toast } = useToast();
   const [formData, setFormData] = useState({
     name: '',
     rfid: '',
@@ -72,11 +71,7 @@ export default function VehicleModal({ open, onClose, vehicle, sites, onSuccess 
       onClose();
     } catch (error) {
       console.error('Error saving vehicle:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save vehicle. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Failed to save vehicle. Please try again.", { description: "Error" });
     } finally {
       setLoading(false);
     }

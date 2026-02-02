@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Truck, CheckCircle, Droplet, Users, Loader2, Trophy, ChevronRight, AlertTriangle, Settings } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { Loader2, Trophy, ChevronRight, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import moment from 'moment';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
-// NEW: Import TanStack Query options factories
 import {
   customersOptions,
   sitesOptions,
@@ -15,15 +15,12 @@ import {
   refillsOptions,
 } from '@/query/options';
 
-// Import Apple-style components
-import AppleHeader from '@/components/layout/AppleHeader';
-import AppleStatCard from '@/components/ui/AppleStatCard';
-import AppleFilterSection from '@/components/dashboard/AppleFilterSection';
-import AppleVehicleList from '@/components/dashboard/AppleVehicleList';
-import TabNav from '@/components/ui/TabNav';
-
-// Import existing components
-import WashAnalytics from '@/components/dashboard/WashAnalytics';
+import { Button } from '@/components/ui/button';
+import SectionCards from '@/components/SectionCards';
+import ChartAreaInteractive from '@/components/ChartAreaInteractive';
+import DataTable from '@/components/DataTable';
+import FilterSection from '@/components/dashboard/FilterSection';
+import FavoriteVehicles from '@/components/dashboard/FavoriteVehicles';
 import VehiclePerformanceChart from '@/components/dashboard/VehiclePerformanceChart';
 import SiteManagement from '@/components/sites/SiteManagement';
 import ReportsDashboard from '@/components/reports/ReportsDashboard';
@@ -34,10 +31,7 @@ import MobileDashboard from './MobileDashboard';
 import DeviceHealth from '@/components/devices/DeviceHealth';
 import CostForecast from '@/components/analytics/CostForecast';
 import RefillAnalytics from '@/components/refills/RefillAnalytics';
-import FavoriteVehicles from '@/components/dashboard/FavoriteVehicles';
-import DashboardCustomizer from '@/components/dashboard/DashboardCustomizer';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
-import CustomComplianceTargets from '@/components/compliance/CustomComplianceTargets';
 import { usePermissions, useFilteredData, useAvailableTabs } from '@/components/auth/PermissionGuard';
 
 // All available tabs (maintenance removed)
@@ -83,10 +77,26 @@ const FILTER_TABS = ['compliance', 'costs', 'refills', 'devices', 'sites', 'repo
 // Email Reports shares filters with Compliance so the emailed report matches what the user sees
 const REPORT_FILTER_SOURCE = 'compliance';
 
+// Route path -> tab value (sidebar nav drives content)
+const PATH_TO_TAB = {
+  '/': 'compliance',
+  '/Dashboard': 'compliance',
+  '/dashboard': 'compliance',
+  '/usage-costs': 'costs',
+  '/refills': 'refills',
+  '/device-health': 'devices',
+  '/sites': 'sites',
+  '/reports': 'reports',
+  '/email-reports': 'email-reports',
+  '/branding': 'branding',
+};
+
 export default function Dashboard() {
+  const location = useLocation();
   const permissions = usePermissions();
   const [isMobile, setIsMobile] = useState(false);
-  const [showCustomizer, setShowCustomizer] = useState(false);
+  // Active section derived from route (sidebar navigation)
+  const activeTab = PATH_TO_TAB[location.pathname] ?? 'compliance';
 
   // Per-tab filter state - each tab has its own filters, no mixing
   const [tabFilters, setTabFilters] = useState(() => {
@@ -97,11 +107,9 @@ export default function Dashboard() {
     return initial;
   });
 
-  // Use database-driven tab visibility from permissions
+  // Use database-driven tab visibility from permissions (for filter/access checks)
   const availableTabs = useAvailableTabs(ALL_TABS);
-
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('compliance');
 
   // Get tenant context (company_id) from user profile for query keys
   const companyId = permissions.userProfile?.company_id;
@@ -147,13 +155,6 @@ export default function Dashboard() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-
-  useEffect(() => {
-    const allowedTabValues = availableTabs.map(tab => tab.value);
-    if (!allowedTabValues.includes(activeTab) && allowedTabValues.length > 0) {
-      setActiveTab(allowedTabValues[0]);
-    }
-  }, [availableTabs, activeTab]);
 
   // NEW: Use TanStack Query options with tenant-aware keys
   const { data: customers = [], isLoading: customersLoading, error: customersError } = useQuery(
@@ -273,7 +274,7 @@ export default function Dashboard() {
   // Apply role-based filtering FIRST to get what this user can access
   const { filteredVehicles: permissionFilteredVehicles, filteredSites: permissionFilteredSites } = useFilteredData(enrichedVehicles, rawSites, customers);
 
-  // Get unique customers from role-filtered sites (for dropdown)
+  // Customers limited by role (for auto-select and restricted UI); full list used for dropdown below
   const filteredCustomers = useMemo(() => {
     // Driver: derive customers from their vehicles when permissionFilteredSites is empty
     if (permissionFilteredSites.length === 0 && permissionFilteredVehicles?.length > 0) {
@@ -301,19 +302,35 @@ export default function Dashboard() {
     return accessibleCustomers;
   }, [permissionFilteredSites, permissionFilteredVehicles, customers, permissions.restrictedCustomer]);
 
-  // Auto-select customer if user has restricted access (apply to all filter tabs)
+  // Customer dropdown: super_admin sees all customers; company users (any other role) see only their company's customer and cannot switch
+  const customersForDropdown = useMemo(() => {
+    if (permissions.isSuperAdmin) return customers;
+    const ref = permissions.userProfile?.company_elora_customer_ref?.trim();
+    if (!ref) return [];
+    return customers.filter(c => (c.id || c.ref) === ref);
+  }, [permissions.isSuperAdmin, permissions.userProfile?.company_elora_customer_ref, customers]);
+
+  // Lock customer filter for all non-super-admins so they cannot switch to another company
+  const lockCustomerFilter = permissions.lockCustomerFilter || !permissions.isSuperAdmin;
+  const restrictedCustomerName = permissions.restrictedCustomer || (!permissions.isSuperAdmin && permissions.userProfile?.company_name) || null;
+
+  // Auto-select and lock to company customer for non-super-admin (apply to all filter tabs)
   useEffect(() => {
-    if (permissions.restrictedCustomer && filteredCustomers.length === 1) {
-      const customerId = filteredCustomers[0].id;
-      setTabFilters(prev => {
-        const next = { ...prev };
-        FILTER_TABS.forEach(tab => {
-          next[tab] = { ...(next[tab] || getDefaultFilters()), selectedCustomer: customerId, selectedSite: 'all' };
-        });
-        return next;
+    const companyRef = permissions.userProfile?.company_elora_customer_ref?.trim();
+    if (permissions.isSuperAdmin || !companyRef) return;
+    setTabFilters(prev => {
+      let changed = false;
+      const next = { ...prev };
+      FILTER_TABS.forEach(tab => {
+        const current = next[tab] || getDefaultFilters();
+        if (current.selectedCustomer !== companyRef) {
+          next[tab] = { ...current, selectedCustomer: companyRef, selectedSite: current.selectedSite || 'all' };
+          changed = true;
+        }
       });
-    }
-  }, [filteredCustomers, permissions.restrictedCustomer]);
+      return changed ? next : prev;
+    });
+  }, [permissions.isSuperAdmin, permissions.userProfile?.company_elora_customer_ref]);
 
   // Auto-select site for batchers (apply to all filter tabs)
   useEffect(() => {
@@ -466,131 +483,93 @@ export default function Dashboard() {
   const hasError = customersError || sitesError || vehiclesError || dashboardError;
   const isDataLoading = vehiclesLoading || dashboardLoading;
 
+  // Must be called unconditionally (before any early return) to satisfy Rules of Hooks
+  const vehicleColumns = useMemo(
+    () => [
+      { id: 'name', header: 'Vehicle', accessorKey: 'name' },
+      { id: 'rfid', header: 'RFID', accessorKey: 'rfid' },
+      { id: 'site_name', header: 'Site', accessorKey: 'site_name' },
+      { id: 'washes_completed', header: 'Washes', accessorKey: 'washes_completed' },
+      { id: 'target', header: 'Target', accessorKey: 'target' },
+      {
+        id: 'status',
+        header: 'Status',
+        cell: (row) =>
+          row.washes_completed >= row.target ? 'Compliant' : 'Non-Compliant',
+      },
+      {
+        id: 'progress',
+        header: 'Progress',
+        cell: (row) =>
+          row.target
+            ? `${Math.round((row.washes_completed / row.target) * 100)}%`
+            : '—',
+      },
+      {
+        id: 'last_scan',
+        header: 'Last Scan',
+        cell: (row) => (row.last_scan ? moment(row.last_scan).fromNow() : '—'),
+      },
+    ],
+    []
+  );
+
   if (isMobile && permissions.isDriver) {
     return <MobileDashboard />;
   }
 
-  // Apple-style Loading State
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex items-center justify-center">
+      <div className="min-h-screen bg-muted/40 flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           className="text-center"
         >
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-emerald-500/10 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
           </div>
-          <p className="text-gray-500 dark:text-gray-400">Loading dashboard...</p>
+          <p className="text-muted-foreground">Loading dashboard...</p>
         </motion.div>
       </div>
     );
   }
 
-  // Apple-style Error State
   if (hasError) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex items-center justify-center">
+      <div className="min-h-screen bg-muted/40 flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-center max-w-md mx-auto p-8"
         >
-          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-red-100 dark:bg-red-500/10 flex items-center justify-center">
-            <AlertTriangle className="w-8 h-8 text-red-500" />
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-destructive/10 flex items-center justify-center">
+            <AlertTriangle className="w-8 h-8 text-destructive" />
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          <h2 className="text-xl font-semibold text-foreground mb-2">
             Failed to Load Dashboard
           </h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">
+          <p className="text-muted-foreground mb-6">
             We couldn't load the dashboard data. Please try again.
           </p>
-          <button
+          <Button
             onClick={() => window.location.reload()}
-            className="h-11 px-6 rounded-full bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 active:scale-95 transition-all"
+            className="rounded-md"
           >
             Refresh Page
-          </button>
+          </Button>
         </motion.div>
       </div>
     );
   }
 
-  const statsConfig = [
-    {
-      icon: Truck,
-      value: stats.totalVehicles.toLocaleString(),
-      label: 'Total Vehicles',
-      accentColor: 'gray',
-    },
-    {
-      icon: CheckCircle,
-      value: `${stats.complianceRate}%`,
-      label: 'Compliance Rate',
-      accentColor: 'emerald',
-      trend: stats.complianceRate >= 80 ? 'up' : stats.complianceRate >= 60 ? 'neutral' : 'down',
-      trendValue: 'vs target 80%',
-    },
-    {
-      icon: Droplet,
-      value: stats.monthlyWashes.toLocaleString(),
-      label: 'Total Washes',
-      accentColor: 'blue',
-    },
-    {
-      icon: Users,
-      value: stats.activeDrivers.toLocaleString(),
-      label: 'Active Drivers',
-      accentColor: 'purple',
-    },
-  ];
-
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-zinc-950">
-      {/* Apple-style Header */}
-      <AppleHeader />
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Page Title */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 dark:text-white tracking-tight">
-                Fleet Compliance
-              </h1>
-              <p className="text-gray-500 dark:text-gray-400 mt-1">
-                {filteredCustomers.length === 1 ? filteredCustomers[0].name : 'All Customers'}
-              </p>
-            </div>
-            <button
-              onClick={() => setShowCustomizer(true)}
-              className="
-                w-10 h-10 rounded-full
-                bg-white/80 dark:bg-zinc-900/80
-                border border-gray-200/50 dark:border-zinc-800/50
-                backdrop-blur-xl
-                flex items-center justify-center
-                hover:bg-gray-100 dark:hover:bg-zinc-800
-                active:scale-95
-                transition-all
-              "
-              title="Customize Dashboard"
-            >
-              <Settings className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-            </button>
-          </div>
-        </motion.div>
-
+    <div className="min-h-screen bg-muted/40">
+      <main className="flex-1 p-4 md:p-6 space-y-6">
         {/* Filters */}
-        <div className="mb-8">
-          <AppleFilterSection
-            customers={filteredCustomers}
+        <div>
+          <FilterSection
+            customers={customersForDropdown}
             sites={allSites}
             selectedCustomer={selectedCustomer}
             setSelectedCustomer={setSelectedCustomer}
@@ -600,21 +579,17 @@ export default function Dashboard() {
             setDateRange={setDateRange}
             activePeriod={activePeriod}
             setActivePeriod={setActivePeriod}
-            lockCustomerFilter={permissions.lockCustomerFilter}
+            lockCustomerFilter={lockCustomerFilter}
             lockSiteFilter={permissions.isBatcher}
-            restrictedCustomerName={permissions.restrictedCustomer}
+            restrictedCustomerName={restrictedCustomerName}
             restrictedSiteName={permissions.isBatcher && allSites.length === 1 ? allSites[0].name : null}
             isFiltering={isFiltersFetching}
             isDataLoading={isDataLoading}
           />
         </div>
 
-        {/* Hero Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {statsConfig.map((stat, index) => (
-            <AppleStatCard key={index} {...stat} index={index} />
-          ))}
-        </div>
+        {/* Stats cards (dashboard-01 SectionCards) */}
+        <SectionCards stats={stats} />
 
         {/* Favorite Vehicles - Full Width */}
         <div className="mb-8">
@@ -654,7 +629,7 @@ export default function Dashboard() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-primary-foreground/20 flex items-center justify-center">
                     <Trophy className="w-6 h-6 text-white" />
                   </div>
                   <div>
@@ -668,12 +643,7 @@ export default function Dashboard() {
           </Link>
         )}
 
-        {/* Tab Navigation - Apple Pill Style */}
-        <div className="mb-6">
-          <TabNav tabs={availableTabs} activeTab={activeTab} onChange={setActiveTab} />
-        </div>
-
-        {/* Tab Content with Animations */}
+        {/* Content by route (sidebar-driven) */}
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -683,37 +653,18 @@ export default function Dashboard() {
             transition={{ duration: 0.2 }}
           >
             {activeTab === 'compliance' && (
-              <div className="space-y-8">
-                {/* Apple-style Vehicle List */}
-                <AppleVehicleList
-                  vehicles={filteredVehicles}
-                  scans={filteredScans}
-                  searchQuery={searchQuery}
-                  setSearchQuery={setSearchQuery}
-                  userEmail={permissions.user?.email}
+              <div className="space-y-6">
+                <DataTable
+                  columns={vehicleColumns}
+                  data={filteredVehicles}
+                  getRowId={(row) => row.id ?? row.rfid ?? ''}
+                  searchPlaceholder="Search vehicles..."
+                  title="Vehicle compliance"
                 />
-
-                {/* Charts in Glass Cards */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-lg shadow-black/[0.03]">
-                    <WashAnalytics
-                      data={washTrendsData}
-                      vehicles={filteredVehicles}
-                      scans={filteredScans}
-                    />
-                  </div>
-                  <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80 border border-gray-200/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-lg shadow-black/[0.03]">
-                    <VehiclePerformanceChart vehicles={filteredVehicles} />
-                  </div>
+                  <ChartAreaInteractive data={washTrendsData} />
+                  <VehiclePerformanceChart vehicles={filteredVehicles} />
                 </div>
-
-                {permissions.isAdmin && selectedCustomer !== 'all' && (
-                  <CustomComplianceTargets
-                    customerRef={selectedCustomer}
-                    vehicles={enrichedVehicles}
-                    sites={allSites}
-                  />
-                )}
               </div>
             )}
 
@@ -770,6 +721,7 @@ export default function Dashboard() {
                   selectedSite
                 }}
                 onSetDateRange={(range) => updateTabFilter({ dateRange: range, activePeriod: 'Custom' })}
+                isReportDataUpdating={isDataLoading || isFiltersFetching}
               />
             )}
 
@@ -781,14 +733,6 @@ export default function Dashboard() {
         </AnimatePresence>
 
       </main>
-
-      {/* Dashboard Customizer Modal */}
-      {showCustomizer && (
-        <DashboardCustomizer
-          userEmail={permissions.user?.email}
-          onClose={() => setShowCustomizer(false)}
-        />
-      )}
 
       {/* Onboarding Wizard */}
       <OnboardingWizard

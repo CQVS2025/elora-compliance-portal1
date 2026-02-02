@@ -6,10 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabaseClient } from "@/api/supabaseClient";
 import { Loader2, Search, Truck } from 'lucide-react';
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "@/lib/toast";
 
 export default function AssignVehiclesModal({ open, onClose, site, vehicles, onSuccess }) {
-  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVehicles, setSelectedVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -65,11 +64,7 @@ export default function AssignVehiclesModal({ open, onClose, site, vehicles, onS
       onClose();
     } catch (error) {
       console.error('Error assigning vehicles:', error);
-      toast({
-        title: "Error",
-        description: "Failed to assign vehicles. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Failed to assign vehicles. Please try again.", { description: "Error" });
     } finally {
       setLoading(false);
     }
@@ -89,14 +84,14 @@ export default function AssignVehiclesModal({ open, onClose, site, vehicles, onS
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Assign Vehicles to {site.name}</DialogTitle>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted-foreground">
             Select which vehicles should be assigned to this site
           </p>
         </DialogHeader>
 
         <div className="space-y-4 flex-1 flex flex-col overflow-hidden">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search vehicles..."
               value={searchQuery}
@@ -105,10 +100,10 @@ export default function AssignVehiclesModal({ open, onClose, site, vehicles, onS
             />
           </div>
 
-          <div className="bg-slate-50 rounded-lg p-3 flex items-center justify-between">
+          <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Truck className="w-4 h-4 text-slate-600" />
-              <span className="text-sm font-medium text-slate-700">
+              <Truck className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">
                 {assignedCount} vehicle{assignedCount !== 1 ? 's' : ''} assigned
               </span>
             </div>
@@ -125,14 +120,14 @@ export default function AssignVehiclesModal({ open, onClose, site, vehicles, onS
                   onClick={() => handleToggle(vehicle.id)}
                   className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
                     isSelected
-                      ? 'bg-[#7CB342]/10 border-[#7CB342]'
-                      : 'bg-white border-slate-200 hover:bg-slate-50'
+                      ? 'bg-primary/10 border-primary'
+                      : 'bg-card border-border hover:bg-muted/50'
                   }`}
                 >
                   <Checkbox checked={isSelected} />
                   <div className="flex-1">
-                    <p className="font-semibold text-slate-800">{vehicle.name}</p>
-                    <p className="text-xs text-slate-500 font-mono">{vehicle.rfid}</p>
+                    <p className="font-semibold text-foreground">{vehicle.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{vehicle.rfid}</p>
                   </div>
                   {isAssignedElsewhere && (
                     <Badge variant="outline" className="text-xs">
@@ -145,9 +140,9 @@ export default function AssignVehiclesModal({ open, onClose, site, vehicles, onS
           </div>
 
           {filteredVehicles.length === 0 && (
-            <div className="flex-1 flex items-center justify-center text-slate-500">
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <Truck className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                <Truck className="w-12 h-12 text-muted-foreground mx-auto mb-2" />
                 <p>No vehicles found</p>
               </div>
             </div>
@@ -158,7 +153,7 @@ export default function AssignVehiclesModal({ open, onClose, site, vehicles, onS
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={loading} className="bg-[#7CB342] hover:bg-[#689F38]">
+          <Button onClick={handleSubmit} disabled={loading} className="">
             {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Save Assignments
           </Button>

@@ -1,11 +1,13 @@
 import { queryOptions } from '@tanstack/react-query';
 import { callEdgeFunction } from '@/lib/supabase';
+import { getEloraTenantContext } from '@/lib/eloraTenantContext';
 import { queryKeys } from '../keys';
 
 /**
  * Vehicle Query Options
  * 
  * Provides all vehicle-related queries with proper caching and tenant isolation.
+ * API supports customer/site query params.
  */
 
 /**
@@ -15,11 +17,16 @@ export const vehiclesOptions = (companyId, filters = {}) =>
   queryOptions({
     queryKey: queryKeys.tenant.vehicles(companyId, filters),
     queryFn: async ({ signal }) => {
+      const { companyEloraCustomerRef, isSuperAdmin } = getEloraTenantContext();
       const params = {
-        customer_id: filters.customerId,
+        customer_id: filters.customerId && filters.customerId !== 'all'
+          ? filters.customerId
+          : !isSuperAdmin && companyEloraCustomerRef
+            ? companyEloraCustomerRef
+            : filters.customerId,
         site_id: filters.siteId,
       };
-      
+
       const response = await callEdgeFunction('elora_vehicles', params);
       return response?.data ?? response ?? [];
     },

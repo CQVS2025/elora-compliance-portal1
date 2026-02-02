@@ -56,15 +56,15 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
     };
   }, [refills]);
 
-  // Filter refills
+  // Filter refills; safe null so rows with null fields are not excluded
   const filteredRefills = useMemo(() => {
     if (!searchQuery) return refills;
     const query = searchQuery.toLowerCase();
-    return refills.filter(r => 
-      r.customer?.toLowerCase().includes(query) ||
-      r.site?.toLowerCase().includes(query) ||
-      r.product?.toLowerCase().includes(query) ||
-      r.invoiceNo?.toLowerCase().includes(query)
+    return refills.filter(r =>
+      (r.customer ?? '').toLowerCase().includes(query) ||
+      (r.site ?? '').toLowerCase().includes(query) ||
+      (r.product ?? '').toLowerCase().includes(query) ||
+      (r.invoiceNo ?? '').toLowerCase().includes(query)
     );
   }, [refills, searchQuery]);
 
@@ -124,19 +124,19 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Delivered': return 'bg-green-100 text-green-800';
-      case 'Scheduled': return 'bg-blue-100 text-blue-800';
-      case 'Confirmed': return 'bg-yellow-100 text-yellow-800';
-      case 'In Transit': return 'bg-orange-100 text-orange-800';
-      case 'Cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-slate-100 text-slate-800';
+      case 'Delivered': return 'bg-primary/10 text-primary';
+      case 'Scheduled': return 'bg-primary/10 text-primary';
+      case 'Confirmed': return 'bg-chart-4/10 text-chart-4';
+      case 'In Transit': return 'bg-chart-5/10 text-chart-5';
+      case 'Cancelled': return 'bg-destructive/10 text-destructive';
+      default: return 'bg-muted text-foreground';
     }
   };
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Droplet className="w-12 h-12 text-[#7CB342] animate-bounce" />
+        <Droplet className="w-12 h-12 text-[hsl(var(--primary))] animate-bounce" />
       </div>
     );
   }
@@ -149,15 +149,15 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Total Deliveries</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.totalDeliveries}</p>
+                <p className="text-sm text-muted-foreground">Total Deliveries</p>
+                <p className="text-3xl font-bold text-foreground mt-1">{stats.totalDeliveries}</p>
                 <div className="flex items-center gap-2 mt-2">
-                  <Badge className="bg-green-100 text-green-800">{stats.deliveredCount} delivered</Badge>
-                  <Badge className="bg-blue-100 text-blue-800">{stats.scheduledCount} scheduled</Badge>
+                  <Badge variant="secondary" className="bg-primary/10 text-primary">{stats.deliveredCount} delivered</Badge>
+                  <Badge variant="secondary" className="bg-primary/10 text-primary">{stats.scheduledCount} scheduled</Badge>
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-[#7CB342]/10 flex items-center justify-center">
-                <Package className="w-6 h-6 text-[#7CB342]" />
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Package className="w-6 h-6 text-[hsl(var(--primary))]" />
               </div>
             </div>
           </CardContent>
@@ -167,27 +167,12 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Total Volume</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.totalVolume.toLocaleString()}L</p>
-                <p className="text-xs text-slate-500 mt-2">Avg: {Math.round(stats.avgDeliverySize)}L per delivery</p>
+                <p className="text-sm text-muted-foreground">Total Volume</p>
+                <p className="text-3xl font-bold text-foreground mt-1">{stats.totalVolume.toLocaleString()}L</p>
+                <p className="text-xs text-muted-foreground mt-2">Avg: {Math.round(stats.avgDeliverySize)}L per delivery</p>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Droplet className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600">Total Cost</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">${stats.totalCost.toLocaleString()}</p>
-                <p className="text-xs text-slate-500 mt-2">Ex GST</p>
-              </div>
-              <div className="w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-emerald-600" />
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Droplet className="w-6 h-6 text-primary" />
               </div>
             </div>
           </CardContent>
@@ -197,12 +182,27 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Pending Actions</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.pendingCount}</p>
-                <p className="text-xs text-slate-500 mt-2">Confirmed/In Transit</p>
+                <p className="text-sm text-muted-foreground">Total Cost</p>
+                <p className="text-3xl font-bold text-foreground mt-1">${stats.totalCost.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-2">Ex GST</p>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center">
-                <Clock className="w-6 h-6 text-orange-600" />
+              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Pending Actions</p>
+                <p className="text-3xl font-bold text-foreground mt-1">{stats.pendingCount}</p>
+                <p className="text-xs text-muted-foreground mt-2">Confirmed/In Transit</p>
+              </div>
+              <div className="w-12 h-12 rounded-lg bg-chart-4/10 flex items-center justify-center">
+                <Clock className="w-6 h-6 text-chart-4" />
               </div>
             </div>
           </CardContent>
@@ -218,14 +218,14 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
                 <Legend />
-                <Line yAxisId="left" type="monotone" dataKey="volume" stroke="#7CB342" name="Volume (L)" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="cost" stroke="#3B82F6" name="Cost ($)" strokeWidth={2} />
+                <Line yAxisId="left" type="monotone" dataKey="volume" stroke="hsl(var(--primary))" name="Volume (L)" strokeWidth={2} />
+                <Line yAxisId="right" type="monotone" dataKey="cost" stroke="hsl(var(--chart-2))" name="Cost ($)" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -238,11 +238,11 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={volumeBySite} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis dataKey="site" type="category" width={120} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="volume" fill="#7CB342" name="Volume (L)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis dataKey="site" type="category" width={120} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                <Bar dataKey="volume" fill="hsl(var(--primary))" name="Volume (L)" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -256,7 +256,7 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
             <CardTitle className="text-lg">Delivery History</CardTitle>
             <div className="flex items-center gap-3">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search refills..."
                   value={searchQuery}
@@ -274,31 +274,31 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-slate-50 border-b">
+              <thead className="bg-muted/50 border-b border-border">
                 <tr>
-                  <th className="text-left p-3 text-sm font-semibold text-slate-700">Date</th>
-                  <th className="text-left p-3 text-sm font-semibold text-slate-700">Customer</th>
-                  <th className="text-left p-3 text-sm font-semibold text-slate-700">Site</th>
-                  <th className="text-left p-3 text-sm font-semibold text-slate-700">Product</th>
-                  <th className="text-right p-3 text-sm font-semibold text-slate-700">Volume</th>
-                  <th className="text-right p-3 text-sm font-semibold text-slate-700">Cost</th>
-                  <th className="text-center p-3 text-sm font-semibold text-slate-700">Status</th>
-                  <th className="text-left p-3 text-sm font-semibold text-slate-700">Invoice</th>
+                  <th className="text-left p-3 text-sm font-semibold text-foreground">Date</th>
+                  <th className="text-left p-3 text-sm font-semibold text-foreground">Customer</th>
+                  <th className="text-left p-3 text-sm font-semibold text-foreground">Site</th>
+                  <th className="text-left p-3 text-sm font-semibold text-foreground">Product</th>
+                  <th className="text-right p-3 text-sm font-semibold text-foreground">Volume</th>
+                  <th className="text-right p-3 text-sm font-semibold text-foreground">Cost</th>
+                  <th className="text-center p-3 text-sm font-semibold text-foreground">Status</th>
+                  <th className="text-left p-3 text-sm font-semibold text-foreground">Invoice</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {filteredRefills.map((refill, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50">
-                    <td className="p-3 text-sm text-slate-700">{moment(refill.date).format('DD MMM YYYY')}</td>
-                    <td className="p-3 text-sm text-slate-700">{refill.customer}</td>
-                    <td className="p-3 text-sm text-slate-700">{refill.site}</td>
-                    <td className="p-3 text-sm text-slate-700">{refill.productName}</td>
-                    <td className="p-3 text-sm text-slate-700 text-right">{refill.deliveredLitres?.toLocaleString()}L</td>
-                    <td className="p-3 text-sm text-slate-700 text-right">${refill.totalExGst?.toFixed(2)}</td>
+                  <tr key={idx} className="hover:bg-muted/50">
+                    <td className="p-3 text-sm text-foreground">{moment(refill.date).format('DD MMM YYYY')}</td>
+                    <td className="p-3 text-sm text-foreground">{refill.customer}</td>
+                    <td className="p-3 text-sm text-foreground">{refill.site}</td>
+                    <td className="p-3 text-sm text-foreground">{refill.productName}</td>
+                    <td className="p-3 text-sm text-foreground text-right">{refill.deliveredLitres?.toLocaleString()}L</td>
+                    <td className="p-3 text-sm text-foreground text-right">${refill.totalExGst?.toFixed(2)}</td>
                     <td className="p-3 text-center">
                       <Badge className={getStatusColor(refill.status)}>{refill.status}</Badge>
                     </td>
-                    <td className="p-3 text-sm text-slate-700">{refill.invoiceNo || '-'}</td>
+                    <td className="p-3 text-sm text-foreground">{refill.invoiceNo || '-'}</td>
                   </tr>
                 ))}
               </tbody>

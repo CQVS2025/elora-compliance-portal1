@@ -17,7 +17,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
   Users,
-  ArrowLeft,
   Search,
   UserPlus,
   Edit,
@@ -33,7 +32,11 @@ import {
   Globe,
   KeyRound,
   UserMinus,
-  ChevronDown
+  ChevronDown,
+  Filter,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -51,29 +54,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
-import { formatErrorForToast, formatSuccessForToast } from '@/utils/errorMessages';
+import { toast, toastError, toastSuccess } from '@/lib/toast';
 import DataPagination from '@/components/ui/DataPagination';
 
 const ROLES = [
-  { value: 'super_admin', label: 'Super Admin', color: 'bg-red-100 text-red-800' },
-  { value: 'admin', label: 'Admin', color: 'bg-purple-100 text-purple-800' },
-  { value: 'manager', label: 'Manager', color: 'bg-blue-100 text-blue-800' },
-  { value: 'user', label: 'User', color: 'bg-slate-100 text-slate-800' },
-  { value: 'batcher', label: 'Batcher', color: 'bg-teal-100 text-teal-800' },
-  { value: 'driver', label: 'Driver', color: 'bg-green-100 text-green-800' },
-  { value: 'viewer', label: 'Viewer', color: 'bg-gray-100 text-gray-800' },
+  { value: 'super_admin', label: 'Super Admin', color: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' },
+  { value: 'admin', label: 'Admin', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200' },
+  { value: 'manager', label: 'Manager', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' },
+  { value: 'user', label: 'User', color: 'bg-muted text-muted-foreground' },
+  { value: 'batcher', label: 'Batcher', color: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200' },
+  { value: 'driver', label: 'Driver', color: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200' },
+  { value: 'viewer', label: 'Viewer', color: 'bg-muted text-muted-foreground' },
 ];
 
 export default function UserManagement() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { userProfile } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState('asc');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
@@ -264,10 +268,10 @@ export default function UserManagement() {
       queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setShowCreateModal(false);
       resetForm();
-      toast(formatSuccessForToast('create', 'user'));
+      toastSuccess('create', 'user');
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'creating user'));
+      toastError(error, 'creating user');
     },
   });
 
@@ -304,10 +308,10 @@ export default function UserManagement() {
       queryClient.refetchQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setShowEditModal(false);
       setSelectedUser(null);
-      toast(formatSuccessForToast('update', 'user'));
+      toastSuccess('update', 'user');
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'updating user'));
+      toastError(error, 'updating user');
     },
   });
 
@@ -323,10 +327,10 @@ export default function UserManagement() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries(['adminUsers']);
       const action = variables.is_active ? 'activate' : 'deactivate';
-      toast(formatSuccessForToast(action, 'user'));
+      toastSuccess(action, 'user');
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'updating user status'));
+      toastError(error, 'updating user status');
     },
   });
 
@@ -342,10 +346,10 @@ export default function UserManagement() {
       setShowResetPasswordModal(false);
       setResetPasswordUser(null);
       setResetPasswordNewPassword('');
-      toast({ title: 'Password updated', description: 'The user\'s password has been reset successfully.' });
+      toast.success('Password updated', { description: 'The user\'s password has been reset successfully.' });
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'resetting password'));
+      toastError(error, 'resetting password');
     },
   });
 
@@ -360,10 +364,10 @@ export default function UserManagement() {
       queryClient.invalidateQueries(['adminUsers']);
       queryClient.invalidateQueries({ queryKey: ['adminCompaniesWithCounts'] });
       setUserToDelete(null);
-      toast(formatSuccessForToast('delete', 'user'));
+      toastSuccess('delete', 'user');
     },
     onError: (error) => {
-      toast(formatErrorForToast(error, 'deleting user'));
+      toastError(error, 'deleting user');
       setUserToDelete(null);
     },
   });
@@ -428,7 +432,7 @@ export default function UserManagement() {
         ) : (
           <div
             className="w-4 h-4 rounded flex items-center justify-center text-white text-xs font-bold"
-            style={{ backgroundColor: company.primary_color || '#7CB342' }}
+            style={{ backgroundColor: company.primary_color || 'hsl(var(--primary))' }}
           >
             {company.name?.charAt(0)}
           </div>
@@ -439,39 +443,54 @@ export default function UserManagement() {
     return { name: 'All Users', icon: <Globe className="w-4 h-4" />, count: users.length };
   };
 
-  // Filter users based on selected company tab, search, and role
+  // Filter and sort users
   const filteredUsers = useMemo(() => {
-    console.log('🔍 FILTERING USERS:', {
-      totalUsers: users.length,
-      searchQuery,
-      roleFilter,
-      selectedCompanyTab
-    });
-
     const filtered = users.filter(user => {
       const matchesSearch = !searchQuery ||
         user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
+        (user.full_name && user.full_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (user.phone && user.phone.includes(searchQuery)) ||
+        (user.job_title && user.job_title.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'active' && user.is_active !== false) ||
+        (statusFilter === 'inactive' && user.is_active === false);
       const matchesCompany =
         selectedCompanyTab === 'all' ? true
           : selectedCompanyTab === 'unassigned' ? !user.company_id
           : user.company_id === selectedCompanyTab;
-      return matchesSearch && matchesRole && matchesCompany;
+      return matchesSearch && matchesRole && matchesStatus && matchesCompany;
     });
 
-    console.log('✅ FILTERED USERS RESULT:', {
-      totalUsers: users.length,
-      filteredCount: filtered.length,
-      filterBreakdown: {
-        bySearch: users.filter(u => !searchQuery || u.email?.toLowerCase().includes(searchQuery.toLowerCase()) || u.full_name?.toLowerCase().includes(searchQuery.toLowerCase())).length,
-        byRole: users.filter(u => roleFilter === 'all' || u.role === roleFilter).length,
-        byCompany: users.filter(u => selectedCompanyTab === 'all' ? true : selectedCompanyTab === 'unassigned' ? !u.company_id : u.company_id === selectedCompanyTab).length
+    const sorted = [...filtered].sort((a, b) => {
+      let cmp = 0;
+      switch (sortBy) {
+        case 'name':
+          cmp = (a.full_name || '').localeCompare(b.full_name || '');
+          break;
+        case 'email':
+          cmp = (a.email || '').localeCompare(b.email || '');
+          break;
+        case 'role':
+          cmp = (a.role || '').localeCompare(b.role || '');
+          break;
+        case 'company':
+          cmp = (a.companies?.name || '').localeCompare(b.companies?.name || '');
+          break;
+        case 'status':
+          cmp = (a.is_active !== false ? 1 : 0) - (b.is_active !== false ? 1 : 0);
+          break;
+        case 'created_at':
+          cmp = new Date(a.created_at || 0) - new Date(b.created_at || 0);
+          break;
+        default:
+          cmp = (a.full_name || '').localeCompare(b.full_name || '');
       }
+      return sortOrder === 'asc' ? cmp : -cmp;
     });
-
-    return filtered;
-  }, [users, searchQuery, roleFilter, selectedCompanyTab]);
+    return sorted;
+  }, [users, searchQuery, roleFilter, statusFilter, selectedCompanyTab, sortBy, sortOrder]);
 
   // Pagination
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -485,13 +504,29 @@ export default function UserManagement() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, roleFilter, selectedCompanyTab]);
+  }, [searchQuery, roleFilter, statusFilter, selectedCompanyTab, sortBy, sortOrder]);
+
+  const hasActiveFilters =
+    searchQuery !== '' ||
+    roleFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    (isSuperAdmin && selectedCompanyTab !== 'all');
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setRoleFilter('all');
+    setStatusFilter('all');
+    if (isSuperAdmin) setSelectedCompanyTab('all');
+    setSortBy('name');
+    setSortOrder('asc');
+    setCurrentPage(1);
+  };
 
   const getRoleBadge = (role) => {
     const roleConfig = ROLES.find(r => r.value === role) || { 
       value: role, 
       label: role?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Unknown', 
-      color: 'bg-gray-100 text-gray-800' 
+      color: 'bg-muted text-muted-foreground' 
     };
     return <Badge className={roleConfig.color}>{roleConfig.label}</Badge>;
   };
@@ -500,38 +535,13 @@ export default function UserManagement() {
   // This component will only render if user has admin or super_admin role
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white hover:bg-white/10"
-              onClick={() => navigate('/admin')}
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Admin
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Users className="w-6 h-6" />
-                User Management
-              </h1>
-              <p className="text-slate-300 text-sm">Create and manage user accounts</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Company Selector - Only for Super Admin */}
-        {isSuperAdmin && (
-          <Card className="mb-6">
+    <div className="p-6 space-y-6">
+      {/* Company Selector - Only for Super Admin */}
+      {isSuperAdmin && (
+          <Card className="border-border">
             <CardContent className="p-4">
               <div className="flex items-center gap-4">
-                <Label className="text-sm font-medium text-slate-700 whitespace-nowrap">Filter by Company:</Label>
+                <Label className="text-sm font-medium text-foreground whitespace-nowrap">Filter by Company:</Label>
                 <Popover open={companyComboboxOpen} onOpenChange={setCompanyComboboxOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -543,7 +553,7 @@ export default function UserManagement() {
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         {getSelectedCompanyDisplay().icon}
                         <span className="truncate">{getSelectedCompanyDisplay().name}</span>
-                        <Badge className="ml-auto bg-slate-200 text-slate-700">
+                        <Badge variant="secondary" className="ml-auto">
                           {getSelectedCompanyDisplay().count}
                         </Badge>
                       </div>
@@ -565,9 +575,9 @@ export default function UserManagement() {
                           >
                             <Globe className="mr-2 h-4 w-4" />
                             <span>All Users</span>
-                            <Badge className="ml-auto bg-slate-200 text-slate-700">{users.length}</Badge>
+                            <Badge variant="secondary" className="ml-auto">{users.length}</Badge>
                             {selectedCompanyTab === 'all' && (
-                              <Check className="ml-2 h-4 w-4 text-[#7CB342]" />
+                              <Check className="ml-2 h-4 w-4 text-primary" />
                             )}
                           </CommandItem>
                           <CommandItem
@@ -579,9 +589,9 @@ export default function UserManagement() {
                           >
                             <UserMinus className="mr-2 h-4 w-4" />
                             <span>Unassigned</span>
-                            <Badge className="ml-auto bg-amber-100 text-amber-800">{unassignedCount}</Badge>
+                            <Badge variant="outline" className="ml-auto">{unassignedCount}</Badge>
                             {selectedCompanyTab === 'unassigned' && (
-                              <Check className="ml-2 h-4 w-4 text-[#7CB342]" />
+                              <Check className="ml-2 h-4 w-4 text-primary" />
                             )}
                           </CommandItem>
                         </CommandGroup>
@@ -606,18 +616,18 @@ export default function UserManagement() {
                                   ) : (
                                     <div
                                       className="w-4 h-4 rounded flex items-center justify-center text-white text-xs font-bold shrink-0"
-                                      style={{ backgroundColor: company.primary_color || '#7CB342' }}
+                                      style={{ backgroundColor: company.primary_color || 'hsl(var(--primary))' }}
                                     >
                                       {company.name?.charAt(0)}
                                     </div>
                                   )}
                                   <span className="truncate">{company.name}</span>
-                                  <Badge className="ml-auto bg-slate-200 text-slate-700 shrink-0">
+                                  <Badge variant="secondary" className="ml-auto shrink-0">
                                     {company.userCount || 0}
                                   </Badge>
                                 </div>
                                 {selectedCompanyTab === company.id && (
-                                  <Check className="ml-2 h-4 w-4 text-[#7CB342] shrink-0" />
+                                  <Check className="ml-2 h-4 w-4 text-primary shrink-0" />
                                 )}
                               </CommandItem>
                             ))}
@@ -632,55 +642,88 @@ export default function UserManagement() {
           </Card>
         )}
 
-        {/* Filters */}
-        <Card className="mb-6">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Search users..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="All Roles" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Roles</SelectItem>
-                  {ROLES.map(role => (
-                    <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Button
-                className="bg-[#7CB342] hover:bg-[#689F38]"
-                onClick={() => setShowCreateModal(true)}
-              >
-                <UserPlus className="w-4 h-4 mr-2" />
-                Add User
-              </Button>
+      {/* Filters */}
+      <Card className="border-border">
+        <CardContent className="p-4 space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, email, phone, job title..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
             </div>
-          </CardContent>
-        </Card>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="All Roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                {ROLES.map(role => (
+                  <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="email">Email</SelectItem>
+                <SelectItem value="role">Role</SelectItem>
+                {isSuperAdmin && <SelectItem value="company">Company</SelectItem>}
+                <SelectItem value="status">Status</SelectItem>
+                <SelectItem value="created_at">Date created</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSortOrder(o => o === 'asc' ? 'desc' : 'asc')}
+              className="shrink-0"
+              title={sortOrder === 'asc' ? 'Ascending (click for descending)' : 'Descending (click for ascending)'}
+            >
+              {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+            </Button>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
+                <X className="w-4 h-4 mr-1" />
+                Clear filters
+              </Button>
+            )}
+            <Button onClick={() => setShowCreateModal(true)} className="ml-auto shrink-0">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add User
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Users Table */}
-        <Card>
-          <CardHeader>
+      {/* Users Table */}
+      <Card className="border-border">
+        <CardHeader>
             <CardTitle>Users ({filteredUsers.length})</CardTitle>
           </CardHeader>
           <CardContent>
             {loadingUsers ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 text-[#7CB342] animate-spin" />
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
               </div>
             ) : filteredUsers.length === 0 ? (
-              <div className="text-center py-12 text-slate-500">
+              <div className="text-center py-12 text-muted-foreground">
                 No users found matching your criteria.
               </div>
             ) : (
@@ -689,40 +732,40 @@ export default function UserManagement() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-3 px-4 font-medium text-slate-600">User</th>
-                        <th className="text-left py-3 px-4 font-medium text-slate-600">Role</th>
+                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">User</th>
+                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">Role</th>
                         {isSuperAdmin && (
-                          <th className="text-left py-3 px-4 font-medium text-slate-600">Company</th>
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Company</th>
                         )}
-                        <th className="text-left py-3 px-4 font-medium text-slate-600">Status</th>
-                        <th className="text-right py-3 px-4 font-medium text-slate-600">Actions</th>
+                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
+                        <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginatedUsers.map(user => (
-                      <tr key={user.id} className="border-b hover:bg-slate-50">
+                      <tr key={user.id} className="border-b hover:bg-muted/50">
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#7CB342] to-[#558B2F] flex items-center justify-center text-white font-bold">
+                            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold">
                               {user.full_name?.charAt(0) || user.email?.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <p className="font-medium text-slate-800">{user.full_name || 'No name'}</p>
-                              <p className="text-sm text-slate-500">{user.email}</p>
+                              <p className="font-medium text-foreground">{user.full_name || 'No name'}</p>
+                              <p className="text-sm text-muted-foreground">{user.email}</p>
                             </div>
                           </div>
                         </td>
                         <td className="py-3 px-4">{getRoleBadge(user.role)}</td>
                         {isSuperAdmin && (
                           <td className="py-3 px-4">
-                            <span className="text-slate-600">{user.companies?.name || '-'}</span>
+                            <span className="text-muted-foreground">{user.companies?.name || '-'}</span>
                           </td>
                         )}
                         <td className="py-3 px-4">
                           {user.is_active !== false ? (
-                            <Badge className="bg-green-100 text-green-800">Active</Badge>
+                            <Badge variant="default">Active</Badge>
                           ) : (
-                            <Badge className="bg-red-100 text-red-800">Inactive</Badge>
+                            <Badge variant="secondary">Inactive</Badge>
                           )}
                         </td>
                         <td className="py-3 px-4 text-right">
@@ -757,7 +800,7 @@ export default function UserManagement() {
                               )}
                               {isSuperAdmin && (
                                 <DropdownMenuItem
-                                  className="text-red-600 focus:text-red-600"
+                                  className="text-destructive focus:text-destructive"
                                   onClick={() => setUserToDelete(user)}
                                 >
                                   <Trash2 className="w-4 h-4 mr-2" />
@@ -806,7 +849,6 @@ export default function UserManagement() {
             )}
           </CardContent>
         </Card>
-      </div>
 
       {/* Create User Modal */}
       <Dialog open={showCreateModal} onOpenChange={(open) => {
@@ -817,14 +859,14 @@ export default function UserManagement() {
           <DialogHeader>
             <DialogTitle>Create New User</DialogTitle>
             {selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' && companies.find(c => c.id === selectedCompanyTab) && (
-              <p className="text-sm text-slate-500 mt-1">
-                Creating user for: <span className="font-medium text-slate-700">
+              <p className="text-sm text-muted-foreground mt-1">
+                Creating user for: <span className="font-medium text-foreground">
                   {companies.find(c => c.id === selectedCompanyTab)?.name}
                 </span>
               </p>
             )}
             {selectedCompanyTab === 'unassigned' && (
-              <p className="text-sm text-amber-600 mt-1">Creating unassigned user (no company)</p>
+              <p className="text-sm text-muted-foreground mt-1">Creating unassigned user (no company)</p>
             )}
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -846,7 +888,7 @@ export default function UserManagement() {
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Min 6 characters"
                 />
-                <p className="text-xs text-slate-500">Save this password - user will need it to log in</p>
+                <p className="text-xs text-muted-foreground">Save this password - user will need it to log in</p>
               </div>
             </div>
             <div className="space-y-2">
@@ -909,7 +951,7 @@ export default function UserManagement() {
                   </SelectContent>
                 </Select>
                 {selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' && formData.company_id === selectedCompanyTab && (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     Pre-filled from selected company tab
                   </p>
                 )}
@@ -922,7 +964,7 @@ export default function UserManagement() {
               resetForm();
             }}>Cancel</Button>
             <Button
-              className="bg-[#7CB342] hover:bg-[#689F38]"
+              className=""
               onClick={() => createUserMutation.mutate(formData)}
               disabled={createUserMutation.isPending || !formData.email || !formData.password || formData.password.length < 6}
             >
@@ -947,7 +989,7 @@ export default function UserManagement() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Email</Label>
-              <Input value={formData.email} disabled className="bg-slate-50" />
+              <Input value={formData.email} disabled className="bg-muted" />
             </div>
             <div className="space-y-2">
               <Label>Full Name</Label>
@@ -1015,7 +1057,7 @@ export default function UserManagement() {
               setSelectedUser(null);
             }}>Cancel</Button>
             <Button
-              className="bg-[#7CB342] hover:bg-[#689F38]"
+              className=""
               onClick={() => {
                 const companyId = formData.company_id === '' || formData.company_id == null ? '' : formData.company_id;
                 const company = companyId ? companies.find(c => c.id === companyId) : null;
@@ -1042,8 +1084,8 @@ export default function UserManagement() {
           <DialogHeader>
             <DialogTitle>Reset password</DialogTitle>
             {resetPasswordUser && (
-              <p className="text-sm text-slate-500">
-                Set a new password for <span className="font-medium text-slate-700">{resetPasswordUser.email}</span>
+              <p className="text-sm text-muted-foreground">
+                Set a new password for <span className="font-medium text-foreground">{resetPasswordUser.email}</span>
               </p>
             )}
           </DialogHeader>
@@ -1063,7 +1105,7 @@ export default function UserManagement() {
               Cancel
             </Button>
             <Button
-              className="bg-[#7CB342] hover:bg-[#689F38]"
+              className=""
               onClick={() => resetPasswordUser && resetPasswordMutation.mutate({ user_id: resetPasswordUser.id, new_password: resetPasswordNewPassword })}
               disabled={resetPasswordMutation.isPending || !resetPasswordNewPassword || resetPasswordNewPassword.length < 6}
             >
@@ -1081,8 +1123,8 @@ export default function UserManagement() {
           <DialogHeader>
             <DialogTitle>Assign to company</DialogTitle>
             {userToAssign && (
-              <p className="text-sm text-slate-500">
-                Assign <span className="font-medium text-slate-700">{userToAssign.email}</span> to a company so they can log in.
+              <p className="text-sm text-muted-foreground">
+                Assign <span className="font-medium text-foreground">{userToAssign.email}</span> to a company so they can log in.
               </p>
             )}
           </DialogHeader>
@@ -1106,7 +1148,7 @@ export default function UserManagement() {
               Cancel
             </Button>
             <Button
-              className="bg-[#7CB342] hover:bg-[#689F38]"
+              className=""
               disabled={updateUserMutation.isPending || !assignToCompanyId}
               onClick={() => {
                 if (!userToAssign || !assignToCompanyId) return;
@@ -1150,7 +1192,7 @@ export default function UserManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setUserToDelete(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => userToDelete && deleteUserMutation.mutate({ user_id: userToDelete.id })}
             >
               {deleteUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete user'}
@@ -1173,7 +1215,7 @@ export default function UserManagement() {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setUserToRemoveFromCompany(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-[#7CB342] hover:bg-[#689F38]"
+              className=""
               disabled={updateUserMutation.isPending}
               onClick={() => {
                 if (!userToRemoveFromCompany) return;

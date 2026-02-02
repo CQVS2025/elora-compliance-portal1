@@ -92,7 +92,11 @@ export default function SiteAnalytics() {
         metrics[siteId].totalVehicles++;
         
         // Count washes for this vehicle
-        const vehicleWashes = scans.filter(s => s.vehicleRef === vehicle.vehicleRef).length;
+        const vehicleWashes = scans.filter(s =>
+          s.vehicleRef === vehicle.vehicleRef ||
+          (vehicle.device_ref && s.deviceRef === vehicle.device_ref) ||
+          (vehicle.vehicleRef && s.deviceRef === vehicle.vehicleRef)
+        ).length;
         const target = vehicle.washesPerWeek || 12;
         
         if (vehicleWashes >= target) {
@@ -146,8 +150,8 @@ export default function SiteAnalytics() {
     }))
     .filter(item => item.value > 0);
 
-  const COLORS = ['#7CB342', '#9CCC65', '#689F38', '#558B2F', '#33691E', '#827717'];
-  const ISSUE_COLORS = ['#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899', '#6B7280'];
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+  const ISSUE_COLORS = ['hsl(var(--destructive))', 'hsl(var(--chart-4))', 'hsl(var(--primary))', 'hsl(var(--chart-3))', 'hsl(var(--chart-5))', 'hsl(var(--muted-foreground))'];
 
   const totalWashes = siteMetrics.reduce((sum, site) => sum + site.totalWashes, 0);
   const totalVehicles = siteMetrics.reduce((sum, site) => sum + site.totalVehicles, 0);
@@ -184,7 +188,7 @@ export default function SiteAnalytics() {
       <div className="min-h-screen bg-slate-50">
         <Header />
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-12 h-12 text-[#7CB342] animate-spin" />
+          <Loader2 className="w-12 h-12 text-primary animate-spin" />
         </div>
       </div>
     );
@@ -202,7 +206,7 @@ export default function SiteAnalytics() {
             <p className="text-slate-600 mt-1">Performance metrics across all sites</p>
           </div>
           {permissions.canExportData && (
-            <Button onClick={exportToCSV} className="bg-[#7CB342] hover:bg-[#689F38]">
+            <Button onClick={exportToCSV}>
               <Download className="w-4 h-4 mr-2" />
               Export Report
             </Button>
@@ -334,17 +338,17 @@ export default function SiteAnalytics() {
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={washesPerSiteData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis 
                     dataKey="name" 
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                     angle={-45}
                     textAnchor="end"
                     height={80}
                   />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="totalWashes" fill="#7CB342" radius={[8, 8, 0, 0]} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                  <Bar dataKey="totalWashes" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -358,17 +362,17 @@ export default function SiteAnalytics() {
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={compliancePerSiteData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis 
                     dataKey="name" 
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                     angle={-45}
                     textAnchor="end"
                     height={80}
                   />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip formatter={(value) => `${value}%`} />
-                  <Bar dataKey="complianceRate" fill="#3B82F6" radius={[8, 8, 0, 0]} />
+                  <YAxis domain={[0, 100]} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value) => `${value}%`} />
+                  <Bar dataKey="complianceRate" fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -384,7 +388,7 @@ export default function SiteAnalytics() {
             </CardHeader>
             <CardContent>
               {issueTypeData.length === 0 ? (
-                <div className="h-[300px] flex items-center justify-center text-slate-500">
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
                   No issues reported in this period
                 </div>
               ) : (
@@ -397,14 +401,14 @@ export default function SiteAnalytics() {
                       labelLine={false}
                       label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                       outerRadius={80}
-                      fill="#8884d8"
+                      fill="hsl(var(--primary))"
                       dataKey="value"
                     >
                       {issueTypeData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={ISSUE_COLORS[index % ISSUE_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               )}

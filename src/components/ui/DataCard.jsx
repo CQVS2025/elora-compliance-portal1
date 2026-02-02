@@ -27,12 +27,11 @@ export default function DataCard({
       whileTap={!disabled && onClick ? { scale: 0.99 } : undefined}
       onClick={!disabled ? onClick : undefined}
       className={`
-        backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
-        border border-gray-200/20 dark:border-zinc-800/50
+        bg-card border border-border
         rounded-xl p-5
         shadow-sm shadow-black/[0.02]
         hover:shadow-md hover:shadow-black/[0.04]
-        hover:bg-white dark:hover:bg-zinc-900
+        hover:bg-card
         transition-all duration-200
         ${onClick && !disabled ? 'cursor-pointer' : ''}
         ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
@@ -42,7 +41,7 @@ export default function DataCard({
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0">{children}</div>
         {showChevron && onClick && !disabled && (
-          <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0 ml-4" />
+          <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0 ml-4" />
         )}
       </div>
     </motion.div>
@@ -70,23 +69,23 @@ export function VehicleDataCard({
         {/* Status indicator */}
         <div
           className={`w-3 h-3 rounded-full flex-shrink-0 ${
-            isCompliant ? 'bg-emerald-500' : 'bg-amber-500'
+            isCompliant ? 'bg-primary' : 'bg-amber-500'
           }`}
         />
 
         {/* Main info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3">
-            <p className="font-semibold text-lg text-gray-900 dark:text-white truncate">
+            <p className="font-semibold text-lg text-foreground truncate">
               {registration}
             </p>
             {isCompliant && (
-              <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-full">
+              <span className="px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary rounded-full">
                 Compliant
               </span>
             )}
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {siteName && <span>{siteName} · </span>}
             Last wash: {lastWash || 'Never'}
           </p>
@@ -94,23 +93,23 @@ export function VehicleDataCard({
 
         {/* Metric */}
         <div className="text-right flex-shrink-0">
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">
+          <p className="text-2xl font-bold text-foreground">
             {washCount}
-            <span className="text-sm font-normal text-gray-400">/{target}</span>
+            <span className="text-sm font-normal text-muted-foreground">/{target}</span>
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">washes</p>
+          <p className="text-xs text-muted-foreground">washes</p>
         </div>
       </div>
 
       {/* Progress bar */}
-      <div className="mt-3 h-1.5 bg-gray-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+      <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(compliancePercent, 100)}%` }}
           transition={{ duration: 0.8, delay: index * 0.05, ease: 'easeOut' }}
           className={`h-full rounded-full ${
             isCompliant
-              ? 'bg-emerald-500'
+              ? 'bg-primary'
               : compliancePercent >= 75
               ? 'bg-amber-500'
               : 'bg-red-500'
@@ -134,11 +133,11 @@ export function ActivityDataCard({
   index = 0,
 }) {
   const typeStyles = {
-    success: 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400',
+    success: 'bg-primary/10 text-primary',
     warning: 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400',
     error: 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400',
     info: 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400',
-    default: 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400',
+    default: 'bg-muted text-muted-foreground',
   };
 
   return (
@@ -150,11 +149,11 @@ export function ActivityDataCard({
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-gray-900 dark:text-white truncate">{title}</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{description}</p>
+          <p className="font-medium text-foreground truncate">{title}</p>
+          <p className="text-sm text-muted-foreground truncate">{description}</p>
         </div>
         {timestamp && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">{timestamp}</p>
+          <p className="text-xs text-muted-foreground flex-shrink-0">{timestamp}</p>
         )}
       </div>
     </DataCard>
