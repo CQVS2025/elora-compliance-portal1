@@ -4,6 +4,7 @@ import { performCompleteLogout } from '@/utils/storageCleanup';
 import { queryClientInstance, clearAllCache } from '@/lib/query-client';
 import { clearTenantContextCache } from '@/api/edgeFetch';
 import { setEloraTenantContext, clearEloraTenantContext } from '@/lib/eloraTenantContext';
+import { upsertPresenceOnLogin, startHeartbeat, stopHeartbeat } from '@/lib/userPresence';
 
 const AuthContext = createContext();
 
@@ -75,6 +76,7 @@ export const AuthProvider = ({ children }) => {
           }
         } else {
           currentProfileId = null;
+          stopHeartbeat();
           setUser(null);
           setUserProfile(null);
           clearEloraTenantContext();
@@ -273,6 +275,9 @@ export const AuthProvider = ({ children }) => {
         companyEloraCustomerRef: enrichedProfile.company_elora_customer_ref ?? null,
         isSuperAdmin: enrichedProfile.role === 'super_admin',
       });
+      // Update presence (last_login + last_seen) and start heartbeat
+      upsertPresenceOnLogin(user.id, enrichedProfile.company_id ?? null);
+      startHeartbeat(user.id, enrichedProfile.company_id ?? null);
       console.log('User profile loaded:', enrichedProfile);
       setIsAuthenticated(true);
       // Clear any previous auth errors since profile loaded successfully
@@ -363,7 +368,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // Get user email before clearing everything
       const userEmail = user?.email || userProfile?.email;
-      
+      stopHeartbeat();
       // Sign out from Supabase first (this clears Supabase session)
       await supabase.auth.signOut();
       

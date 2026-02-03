@@ -29,3 +29,4 @@ export * from './siteOverrides';
 export * from './users';
 export * from './companies';
 export * from './roleTabSettings';
+export * from './userPresence';

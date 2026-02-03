@@ -56,6 +56,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast, toastError, toastSuccess } from '@/lib/toast';
 import DataPagination from '@/components/ui/DataPagination';
+import UserAvatarWithPresence from '@/components/admin/UserAvatarWithPresence';
+import { userPresenceOptions } from '@/query/options';
+import moment from 'moment';
 
 const ROLES = [
   { value: 'super_admin', label: 'Super Admin', color: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' },
@@ -70,7 +73,7 @@ const ROLES = [
 export default function UserManagement() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { userProfile } = useAuth();
+  const { userProfile, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -123,6 +126,12 @@ export default function UserManagement() {
       setFormData(prev => ({ ...prev, company_id: '' }));
     }
   }, [showCreateModal, selectedCompanyTab]);
+
+  // Fetch user presence (last_seen, online) for admin display
+  const { data: presenceMap = {} } = useQuery({
+    ...userPresenceOptions(),
+    enabled: !!isAuthenticated && !!userProfile,
+  });
 
   // Fetch users
   const { data: users = [], isLoading: loadingUsers } = useQuery({
@@ -733,6 +742,7 @@ export default function UserManagement() {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left py-3 px-4 font-medium text-muted-foreground">User</th>
+                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">Presence</th>
                         <th className="text-left py-3 px-4 font-medium text-muted-foreground">Role</th>
                         {isSuperAdmin && (
                           <th className="text-left py-3 px-4 font-medium text-muted-foreground">Company</th>
@@ -742,18 +752,38 @@ export default function UserManagement() {
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedUsers.map(user => (
+                      {paginatedUsers.map(user => {
+                        const presence = presenceMap[user.id];
+                        const isOnline = presence?.isOnline ?? false;
+                        const lastSeenAt = presence?.last_seen_at ?? presence?.last_login_at;
+
+                        return (
                       <tr key={user.id} className="border-b hover:bg-muted/50">
                         <td className="py-3 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold">
-                              {user.full_name?.charAt(0) || user.email?.charAt(0).toUpperCase()}
+                          <UserAvatarWithPresence
+                            name={user.full_name}
+                            email={user.email}
+                            avatarUrl={user.avatar_url}
+                            isOnline={isOnline}
+                          />
+                        </td>
+                        <td className="py-3 px-4">
+                          {lastSeenAt ? (
+                            <div className="flex flex-col gap-0.5">
+                              {isOnline ? (
+                                <span className="text-sm font-medium text-green-600 dark:text-green-400">Online</span>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">
+                                  Last seen {moment(lastSeenAt).fromNow()}
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground" title="Last seen at">
+                                {moment(lastSeenAt).format('MMM D, YYYY, h:mm A')}
+                              </span>
                             </div>
-                            <div>
-                              <p className="font-medium text-foreground">{user.full_name || 'No name'}</p>
-                              <p className="text-sm text-muted-foreground">{user.email}</p>
-                            </div>
-                          </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="py-3 px-4">{getRoleBadge(user.role)}</td>
                         {isSuperAdmin && (
@@ -829,7 +859,8 @@ export default function UserManagement() {
                           </DropdownMenu>
                         </td>
                       </tr>
-                      ))}
+                      );
+                      })}
                     </tbody>
                   </table>
                 </div>
