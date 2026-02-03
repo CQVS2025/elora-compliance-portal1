@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar as CalendarIcon, Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Loader2, RotateCcw, Building2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import {
@@ -31,6 +31,9 @@ export default function FilterSection({
   setDateRange,
   activePeriod,
   setActivePeriod,
+  companyName = null,
+  companyLogoUrl = null,
+  onResetDateRange = null,
   lockCustomerFilter = false,
   lockSiteFilter = false,
   restrictedCustomerName = null,
@@ -39,41 +42,69 @@ export default function FilterSection({
   isDataLoading = false,
 }) {
   const showLoading = isFiltering || isDataLoading;
+  const displayName = companyName || restrictedCustomerName;
+  const showCompanyBadge = lockCustomerFilter && displayName;
+  const showSiteBadgeOnly = lockSiteFilter && restrictedSiteName && !showCompanyBadge;
 
   return (
     <div className="space-y-4">
-      {(lockCustomerFilter && restrictedCustomerName) || (lockSiteFilter && restrictedSiteName) ? (
+      {showCompanyBadge && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
+          initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-start gap-3"
+          className="flex items-center gap-5 rounded-xl border border-border bg-card px-5 py-4 shadow-sm"
         >
-          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <h3 className="font-semibold text-amber-900 dark:text-amber-200 mb-0.5">
-              {lockSiteFilter && restrictedSiteName
-                ? `Viewing ${restrictedSiteName} Only`
-                : `Viewing ${restrictedCustomerName} Only`}
-            </h3>
-            <p className="text-sm text-amber-700 dark:text-amber-400/80">
-              {lockSiteFilter
-                ? 'Your account is configured to view data for this site only.'
-                : 'Your account is configured to view data for this customer.'}
+          <div
+            className={`flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border ${
+              companyLogoUrl ? 'h-20 w-24 min-h-[5rem] min-w-[6rem] bg-card' : 'h-20 w-24 min-h-[5rem] min-w-[6rem] bg-muted'
+            }`}
+          >
+            {companyLogoUrl ? (
+              <img
+                src={companyLogoUrl}
+                alt=""
+                className="h-full w-full object-contain p-2"
+              />
+            ) : (
+              <Building2 className="h-10 w-10 text-muted-foreground" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Viewing data for
             </p>
+            <p className="truncate text-lg font-semibold text-foreground">
+              {displayName}
+            </p>
+            {lockSiteFilter && restrictedSiteName && (
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Site: <span className="font-medium text-foreground">{restrictedSiteName}</span>
+              </p>
+            )}
           </div>
         </motion.div>
-      ) : null}
+      )}
+      {showSiteBadgeOnly && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground"
+        >
+          Viewing site: <span className="font-medium text-foreground">{restrictedSiteName}</span>
+        </motion.div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative">
+        {lockCustomerFilter && displayName ? (
+          <div className="flex h-10 min-w-[180px] items-center rounded-md border border-transparent px-3 text-sm font-medium text-foreground">
+            {displayName}
+          </div>
+        ) : (
           <Select
             value={selectedCustomer}
             onValueChange={setSelectedCustomer}
-            disabled={lockCustomerFilter}
           >
-            <SelectTrigger
-              className={`min-w-[180px] ${lockCustomerFilter ? 'opacity-60 cursor-not-allowed' : ''}`}
-            >
+            <SelectTrigger className="min-w-[180px]">
               <SelectValue placeholder="All Customers" />
             </SelectTrigger>
             <SelectContent>
@@ -85,35 +116,32 @@ export default function FilterSection({
               ))}
             </SelectContent>
           </Select>
-          {lockCustomerFilter && (
-            <Lock className="w-4 h-4 text-amber-500 absolute right-10 top-1/2 -translate-y-1/2 pointer-events-none" />
-          )}
-        </div>
+        )}
 
-        <div className="relative">
-          <Select
-            value={selectedSite}
-            onValueChange={setSelectedSite}
-            disabled={lockSiteFilter}
-          >
-            <SelectTrigger
-              className={`min-w-[160px] ${lockSiteFilter ? 'opacity-60 cursor-not-allowed' : ''}`}
+        {lockSiteFilter && restrictedSiteName ? (
+          <div className="flex h-10 min-w-[160px] items-center rounded-md border border-transparent px-3 text-sm font-medium text-foreground">
+            {restrictedSiteName}
+          </div>
+        ) : (
+          <div className="relative">
+            <Select
+              value={selectedSite}
+              onValueChange={setSelectedSite}
             >
-              <SelectValue placeholder="All Sites" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sites</SelectItem>
-              {sites.filter((site) => site.name !== 'All Sites').map((site) => (
-                <SelectItem key={site.id} value={site.id}>
-                  {site.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {lockSiteFilter && (
-            <Lock className="w-4 h-4 text-amber-500 absolute right-10 top-1/2 -translate-y-1/2 pointer-events-none" />
-          )}
-        </div>
+              <SelectTrigger className="min-w-[160px]">
+                <SelectValue placeholder="All Sites" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sites</SelectItem>
+                {sites.filter((site) => site.name !== 'All Sites').map((site) => (
+                  <SelectItem key={site.id} value={site.id}>
+                    {site.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <Popover>
           <PopoverTrigger asChild>
@@ -150,6 +178,18 @@ export default function FilterSection({
             />
           </PopoverContent>
         </Popover>
+
+        {onResetDateRange && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={onResetDateRange}
+          >
+            <RotateCcw className="mr-1.5 h-4 w-4" />
+            Reset
+          </Button>
+        )}
 
         <AnimatePresence mode="wait">
           {showLoading && (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
-import { Loader2, Trophy, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Loader2, Trophy, ChevronRight, AlertTriangle, Download, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import moment from 'moment';
 import { Link } from 'react-router-dom';
@@ -16,12 +16,21 @@ import {
 } from '@/query/options';
 
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import SectionCards from '@/components/SectionCards';
 import ChartAreaInteractive from '@/components/ChartAreaInteractive';
 import DataTable from '@/components/DataTable';
 import FilterSection from '@/components/dashboard/FilterSection';
 import FavoriteVehicles, { FavoriteButton } from '@/components/dashboard/FavoriteVehicles';
 import VehiclePerformanceChart from '@/components/dashboard/VehiclePerformanceChart';
+import VehicleWashHistoryModal from '@/components/dashboard/VehicleWashHistoryModal';
 import SiteManagement from '@/components/sites/SiteManagement';
 import ReportsDashboard from '@/components/reports/ReportsDashboard';
 import EmailReportSettings from '@/components/reports/EmailReportSettings';
@@ -70,10 +79,51 @@ const getDateRangeForPeriod = (period) => {
   return null;
 };
 
-// Tabs that use filters (customer, site, date) - each has isolated filter state
+/**
+ * On-track status for day / week / month. Based on time elapsed in period and washes completed.
+ * Returns { day: 'on_track'|'off_track'|null, week: ..., month: ... } (null = not applicable).
+ */
+function getOnTrackStatus(vehicle, dateRange, activePeriod) {
+  const now = moment();
+  const start = moment(dateRange.start);
+  const end = moment(dateRange.end);
+  const washes = vehicle.washes_completed ?? 0;
+  const washesPerWeek = vehicle.washesPerWeek ?? vehicle.target ?? 12;
+  const washesPerDay = vehicle.washesPerDay;
+  const monthlyTarget = washesPerWeek * 4;
+  const periodEnded = now.isAfter(end);
+
+  const result = { day: null, week: null, month: null };
+
+  // Day: only when we have daily target and period is Today (single day)
+  if (washesPerDay != null && activePeriod === 'Today' && start.isSame(end, 'day') && start.isSame(now, 'day')) {
+    const fractionOfDay = (now.hours() * 60 + now.minute()) / (24 * 60);
+    const required = washesPerDay * fractionOfDay;
+    result.day = washes >= required ? 'on_track' : 'off_track';
+  }
+
+  // Week: when period is Week (or range is ~7 days)
+  if (activePeriod === 'Week' || (end.diff(start, 'days') <= 8 && start.isSame(now, 'week'))) {
+    const totalDays = Math.max(1, end.diff(start, 'days') + 1);
+    const required = periodEnded ? washesPerWeek : washesPerWeek * (Math.min(totalDays, Math.max(0, now.diff(start, 'days') + 1)) / 7);
+    result.week = washes >= required ? 'on_track' : 'off_track';
+  }
+
+  // Month: when period is Month (or range is current month)
+  if (activePeriod === 'Month' || start.isSame(end, 'month')) {
+    const daysInPeriod = Math.max(1, end.diff(start, 'days') + 1);
+    const elapsedDays = periodEnded ? daysInPeriod : Math.min(daysInPeriod, Math.max(0, now.diff(start, 'days') + 1));
+    const required = monthlyTarget * (elapsedDays / daysInPeriod);
+    result.month = washes >= required ? 'on_track' : 'off_track';
+  }
+
+  return result;
+}
+
+// Tabs that use filters (customer, site, date) - shared across all tabs
 const FILTER_TABS = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
 
-// Email Reports shares filters with Compliance so the emailed report matches what the user sees
+// Email Reports uses the same shared filters as other tabs
 const REPORT_FILTER_SOURCE = 'compliance';
 
 // Route path -> tab value (sidebar nav drives content)
@@ -97,53 +147,47 @@ export default function Dashboard() {
   // Active section derived from route (sidebar navigation)
   const activeTab = PATH_TO_TAB[location.pathname] ?? 'compliance';
 
-  // Per-tab filter state - each tab has its own filters, no mixing
-  const [tabFilters, setTabFilters] = useState(() => {
-    const initial = {};
-    FILTER_TABS.forEach(tab => {
-      initial[tab] = getDefaultFilters();
-    });
-    return initial;
-  });
+  // Single shared filter state - same customer, site, and date range across all navigation tabs
+  const [sharedFilters, setSharedFilters] = useState(getDefaultFilters);
 
   // Use database-driven tab visibility from permissions (for filter/access checks)
   const availableTabs = useAvailableTabs(ALL_TABS);
   const [searchQuery, setSearchQuery] = useState('');
+  const [complianceStatusFilter, setComplianceStatusFilter] = useState('all');
+  const [complianceSiteFilter, setComplianceSiteFilter] = useState('all');
+  const [selectedVehicleForWashHistory, setSelectedVehicleForWashHistory] = useState(null);
 
   // Get tenant context (company_id) from user profile for query keys
   const companyId = permissions.userProfile?.company_id;
 
-  // Filter tab used for data queries (Email Reports uses Compliance filters so report matches dashboard)
-  const filterTabForData = activeTab === 'email-reports' ? REPORT_FILTER_SOURCE : activeTab;
+  const { selectedCustomer, selectedSite, dateRange, activePeriod } = sharedFilters;
 
-  // Current tab's filters - used for queries and display (isolated per tab)
-  const currentFilters = useMemo(() => {
-    const base = tabFilters[filterTabForData] || getDefaultFilters();
-    return { ...getDefaultFilters(), ...base };
-  }, [tabFilters, filterTabForData]);
-
-  const { selectedCustomer, selectedSite, dateRange, activePeriod } = currentFilters;
-
-  // Update current tab's filter (Email Reports updates Compliance so report stays in sync)
-  const updateTabFilter = useCallback((updates) => {
-    setTabFilters(prev => {
-      const tab = activeTab === 'email-reports' ? REPORT_FILTER_SOURCE : activeTab;
-      const current = prev[tab] || getDefaultFilters();
-      const next = { ...current, ...updates };
-      if (updates.selectedCustomer && updates.selectedCustomer !== current.selectedCustomer) {
+  // Update shared filters (applies to all tabs)
+  const updateSharedFilter = useCallback((updates) => {
+    setSharedFilters(prev => {
+      const next = { ...prev, ...updates };
+      if (updates.selectedCustomer != null && updates.selectedCustomer !== prev.selectedCustomer) {
         next.selectedSite = 'all';
       }
-      return { ...prev, [tab]: next };
+      return next;
     });
-  }, [activeTab]);
+  }, []);
 
-  const setSelectedCustomer = useCallback((v) => updateTabFilter({ selectedCustomer: v }), [updateTabFilter]);
-  const setSelectedSite = useCallback((v) => updateTabFilter({ selectedSite: v }), [updateTabFilter]);
-  const setDateRange = useCallback((v) => updateTabFilter({ dateRange: v, activePeriod: 'Custom' }), [updateTabFilter]);
+  const setSelectedCustomer = useCallback((v) => updateSharedFilter({ selectedCustomer: v }), [updateSharedFilter]);
+  const setSelectedSite = useCallback((v) => updateSharedFilter({ selectedSite: v }), [updateSharedFilter]);
+  const setDateRange = useCallback((v) => updateSharedFilter({ dateRange: v, activePeriod: 'Custom' }), [updateSharedFilter]);
   const setActivePeriod = useCallback((period) => {
     const range = getDateRangeForPeriod(period);
-    if (range) updateTabFilter({ activePeriod: period, dateRange: range });
-  }, [updateTabFilter]);
+    if (range) updateSharedFilter({ activePeriod: period, dateRange: range });
+  }, [updateSharedFilter]);
+
+  const resetDateRangeToDefault = useCallback(() => {
+    setSharedFilters(prev => ({
+      ...prev,
+      dateRange: getDefaultFilters().dateRange,
+      activePeriod: getDefaultFilters().activePeriod,
+    }));
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -211,6 +255,8 @@ export default function Dashboard() {
         customer_ref: vehicle.customerId,
         washes_completed: 0, // Will be updated from dashboard data
         target: vehicle.washesPerWeek || 12,
+        washesPerDay: vehicle.washesPerDay ?? null,
+        washesPerWeek: vehicle.washesPerWeek ?? 12,
         last_scan: vehicle.lastScanAt || null,
         status: vehicle.statusLabel,
       });
@@ -246,6 +292,8 @@ export default function Dashboard() {
             site_name: row.siteName,
             washes_completed: row.totalScans || 0,
             target: row.washesPerWeek || 12,
+            washesPerDay: row.washesPerDay ?? null,
+            washesPerWeek: row.washesPerWeek ?? 12,
             last_scan: row.lastScan,
           });
         }
@@ -313,35 +361,21 @@ export default function Dashboard() {
   const lockCustomerFilter = permissions.lockCustomerFilter || !permissions.isSuperAdmin;
   const restrictedCustomerName = permissions.restrictedCustomer || (!permissions.isSuperAdmin && permissions.userProfile?.company_name) || null;
 
-  // Auto-select and lock to company customer for non-super-admin (apply to all filter tabs)
+  // Auto-select and lock to company customer for non-super-admin
   useEffect(() => {
     const companyRef = permissions.userProfile?.company_elora_customer_ref?.trim();
     if (permissions.isSuperAdmin || !companyRef) return;
-    setTabFilters(prev => {
-      let changed = false;
-      const next = { ...prev };
-      FILTER_TABS.forEach(tab => {
-        const current = next[tab] || getDefaultFilters();
-        if (current.selectedCustomer !== companyRef) {
-          next[tab] = { ...current, selectedCustomer: companyRef, selectedSite: current.selectedSite || 'all' };
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
+    setSharedFilters(prev => {
+      if (prev.selectedCustomer === companyRef) return prev;
+      return { ...prev, selectedCustomer: companyRef, selectedSite: prev.selectedSite || 'all' };
     });
   }, [permissions.isSuperAdmin, permissions.userProfile?.company_elora_customer_ref]);
 
-  // Auto-select site for batchers (apply to all filter tabs)
+  // Auto-select site for batchers
   useEffect(() => {
     if (permissions.isBatcher && permissionFilteredSites.length === 1) {
       const siteId = permissionFilteredSites[0].id;
-      setTabFilters(prev => {
-        const next = { ...prev };
-        FILTER_TABS.forEach(tab => {
-          next[tab] = { ...(next[tab] || getDefaultFilters()), selectedSite: siteId };
-        });
-        return next;
-      });
+      setSharedFilters(prev => ({ ...prev, selectedSite: siteId }));
     }
   }, [permissions.isBatcher, permissionFilteredSites]);
 
@@ -349,16 +383,9 @@ export default function Dashboard() {
   useEffect(() => {
     if ((permissions.isManager || permissions.isBatcher) && filteredCustomers.length === 1 && selectedCustomer === 'all') {
       const customerId = filteredCustomers[0].id;
-      setTabFilters(prev => {
-        const next = { ...prev };
-        const tab = activeTab === 'email-reports' ? REPORT_FILTER_SOURCE : activeTab;
-        if (FILTER_TABS.includes(activeTab)) {
-          next[tab] = { ...(next[tab] || getDefaultFilters()), selectedCustomer: customerId, selectedSite: 'all' };
-        }
-        return next;
-      });
+      setSharedFilters(prev => ({ ...prev, selectedCustomer: customerId, selectedSite: 'all' }));
     }
-  }, [permissions.isManager, permissions.isBatcher, filteredCustomers, selectedCustomer, activeTab]);
+  }, [permissions.isManager, permissions.isBatcher, filteredCustomers, selectedCustomer]);
 
   // Filter sites by selected customer (from role-filtered sites)
   const allSites = useMemo(() => {
@@ -476,6 +503,62 @@ export default function Dashboard() {
     };
   }, [filteredVehicles]);
 
+  // Unique sites for compliance table site filter (from current filtered vehicles)
+  const complianceTableSites = useMemo(() => {
+    const list = Array.isArray(filteredVehicles) ? filteredVehicles : [];
+    const byKey = new Map();
+    list.forEach((v) => {
+      const id = v.site_id ?? v.site_name;
+      const name = v.site_name || '—';
+      if (id != null && id !== '' && !byKey.has(String(id))) byKey.set(String(id), { id: String(id), name });
+    });
+    return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredVehicles]);
+
+  // Compliance table: filter by site then by status
+  const complianceFilteredVehicles = useMemo(() => {
+    let list = Array.isArray(filteredVehicles) ? filteredVehicles : [];
+    if (complianceSiteFilter !== 'all') {
+      list = list.filter(
+        (v) =>
+          String(v.site_id ?? v.site_name) === String(complianceSiteFilter) ||
+          String(v.site_name) === String(complianceSiteFilter)
+      );
+    }
+    if (complianceStatusFilter === 'all') return list;
+    const targetDefault = 12;
+    if (complianceStatusFilter === 'compliant') {
+      return list.filter((v) => (v.washes_completed ?? 0) >= (v.target ?? targetDefault));
+    }
+    if (complianceStatusFilter === 'non-compliant') {
+      return list.filter((v) => (v.washes_completed ?? 0) < (v.target ?? targetDefault));
+    }
+    return list;
+  }, [filteredVehicles, complianceStatusFilter, complianceSiteFilter]);
+
+  const exportComplianceCSV = useCallback(() => {
+    const reportData = complianceFilteredVehicles.map((v) => ({
+      Vehicle: v.name ?? '—',
+      RFID: v.rfid ?? '—',
+      Site: v.site_name ?? '—',
+      Washes: v.washes_completed ?? 0,
+      Target: v.target ?? '—',
+      Status: (v.washes_completed ?? 0) >= (v.target ?? 12) ? 'Compliant' : 'Non-Compliant',
+      'Progress %': v.target ? Math.round(((v.washes_completed ?? 0) / v.target) * 100) : '—',
+      'Last Scan': v.last_scan ? moment(v.last_scan).format('YYYY-MM-DD HH:mm') : '—',
+    }));
+    const headers = Object.keys(reportData[0] || {});
+    const rows = reportData.map((row) => headers.map((h) => String(row[h] ?? '')).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vehicle-compliance-${moment().format('YYYY-MM-DD')}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }, [complianceFilteredVehicles]);
+
   // Only block full-page spinner on permissions + customers + sites (needed for shell).
   // Vehicles and dashboard load in background so the page appears sooner.
   const isLoading = permissions.isLoading || customersLoading || sitesLoading;
@@ -506,8 +589,15 @@ export default function Dashboard() {
       {
         id: 'status',
         header: 'Status',
-        cell: (row) =>
-          row.washes_completed >= row.target ? 'Compliant' : 'Non-Compliant',
+        cell: (row) => {
+          const target = row.target ?? 12;
+          const isCompliant = (row.washes_completed ?? 0) >= target;
+          return (
+            <Badge className={isCompliant ? 'bg-primary' : 'bg-red-500 hover:bg-red-600'}>
+              {isCompliant ? 'Compliant' : 'Non-Compliant'}
+            </Badge>
+          );
+        },
       },
       {
         id: 'progress',
@@ -518,12 +608,51 @@ export default function Dashboard() {
             : '—',
       },
       {
+        id: 'on_track_day',
+        header: 'Day',
+        cell: (row) => {
+          const status = getOnTrackStatus(row, dateRange, activePeriod).day;
+          if (status == null) return <span className="text-muted-foreground">—</span>;
+          return status === 'on_track' ? (
+            <span className="inline-flex items-center text-green-600" title="On track"><Check className="w-4 h-4" /></span>
+          ) : (
+            <span className="inline-flex items-center text-destructive" title="Off track"><X className="w-4 h-4" /></span>
+          );
+        },
+      },
+      {
+        id: 'on_track_week',
+        header: 'Week',
+        cell: (row) => {
+          const status = getOnTrackStatus(row, dateRange, activePeriod).week;
+          if (status == null) return <span className="text-muted-foreground">—</span>;
+          return status === 'on_track' ? (
+            <span className="inline-flex items-center text-green-600" title="On track"><Check className="w-4 h-4" /></span>
+          ) : (
+            <span className="inline-flex items-center text-destructive" title="Off track"><X className="w-4 h-4" /></span>
+          );
+        },
+      },
+      {
+        id: 'on_track_month',
+        header: 'Month',
+        cell: (row) => {
+          const status = getOnTrackStatus(row, dateRange, activePeriod).month;
+          if (status == null) return <span className="text-muted-foreground">—</span>;
+          return status === 'on_track' ? (
+            <span className="inline-flex items-center text-green-600" title="On track"><Check className="w-4 h-4" /></span>
+          ) : (
+            <span className="inline-flex items-center text-destructive" title="Off track"><X className="w-4 h-4" /></span>
+          );
+        },
+      },
+      {
         id: 'last_scan',
         header: 'Last Scan',
         cell: (row) => (row.last_scan ? moment(row.last_scan).fromNow() : '—'),
       },
     ],
-    [userEmail]
+    [userEmail, dateRange, activePeriod]
   );
 
   if (isMobile && permissions.isDriver) {
@@ -591,6 +720,9 @@ export default function Dashboard() {
             setDateRange={setDateRange}
             activePeriod={activePeriod}
             setActivePeriod={setActivePeriod}
+            companyName={permissions.userProfile?.company_name ?? null}
+            companyLogoUrl={permissions.userProfile?.company_logo_url ?? null}
+            onResetDateRange={resetDateRangeToDefault}
             lockCustomerFilter={lockCustomerFilter}
             lockSiteFilter={permissions.isBatcher}
             restrictedCustomerName={restrictedCustomerName}
@@ -601,47 +733,50 @@ export default function Dashboard() {
         </div>
 
         {/* Stats cards (dashboard-01 SectionCards) */}
-        <SectionCards stats={stats} />
+        <SectionCards stats={stats} dateRange={dateRange} />
 
-        {/* Favorite Vehicles - Full Width */}
-        <div className="mb-8">
-          <FavoriteVehicles
-            vehicles={filteredVehicles}
-            selectedCustomer={selectedCustomer}
-            selectedSite={selectedSite}
-            userEmail={permissions.user?.email}
-          />
-        </div>
+        {/* Favorite Vehicles and Leaderboard - only on Compliance tab */}
+        {activeTab === 'compliance' && (
+          <>
+            <div className="mb-8">
+              <FavoriteVehicles
+                vehicles={filteredVehicles}
+                selectedCustomer={selectedCustomer}
+                selectedSite={selectedSite}
+                userEmail={permissions.user?.email}
+              />
+            </div>
 
-        {/* Leaderboard Link */}
-        {!permissions.hideLeaderboard && (
-          <Link to={`${createPageUrl('Leaderboard')}?customer=${selectedCustomer}&site=${selectedSite}`}>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              className="
-                backdrop-blur-xl bg-gradient-to-r from-purple-600 to-blue-600
-                rounded-2xl p-6 mb-8
-                shadow-xl shadow-purple-500/20
-                cursor-pointer group
-              "
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-primary-foreground/20 flex items-center justify-center">
-                    <Trophy className="w-6 h-6 text-white" />
+            {!permissions.hideLeaderboard && (
+              <Link to={`${createPageUrl('Leaderboard')}?customer=${selectedCustomer}&site=${selectedSite}`}>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  className="
+                    backdrop-blur-xl bg-gradient-to-r from-purple-600 to-blue-600
+                    rounded-2xl p-6 mb-8
+                    shadow-xl shadow-purple-500/20
+                    cursor-pointer group
+                  "
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-primary-foreground/20 flex items-center justify-center">
+                        <Trophy className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-white">Driver Leaderboard</h3>
+                        <p className="text-purple-200">See who's leading the pack this month</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-6 h-6 text-white/70 group-hover:translate-x-1 transition-transform" />
                   </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">Driver Leaderboard</h3>
-                    <p className="text-purple-200">See who's leading the pack this month</p>
-                  </div>
-                </div>
-                <ChevronRight className="w-6 h-6 text-white/70 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </motion.div>
-          </Link>
+                </motion.div>
+              </Link>
+            )}
+          </>
         )}
 
         {/* Content by route (sidebar-driven) */}
@@ -657,15 +792,57 @@ export default function Dashboard() {
               <div className="space-y-6">
                 <DataTable
                   columns={vehicleColumns}
-                  data={filteredVehicles}
+                  data={complianceFilteredVehicles}
                   getRowId={(row) => row.id ?? row.rfid ?? ''}
-                  searchPlaceholder="Search vehicles..."
+                  onRowClick={(row) => setSelectedVehicleForWashHistory(row)}
+                  searchPlaceholder="Search by vehicle, RFID, or site..."
                   title="Vehicle compliance"
+                  headerExtra={
+                    <>
+                      <Select value={complianceStatusFilter} onValueChange={setComplianceStatusFilter}>
+                        <SelectTrigger className="w-[160px] h-9">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Statuses</SelectItem>
+                          <SelectItem value="compliant">Compliant</SelectItem>
+                          <SelectItem value="non-compliant">Non-Compliant</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={complianceSiteFilter} onValueChange={setComplianceSiteFilter}>
+                        <SelectTrigger className="w-[160px] h-9">
+                          <SelectValue placeholder="Site" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Sites</SelectItem>
+                          {complianceTableSites.map((site) => (
+                            <SelectItem key={site.id} value={site.id}>
+                              {site.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button variant="outline" size="sm" className="h-9 gap-2" onClick={exportComplianceCSV}>
+                        <Download className="h-4 w-4" />
+                        Export CSV
+                      </Button>
+                    </>
+                  }
                 />
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <ChartAreaInteractive data={washTrendsData} />
                   <VehiclePerformanceChart vehicles={filteredVehicles} />
                 </div>
+
+                <VehicleWashHistoryModal
+                  vehicle={selectedVehicleForWashHistory}
+                  dateRange={dateRange}
+                  selectedCustomer={selectedCustomer}
+                  selectedSite={selectedSite}
+                  companyId={companyId}
+                  open={!!selectedVehicleForWashHistory}
+                  onClose={() => setSelectedVehicleForWashHistory(null)}
+                />
               </div>
             )}
 
@@ -721,7 +898,7 @@ export default function Dashboard() {
                   selectedCustomer,
                   selectedSite
                 }}
-                onSetDateRange={(range) => updateTabFilter({ dateRange: range, activePeriod: 'Custom' })}
+                onSetDateRange={(range) => updateSharedFilter({ dateRange: range, activePeriod: 'Custom' })}
                 isReportDataUpdating={isDataLoading || isFiltersFetching}
               />
             )}

@@ -108,6 +108,27 @@ export function getEffectiveConfig(email) {
 }
 
 /**
+ * Compute effective visible tab values for the current user.
+ * Priority: user visible_tabs > user hidden_tabs > role override (Super Admin config) > role defaults.
+ */
+function getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides) {
+  if (perms.visible_tabs && perms.visible_tabs.length > 0) {
+    return perms.visible_tabs;
+  }
+  if (perms.hidden_tabs && perms.hidden_tabs.length > 0) {
+    const allTabValues = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard'];
+    return allTabValues.filter((v) => !perms.hidden_tabs.includes(v));
+  }
+  const role = userProfile?.role;
+  const roleData = role && roleTabOverrides?.[role];
+  const roleTabs = Array.isArray(roleData) ? roleData : roleData?.visible_tabs;
+  if (role && roleTabs && roleTabs.length > 0) {
+    return roleTabs;
+  }
+  return getAccessibleTabs(userProfile) || [];
+}
+
+/**
  * Main permissions hook used throughout the app
  */
 export function usePermissions() {
@@ -115,9 +136,14 @@ export function usePermissions() {
   const userEmail = authUser?.email || userProfile?.email;
 
   const { permissions: dbPermissions, isLoading: permissionsLoading } = useUserPermissions(userEmail);
+  const { data: roleTabOverrides = {} } = useQuery(roleTabSettingsOptions());
 
   const permissions = useMemo(() => {
     const perms = dbPermissions || DEFAULT_PERMISSIONS;
+    const effectiveTabs = getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides);
+    // Driver Leaderboard visibility is controlled only by tab visibility (same as other tabs).
+    // Default: visible for all roles; Super Admin can turn off per role in Admin Console.
+    const hideLeaderboard = !effectiveTabs.includes('leaderboard');
 
     return {
       // Role checks based on user profile
@@ -142,9 +168,9 @@ export function usePermissions() {
       canEditSites: perms.can_edit_sites ?? true,
       canDeleteRecords: perms.can_delete_records ?? false,
 
-      // UI visibility from database
+      // UI visibility from database (leaderboard driven by tab visibility when not user-overridden)
       hideCostForecast: perms.hide_cost_forecast ?? false,
-      hideLeaderboard: perms.hide_leaderboard ?? false,
+      hideLeaderboard,
       hideUsageCosts: perms.hide_usage_costs ?? false,
 
       // Data restrictions from database
@@ -170,7 +196,7 @@ export function usePermissions() {
       // Raw permissions data
       _raw: perms,
     };
-  }, [dbPermissions, authUser, userProfile, permissionsLoading]);
+  }, [dbPermissions, authUser, userProfile, permissionsLoading, roleTabOverrides]);
 
   return permissions;
 }

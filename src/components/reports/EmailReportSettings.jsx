@@ -5,7 +5,14 @@ import { useAuth } from '@/lib/AuthContext';
 import { roleTabSettingsOptions } from '@/query/options';
 import { getDefaultEmailReportTypes } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
-import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Bell } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Chart } from 'chart.js/auto';
@@ -790,7 +797,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
   // Show error state if user failed to load
   if (userError && !userLoading) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="w-full p-6">
         <div className="bg-destructive/10 border-l-4 border-destructive p-6 rounded-lg">
           <div className="flex items-start">
             <div className="flex-shrink-0">
@@ -804,15 +811,13 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
                 We couldn't load your user information. This might be due to a temporary connection issue.
               </p>
               <p className="text-sm text-destructive mb-4">Error: {userError}</p>
-              <button
+              <Button
                 onClick={handleRetryUserLoad}
-                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-semibold py-2 px-4 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+                variant="destructive"
+                className="gap-2"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
                 Try Again
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -834,80 +839,80 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     );
   }
 
+  const durationOptions = [
+    { id: 'today', label: 'Today' },
+    { id: 'days', label: 'Last X days' },
+    { id: 'weeks', label: 'Last X weeks' },
+    { id: 'months', label: 'Last X months' },
+  ];
+
+  const handleDurationChange = (value) => {
+    const count = value === 'days' ? 7 : value === 'weeks' ? 1 : value === 'months' ? 1 : null;
+    setFormData(prev => ({
+      ...prev,
+      duration_type: value,
+      duration_count: count ?? prev.duration_count,
+    }));
+    if (value !== 'today') {
+      applyDurationToFilters(value, count ?? (value === 'days' ? 7 : 1));
+    } else {
+      applyDurationToFilters('today', null);
+    }
+  };
+
+  const actionDisabled = sendingNow || exportingPdf || userLoading || isReportDataUpdating || !userEmail || formData.report_types.length === 0;
+
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-primary to-primary/90 text-primary-foreground rounded-xl p-8 shadow-lg">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-primary-foreground/10 backdrop-blur-sm rounded-lg">
-            <Mail className="w-8 h-8" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Email Report Settings</h1>
-            <p className="text-primary-foreground/90">Request and configure email reports</p>
-          </div>
-        </div>
+    <div className="w-full space-y-6">
+      {/* Page header */}
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Email Report Settings</h1>
+        <p className="text-sm text-muted-foreground">Request and configure email reports for your account.</p>
       </div>
 
-      {/* Success Message */}
+      {/* Success message */}
       {successMessage && (
-        <div className="bg-primary/10 border-l-4 border-primary p-4 rounded-lg flex items-center gap-3">
-          <CheckCircle className="w-5 h-5 text-primary" />
-          <p className="text-foreground font-medium">{successMessage}</p>
-        </div>
+        <Alert className="border-primary/50 bg-primary/5">
+          <CheckCircle className="h-4 w-4 text-primary" />
+          <AlertDescription className="text-foreground">{successMessage}</AlertDescription>
+        </Alert>
       )}
 
-
-      {/* Report Duration - data range for the email */}
-      <div className="bg-card rounded-xl shadow-md p-6 border border-border">
-        <div className="flex items-center gap-3 mb-4">
-          <Clock className="w-5 h-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold text-foreground">Report Duration</h2>
-        </div>
-        <p className="text-sm text-muted-foreground mb-6">
-          Select the date range for the report data. The filters above will update to match.
-        </p>
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-3">
-            {[
-              { id: 'today', label: 'Today' },
-              { id: 'days', label: 'Last X days' },
-              { id: 'weeks', label: 'Last X weeks' },
-              { id: 'months', label: 'Last X months' }
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => {
-                  const count = opt.id === 'days' ? 7 : opt.id === 'weeks' ? 1 : opt.id === 'months' ? 1 : null;
-                  setFormData(prev => ({
-                    ...prev,
-                    duration_type: opt.id,
-                    duration_count: count ?? prev.duration_count
-                  }));
-                  if (opt.id !== 'today') {
-                    applyDurationToFilters(opt.id, count ?? (opt.id === 'days' ? 7 : 1));
-                  } else {
-                    applyDurationToFilters('today', null);
-                  }
-                }}
-                className={`px-4 py-2.5 rounded-lg border-2 transition-all text-sm font-medium ${
-                  formData.duration_type === opt.id
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-muted-foreground hover:border-primary/50'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+      {/* Report duration */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-base">Report duration</CardTitle>
           </div>
+          <CardDescription>
+            Choose the date range for the report. The dashboard filters above will update to match.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <RadioGroup
+            value={formData.duration_type}
+            onValueChange={handleDurationChange}
+            className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+          >
+            {durationOptions.map((opt) => (
+              <div key={opt.id} className="flex items-center space-x-2">
+                <RadioGroupItem value={opt.id} id={`duration-${opt.id}`} />
+                <Label htmlFor={`duration-${opt.id}`} className="cursor-pointer text-sm font-normal">
+                  {opt.label}
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
           {(formData.duration_type === 'days' || formData.duration_type === 'weeks' || formData.duration_type === 'months') && (
-            <div className="flex items-center gap-3 flex-wrap">
-              <label className="text-sm font-medium text-muted-foreground">
-                {formData.duration_type === 'days' && 'Number of days:'}
-                {formData.duration_type === 'weeks' && 'Number of weeks:'}
-                {formData.duration_type === 'months' && 'Number of months:'}
-              </label>
-              <input
+            <div className="flex flex-wrap items-center gap-3">
+              <Label htmlFor="duration-count" className="text-sm text-muted-foreground shrink-0">
+                {formData.duration_type === 'days' && 'Number of days'}
+                {formData.duration_type === 'weeks' && 'Number of weeks'}
+                {formData.duration_type === 'months' && 'Number of months'}
+              </Label>
+              <Input
+                id="duration-count"
                 type="number"
                 min={1}
                 max={formData.duration_type === 'days' ? 365 : formData.duration_type === 'weeks' ? 52 : 60}
@@ -917,7 +922,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
                   setFormData(prev => ({ ...prev, duration_count: val }));
                   applyDurationToFilters(formData.duration_type, val);
                 }}
-                className="w-20 px-3 py-2 border border-input bg-background text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className="w-24"
               />
               <span className="text-sm text-muted-foreground">
                 {formData.duration_type === 'days' && `Last ${formData.duration_count} day${formData.duration_count > 1 ? 's' : ''}`}
@@ -926,139 +931,149 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
               </span>
             </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Report Types Selection */}
-      <div className="bg-card rounded-xl shadow-md p-6 border border-border">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Mail className="w-5 h-5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold text-foreground">Select Reports to Include</h2>
+      {/* Report types */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div className="space-y-1.5">
+            <CardTitle className="text-base">Reports to include</CardTitle>
+            <CardDescription>Select which sections appear in the email and PDF report.</CardDescription>
           </div>
           {reportTypes.length > 0 && (
-            <button
-              onClick={handleAllReportsToggle}
-              className="px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
-            >
-              {reportTypes.every(r => formData.report_types.includes(r.id)) ? 'Deselect All' : 'Select All'}
-            </button>
+            <Button variant="ghost" size="sm" onClick={handleAllReportsToggle}>
+              {reportTypes.every((r) => formData.report_types.includes(r.id)) ? 'Deselect all' : 'Select all'}
+            </Button>
           )}
-        </div>
-
-        {reportTypes.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4">
-            No report types are available for your role. Contact your administrator to enable report types.
-          </p>
-        ) : (
-        <div className="grid gap-4">
-          {reportTypes.map((report) => (
-            <label
-              key={report.id}
-              className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                formData.report_types.includes(report.id)
-                  ? 'border-primary bg-primary/10'
-                  : 'border-border hover:border-primary/30'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={formData.report_types.includes(report.id)}
-                onChange={() => handleReportTypeToggle(report.id)}
-                className="mt-1 w-5 h-5 text-primary border-input rounded focus:ring-primary"
-              />
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">{report.icon}</span>
-                  <span className="font-semibold text-foreground">{report.label}</span>
+        </CardHeader>
+        <CardContent>
+          {reportTypes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              No report types are available for your role. Contact your administrator to enable report types.
+            </p>
+          ) : (
+            <div className="grid gap-3">
+              {reportTypes.map((report) => (
+                <div
+                  key={report.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleReportTypeToggle(report.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleReportTypeToggle(report.id);
+                    }
+                  }}
+                  className="flex items-start space-x-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 cursor-pointer select-none"
+                >
+                  <div onClick={(e) => e.stopPropagation()} className="shrink-0 pt-0.5">
+                    <Checkbox
+                      id={`report-${report.id}`}
+                      checked={formData.report_types.includes(report.id)}
+                      onCheckedChange={() => handleReportTypeToggle(report.id)}
+                    />
+                  </div>
+                  <div className="grid gap-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-medium leading-none">
+                      <span className="text-base" aria-hidden>{report.icon}</span>
+                      {report.label}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{report.description}</p>
+                  </div>
                 </div>
-                <p className="text-sm text-muted-foreground">{report.description}</p>
-              </div>
-            </label>
-          ))}
-        </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Updating data notice — block send/export until report data is ready */}
+      {/* Data updating notice */}
       {isReportDataUpdating && (
-        <div className="flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 dark:bg-amber-500/10 dark:border-amber-500/40 p-4 mb-4">
-          <Loader2 className="w-5 h-5 shrink-0 animate-spin text-amber-600 dark:text-amber-400" />
-          <div>
-            <p className="font-medium text-amber-900 dark:text-amber-200">Data is updating</p>
-            <p className="text-sm text-amber-800/90 dark:text-amber-200/90">Please wait for the report data above to finish loading. You can then send the email or export to PDF.</p>
-          </div>
-        </div>
+        <Alert className="border-amber-500/50 bg-amber-500/10">
+          <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-500" />
+          <AlertDescription>
+            <span className="font-medium text-foreground">Data is updating.</span> Wait for the report data above to finish loading before sending or exporting.
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Action Buttons */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <button
-          onClick={handleSendNow}
-          disabled={sendingNow || userLoading || isReportDataUpdating || !userEmail || formData.report_types.length === 0}
-          className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-4 px-6 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-          title={
-            isReportDataUpdating ? 'Please wait for data to finish updating' :
-            userLoading ? 'Loading user information...' :
-            !userEmail ? 'User email not available' :
-            formData.report_types.length === 0 ? 'Please select at least one report type' :
-            'Send email report now'
-          }
-        >
-          {sendingNow ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Sending...
-            </>
-          ) : userLoading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Loading...
-            </>
-          ) : isReportDataUpdating ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Wait for data...
-            </>
-          ) : (
-            <>
-              <Send className="w-5 h-5" />
-              Email Me Now
-            </>
-          )}
-        </button>
+      {/* Actions */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              size="lg"
+              className="flex-1 gap-2"
+              onClick={handleSendNow}
+              disabled={actionDisabled}
+              title={
+                isReportDataUpdating ? 'Please wait for data to finish updating' :
+                userLoading ? 'Loading user information...' :
+                !userEmail ? 'User email not available' :
+                formData.report_types.length === 0 ? 'Please select at least one report type' :
+                'Send email report now'
+              }
+            >
+              {sendingNow ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : userLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading...
+                </>
+              ) : isReportDataUpdating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Wait for data...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Email me now
+                </>
+              )}
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="flex-1 gap-2"
+              onClick={handleExportPdf}
+              disabled={actionDisabled}
+              title={
+                isReportDataUpdating ? 'Please wait for data to finish updating' :
+                userLoading ? 'Loading user information...' :
+                !userEmail ? 'User email not available' :
+                formData.report_types.length === 0 ? 'Please select at least one report type' :
+                'Export report to PDF'
+              }
+            >
+              {exportingPdf ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Exporting...
+                </>
+              ) : isReportDataUpdating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Wait for data...
+                </>
+              ) : (
+                <>
+                  <FileDown className="h-4 w-4" />
+                  Export to PDF
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-        <button
-          onClick={handleExportPdf}
-          disabled={exportingPdf || userLoading || isReportDataUpdating || !userEmail || formData.report_types.length === 0}
-          className="flex-1 bg-card border border-border hover:bg-accent text-foreground font-semibold py-4 px-6 rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-          title={
-            isReportDataUpdating ? 'Please wait for data to finish updating' :
-            userLoading ? 'Loading user information...' :
-            !userEmail ? 'User email not available' :
-            formData.report_types.length === 0 ? 'Please select at least one report type' :
-            'Export report to PDF'
-          }
-        >
-          {exportingPdf ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Exporting...
-            </>
-          ) : isReportDataUpdating ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Wait for data...
-            </>
-          ) : (
-            <>
-              <FileDown className="w-5 h-5" />
-              Export to PDF
-            </>
-          )}
-        </button>
-      </div>
-
+      {/* Hidden PDF container */}
       <div
         ref={pdfContainerRef}
         style={{
@@ -1072,19 +1087,20 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           pointerEvents: 'none',
           zIndex: -9999,
           overflow: 'visible',
-          visibility: pdfHtml ? 'visible' : 'hidden'
+          visibility: pdfHtml ? 'visible' : 'hidden',
         }}
         aria-hidden="true"
         dangerouslySetInnerHTML={{ __html: pdfHtml }}
       />
 
-      {/* Info Box */}
-      <div className="bg-primary/10 border-l-4 border-primary p-4 rounded-lg">
-        <p className="text-sm text-foreground">
-          <strong>Note:</strong> The report uses the date range and filters (customer, site) selected above. Reports will be sent to{' '}
-          <strong className="text-primary">{userEmail || 'your email'}</strong>.{' '}
-        </p>
-      </div>
+      {/* Info */}
+      <Alert className="border-border bg-muted/30">
+        <Info className="h-4 w-4 text-muted-foreground" />
+        <AlertDescription>
+          The report uses the date range and filters (customer, site) selected above. Reports will be sent to{' '}
+          <strong className="text-foreground">{userEmail || 'your email'}</strong>.
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

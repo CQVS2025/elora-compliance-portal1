@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DollarSign, Calculator, Droplet, MapPin, Download, Search, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -198,6 +198,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
   const [currentPage, setCurrentPage] = useState(1);
   const [apiPage, setApiPage] = useState(1);
   const itemsPerPage = 20;
+  const autoSkippedPagesRef = useRef(new Set());
 
   // Scans API: paginated { total, page, pageSize, pageCount, data }. Each item is a wash event
   // (deviceRef, deviceName, rfid, createdAt, etc.). We group by vehicle/device, apply pricing
@@ -220,22 +221,32 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
   const pageCount = isPaginated ? scansResult.pageCount ?? 1 : 1;
   const currentApiPage = isPaginated ? scansResult.page ?? apiPage : 1;
 
+  // Filter out auto check-ins and non-success scans for usage cost reporting
+  const filteredScansForCost = useMemo(() => {
+    return scans.filter((scan) => {
+      const status = (scan.statusLabel ?? '').toString().toLowerCase();
+      const rfid = (scan.rfid ?? '').toString().toLowerCase();
+      return status === 'success' && rfid !== 'auto';
+    });
+  }, [scans]);
+
   useEffect(() => {
     setApiPage(1);
     setCurrentPage(1);
+    autoSkippedPagesRef.current.clear();
   }, [selectedCustomer, selectedSite, dateRange.start, dateRange.end]);
 
   // Process data: scans API returns { total, page, pageSize, pageCount, data }.
   // We group scans by vehicle (or by device when customer/site/vehicle are null),
   // compute cost per row, then drive summary cards, table, charts, and customer summary.
   const costData = useMemo(() => {
-    if (!scans.length) return { vehicles: [], summary: {}, customerSummary: [], dailyCosts: [], topSites: [] };
+    if (!filteredScansForCost.length) return { vehicles: [], summary: {}, customerSummary: [], dailyCosts: [], topSites: [] };
 
     const hasVehicleContext = (s) => s.customerRef != null && s.siteRef != null && s.vehicleRef != null;
 
     // Group scans by vehicle when API provides customer/site/vehicle; otherwise by device
     const vehicleGroups = {};
-    scans.forEach(scan => {
+    filteredScansForCost.forEach(scan => {
       const key = hasVehicleContext(scan)
         ? `${scan.customerRef}_${scan.siteRef}_${scan.vehicleRef}`
         : `device_${scan.deviceRef ?? scan.internalScanId ?? scan.scanRef}`;
@@ -321,7 +332,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
 
     // Daily costs for chart
     const dailyGroups = {};
-    scans.forEach(scan => {
+    filteredScansForCost.forEach(scan => {
       const date = moment(scan.createdAt ?? scan.timestamp).format('MMM D');
       const state = getStateFromSite(scan.siteName, scan.customerName);
       const cost = calculateCostPerScan(scan.customerName, state);
@@ -354,7 +365,21 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
       dailyCosts,
       topSites
     };
-  }, [scans]);
+  }, [filteredScansForCost]);
+
+  // Automatically skip API pages that only contain auto check-ins
+  useEffect(() => {
+    if (
+      isPaginated &&
+      scans.length > 0 &&
+      filteredScansForCost.length === 0 &&
+      currentApiPage < pageCount &&
+      !autoSkippedPagesRef.current.has(currentApiPage)
+    ) {
+      autoSkippedPagesRef.current.add(currentApiPage);
+      setApiPage((prev) => Math.min(pageCount, prev + 1));
+    }
+  }, [filteredScansForCost, isPaginated, scans.length, currentApiPage, pageCount]);
 
   // Filter and paginate
   const filteredVehicles = useMemo(() => {
@@ -425,7 +450,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
     );
   }
 
-  if (!scans.length) {
+  if (!filteredScansForCost.length) {
     return (
       <div className="space-y-6">
         {!permissions.hideCostForecast && (
@@ -448,7 +473,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
     <div className="space-y-6 relative">
       {!permissions.hideCostForecast && (
         <CostForecast
-          scans={scans}
+          scans={filteredScansForCost}
           selectedCustomer={selectedCustomer}
           selectedSite={selectedSite}
         />
@@ -504,11 +529,13 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-foreground">{totalFromApi > 0 ? totalFromApi.toLocaleString() : summary.totalScans.toLocaleString()}</div>
+              <div className="text-3xl font-bold text-foreground">
+                {filteredScansForCost.length.toLocaleString()}
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {isPaginated && pageCount > 1
-                  ? `Showing page ${currentApiPage} of ${pageCount} (${scans.length} scans on this page)`
-                  : 'Total washes (selected period)'}
+                  ? `Success scans on page ${currentApiPage} (${filteredScansForCost.length} on this page)`
+                  : 'Success scans (selected period)'}
               </p>
             </CardContent>
           </Card>
@@ -535,7 +562,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3">
           <p className="text-sm text-muted-foreground">
             Scans page <span className="font-semibold text-foreground">{currentApiPage}</span> of <span className="font-semibold text-foreground">{pageCount.toLocaleString()}</span>
-            {' '}({totalFromApi.toLocaleString()} total in period)
+            {' '}({filteredScansForCost.length.toLocaleString()} success scans on this page)
           </p>
           <div className="flex items-center gap-2">
             <Button

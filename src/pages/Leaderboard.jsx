@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Trophy, Medal, Star, TrendingUp, Flame, Award, Target, Zap, Crown, Building2, MapPin, Loader2 } from 'lucide-react';
+import { Trophy, Medal, Star, TrendingUp, Flame, Award, Target, Zap, Crown, Building2, MapPin, Loader2, ShieldAlert } from 'lucide-react';
 import moment from 'moment';
 import confetti from 'canvas-confetti';
 import { vehiclesOptions, scansOptions } from '@/query/options';
@@ -8,6 +9,7 @@ import { usePermissions } from '@/components/auth/PermissionGuard';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import DataPagination from '@/components/ui/DataPagination';
+import { Button } from '@/components/ui/button';
 
 const RANKINGS_PAGE_SIZE = 20;
 
@@ -31,10 +33,27 @@ function getRankIcon(rank) {
 }
 
 export default function Leaderboard() {
+  const navigate = useNavigate();
   const [celebratedTop, setCelebratedTop] = useState(false);
   const [rankingsPage, setRankingsPage] = useState(1);
   const permissions = usePermissions();
   const companyId = permissions.userProfile?.company_id;
+
+  if (permissions.hideLeaderboard) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[300px]">
+        <Card className="max-w-md border-border">
+          <CardContent className="pt-6 flex flex-col items-center gap-4 text-center">
+            <ShieldAlert className="w-12 h-12 text-muted-foreground" />
+            <p className="text-muted-foreground">Driver Leaderboard is not available for your role.</p>
+            <Button variant="outline" onClick={() => navigate('/')}>
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const urlParams = new URLSearchParams(window.location.search);
   const customerFilter = urlParams.get('customer') || 'all';

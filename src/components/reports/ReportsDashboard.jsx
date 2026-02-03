@@ -351,6 +351,10 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
     </div>
   );
 
+  const reportsDateRangeStr = dateRange?.start && dateRange?.end
+    ? `${moment(dateRange.start).format('D MMM yyyy')} – ${moment(dateRange.end).format('D MMM yyyy')}`
+    : null;
+
   return (
     <div className="space-y-8 w-full">
       {/* Header with Filters */}
@@ -379,6 +383,9 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Compliance Rate</p>
+                {reportsDateRangeStr && (
+                  <p className="text-xs text-muted-foreground/90 mt-0.5">{reportsDateRangeStr}</p>
+                )}
                 <p className="text-3xl font-bold text-foreground mt-1">{complianceStats.complianceRate}%</p>
                 <div className="flex items-center gap-1 mt-2">
                   {complianceStats.trend === 'good' ? (
@@ -410,6 +417,9 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Washes</p>
+                {reportsDateRangeStr && (
+                  <p className="text-xs text-muted-foreground/90 mt-0.5">{reportsDateRangeStr}</p>
+                )}
                 <p className="text-3xl font-bold text-foreground mt-1">
                   {filteredData.filteredScans.length}
                 </p>

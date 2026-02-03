@@ -44,7 +44,7 @@ import {
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
-const PAGE_SIZES = [10, 20, 50];
+const PAGE_SIZES = [10, 20, 50, 100];
 
 function SortableRow({ id, children, disabled }) {
   const {
@@ -96,8 +96,10 @@ export default function DataTable({
   onSelectionChange,
   sortable = false,
   onReorder,
+  onRowClick,
   className,
   title,
+  headerExtra,
 }) {
   const [internalSearch, setInternalSearch] = useState('');
   const [internalPage, setInternalPage] = useState(1);
@@ -188,10 +190,10 @@ export default function DataTable({
               const rowId = getRowId(row, (page - 1) * pageSize + index);
               const RowWrapper = sortable ? SortableRow : TableRow;
               const rowProps = sortable ? { id: rowId, disabled: false } : {};
-              return (
-                <RowWrapper key={rowId} {...rowProps}>
+              const sharedCells = (
+                <>
                   {onSelectionChange || selectedRowIds ? (
-                    <TableCell className="w-10">
+                    <TableCell className="w-10" onClick={onRowClick ? (e) => e.stopPropagation() : undefined}>
                       <Checkbox
                         checked={selection.has(rowId)}
                         onCheckedChange={() => toggleRow(rowId)}
@@ -200,11 +202,24 @@ export default function DataTable({
                     </TableCell>
                   ) : null}
                   {visibleColumns.map((col) => (
-                    <TableCell key={col.id}>
+                    <TableCell key={col.id} onClick={col.id === 'favorite' && onRowClick ? (e) => e.stopPropagation() : undefined}>
                       {col.cell ? col.cell(row) : (row[col.accessorKey ?? col.id] ?? '—')}
                     </TableCell>
                   ))}
+                </>
+              );
+              return sortable ? (
+                <RowWrapper key={rowId} {...rowProps}>
+                  {sharedCells}
                 </RowWrapper>
+              ) : (
+                <TableRow
+                  key={rowId}
+                  className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : undefined}
+                  onClick={onRowClick ? () => onRowClick(row, index) : undefined}
+                >
+                  {sharedCells}
+                </TableRow>
               );
             })}
           </SortableContext>
@@ -213,9 +228,13 @@ export default function DataTable({
         paginatedData.map((row, index) => {
           const rowId = getRowId(row, (page - 1) * pageSize + index);
           return (
-            <TableRow key={rowId}>
+            <TableRow
+              key={rowId}
+              className={onRowClick ? 'cursor-pointer hover:bg-muted/50' : undefined}
+              onClick={onRowClick ? () => onRowClick(row, index) : undefined}
+            >
               {onSelectionChange || selectedRowIds ? (
-                <TableCell className="w-10">
+                <TableCell className="w-10" onClick={(e) => onRowClick && e.stopPropagation()}>
                   <Checkbox
                     checked={selection.has(rowId)}
                     onCheckedChange={() => toggleRow(rowId)}
@@ -224,7 +243,7 @@ export default function DataTable({
                 </TableCell>
               ) : null}
               {visibleColumns.map((col) => (
-                <TableCell key={col.id}>
+                <TableCell key={col.id} onClick={col.id === 'favorite' && onRowClick ? (e) => e.stopPropagation() : undefined}>
                   {col.cell ? col.cell(row) : (row[col.accessorKey ?? col.id] ?? '—')}
                 </TableCell>
               ))}
@@ -239,7 +258,8 @@ export default function DataTable({
     <Card className={cn('overflow-hidden', className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         {title && <h3 className="text-lg font-semibold">{title}</h3>}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {headerExtra}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input

@@ -33,7 +33,8 @@ export const devicesOptions = (companyId, filters = {}) =>
       }
 
       const response = await callEdgeFunction('elora_devices', params);
-      let data = response?.data ?? response ?? [];
+      // API returns { total, data: [...] }; edge returns that as-is. Use .data so we never treat wrapper as list.
+      let data = Array.isArray(response) ? response : (response?.data ?? []);
       // Client-side tenant filter if API does not support customer filter (e.g. GET /api/devices).
       // Include items with null customerRef (trust backend); only exclude when ref differs.
       if (!isSuperAdmin && companyEloraCustomerRef && Array.isArray(data)) {
@@ -45,7 +46,7 @@ export const devicesOptions = (companyId, filters = {}) =>
       }
       return data;
     },
-    staleTime: 2 * 60 * 1000, // 2 minutes - device status changes
+    staleTime: 30 * 1000, // 30s - lastScanAt changes frequently; match old platform behaviour
     gcTime: 10 * 60 * 1000,
     enabled: !!companyId,
   });
