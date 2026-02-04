@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DollarSign, Calculator, Droplet, MapPin, Download, Search, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,9 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import moment from 'moment';
-import { supabaseClient } from "@/api/supabaseClient";
 import { motion } from 'framer-motion';
 import DataPagination from '@/components/ui/DataPagination';
+import { usePermissions } from '@/components/auth/PermissionGuard';
+import { scansOptions } from '@/query/options';
+import CostForecast from '@/components/analytics/CostForecast';
 
 // Pricing rules
 const PRICING_RULES = {
@@ -186,49 +188,78 @@ const getPricingDetails = (customerName, state) => {
   return PRICING_RULES[state];
 };
 
-async function fetchScans({ customerId, siteId, startDate, endDate } = {}) {
-  const params = {};
-  if (customerId && customerId !== 'all') params.customer_id = customerId;
-  if (siteId && siteId !== 'all') params.site_id = siteId;
-  if (startDate) params.start_date = startDate;
-  if (endDate) params.end_date = endDate;
-  
-  const response = await supabaseClient.elora.scans(params);
-  return response?.data ?? response ?? [];
-}
+const SCANS_PAGE_SIZE = 100;
 
 export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }) {
+  const permissions = usePermissions();
+  const companyId = permissions.userProfile?.company_id ?? 'portal';
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCustomers, setExpandedCustomers] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [apiPage, setApiPage] = useState(1);
   const itemsPerPage = 20;
+  const autoSkippedPagesRef = useRef(new Set());
 
-  const { data: scans = [], isLoading, isFetching } = useQuery({
-    queryKey: ['costs-scans', selectedCustomer, selectedSite, dateRange.start, dateRange.end],
-    queryFn: () => fetchScans({
+  // Scans API: paginated { total, page, pageSize, pageCount, data }. Each item is a wash event
+  // (deviceRef, deviceName, rfid, createdAt, etc.). We group by vehicle/device, apply pricing
+  // by state, then show: summary cards, Cost Breakdown by Vehicle table, Cost Over Time chart,
+  // Top Sites, and Cost Summary by Customer. Use API pagination (Previous/Next) to load more pages.
+  const { data: scansResult, isLoading, isFetching } = useQuery(
+    scansOptions(companyId, {
       customerId: selectedCustomer,
       siteId: selectedSite,
       startDate: dateRange.start,
-      endDate: dateRange.end
-    }),
-  });
+      endDate: dateRange.end,
+      page: apiPage,
+      pageSize: SCANS_PAGE_SIZE,
+    })
+  );
 
-  // Process data
+  const isPaginated = scansResult != null && typeof scansResult === 'object' && 'data' in scansResult;
+  const scans = isPaginated ? scansResult.data ?? [] : (Array.isArray(scansResult) ? scansResult : []);
+  const totalFromApi = isPaginated ? scansResult.total ?? 0 : scans.length;
+  const pageCount = isPaginated ? scansResult.pageCount ?? 1 : 1;
+  const currentApiPage = isPaginated ? scansResult.page ?? apiPage : 1;
+
+  // Filter out auto check-ins and non-success scans for usage cost reporting
+  const filteredScansForCost = useMemo(() => {
+    return scans.filter((scan) => {
+      const status = (scan.statusLabel ?? '').toString().toLowerCase();
+      const rfid = (scan.rfid ?? '').toString().toLowerCase();
+      return status === 'success' && rfid !== 'auto';
+    });
+  }, [scans]);
+
+  useEffect(() => {
+    setApiPage(1);
+    setCurrentPage(1);
+    autoSkippedPagesRef.current.clear();
+  }, [selectedCustomer, selectedSite, dateRange.start, dateRange.end]);
+
+  // Process data: scans API returns { total, page, pageSize, pageCount, data }.
+  // We group scans by vehicle (or by device when customer/site/vehicle are null),
+  // compute cost per row, then drive summary cards, table, charts, and customer summary.
   const costData = useMemo(() => {
-    if (!scans.length) return { vehicles: [], summary: {}, customerSummary: [], dailyCosts: [], topSites: [] };
+    if (!filteredScansForCost.length) return { vehicles: [], summary: {}, customerSummary: [], dailyCosts: [], topSites: [] };
 
-    // Group scans by vehicle
+    const hasVehicleContext = (s) => s.customerRef != null && s.siteRef != null && s.vehicleRef != null;
+
+    // Group scans by vehicle when API provides customer/site/vehicle; otherwise by device
     const vehicleGroups = {};
-    scans.forEach(scan => {
-      const key = `${scan.customerRef}_${scan.siteRef}_${scan.vehicleRef}`;
+    filteredScansForCost.forEach(scan => {
+      const key = hasVehicleContext(scan)
+        ? `${scan.customerRef}_${scan.siteRef}_${scan.vehicleRef}`
+        : `device_${scan.deviceRef ?? scan.internalScanId ?? scan.scanRef}`;
       if (!vehicleGroups[key]) {
+        const deviceOnly = !hasVehicleContext(scan);
         vehicleGroups[key] = {
-          customerName: scan.customerName,
-          customerRef: scan.customerRef,
-          siteName: scan.siteName,
-          siteRef: scan.siteRef,
-          vehicleName: scan.vehicleName,
-          vehicleRfid: scan.vehicleRfid,
+          customerName: scan.customerName ?? '—',
+          customerRef: scan.customerRef ?? key,
+          siteName: scan.siteName ?? (deviceOnly ? (scan.deviceName ?? '—') : '—'),
+          siteRef: scan.siteRef ?? (deviceOnly ? (scan.deviceRef ?? key) : key),
+          vehicleName: scan.vehicleName ?? scan.deviceName ?? '—',
+          vehicleRef: scan.vehicleRef ?? scan.deviceRef ?? key,
+          vehicleRfid: scan.vehicleRfid ?? scan.rfid ?? '—',
           scans: [],
         };
       }
@@ -242,7 +273,8 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
       const costPerScan = calculateCostPerScan(group.customerName, state);
       const pricingDetails = getPricingDetails(group.customerName, state);
       const totalCost = totalScans * costPerScan;
-      const lastScan = group.scans.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+      const lastScan = group.scans.sort((a, b) => new Date(b.createdAt ?? b.timestamp ?? 0) - new Date(a.createdAt ?? a.timestamp ?? 0))[0];
+      const lastScanDate = lastScan?.createdAt ?? lastScan?.timestamp;
 
       return {
         ...group,
@@ -252,7 +284,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         pricePerLitre: pricingDetails.pricePerLitre,
         costPerScan,
         totalCost,
-        lastScan: lastScan?.timestamp,
+        lastScan: lastScanDate,
       };
     });
 
@@ -267,23 +299,26 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
       return siteCost > (max.cost || 0) ? { name: v.siteName, cost: siteCost } : max;
     }, {});
 
-    // Customer summary
+    // Customer summary (aggregate device-only rows under "Devices (this page)")
     const customerGroups = {};
     vehicles.forEach(v => {
-      if (!customerGroups[v.customerRef]) {
-        customerGroups[v.customerRef] = {
-          customerName: v.customerName,
-          customerRef: v.customerRef,
+      const isDeviceOnly = v.customerName === '—';
+      const custKey = isDeviceOnly ? '__devices__' : v.customerRef;
+      const custName = isDeviceOnly ? 'Devices (this page)' : v.customerName;
+      if (!customerGroups[custKey]) {
+        customerGroups[custKey] = {
+          customerName: custName,
+          customerRef: custKey,
           totalScans: 0,
           totalCost: 0,
           sites: {}
         };
       }
-      customerGroups[v.customerRef].totalScans += v.totalScans;
-      customerGroups[v.customerRef].totalCost += v.totalCost;
+      customerGroups[custKey].totalScans += v.totalScans;
+      customerGroups[custKey].totalCost += v.totalCost;
 
-      if (!customerGroups[v.customerRef].sites[v.siteRef]) {
-        customerGroups[v.customerRef].sites[v.siteRef] = {
+      if (!customerGroups[custKey].sites[v.siteRef]) {
+        customerGroups[custKey].sites[v.siteRef] = {
           siteName: v.siteName,
           state: v.state,
           totalScans: 0,
@@ -291,14 +326,14 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
           costPerScan: v.costPerScan
         };
       }
-      customerGroups[v.customerRef].sites[v.siteRef].totalScans += v.totalScans;
-      customerGroups[v.customerRef].sites[v.siteRef].totalCost += v.totalCost;
+      customerGroups[custKey].sites[v.siteRef].totalScans += v.totalScans;
+      customerGroups[custKey].sites[v.siteRef].totalCost += v.totalCost;
     });
 
     // Daily costs for chart
     const dailyGroups = {};
-    scans.forEach(scan => {
-      const date = moment(scan.timestamp).format('MMM D');
+    filteredScansForCost.forEach(scan => {
+      const date = moment(scan.createdAt ?? scan.timestamp).format('MMM D');
       const state = getStateFromSite(scan.siteName, scan.customerName);
       const cost = calculateCostPerScan(scan.customerName, state);
       dailyGroups[date] = (dailyGroups[date] || 0) + cost;
@@ -330,7 +365,21 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
       dailyCosts,
       topSites
     };
-  }, [scans]);
+  }, [filteredScansForCost]);
+
+  // Automatically skip API pages that only contain auto check-ins
+  useEffect(() => {
+    if (
+      isPaginated &&
+      scans.length > 0 &&
+      filteredScansForCost.length === 0 &&
+      currentApiPage < pageCount &&
+      !autoSkippedPagesRef.current.has(currentApiPage)
+    ) {
+      autoSkippedPagesRef.current.add(currentApiPage);
+      setApiPage((prev) => Math.min(pageCount, prev + 1));
+    }
+  }, [filteredScansForCost, isPaginated, scans.length, currentApiPage, pageCount]);
 
   // Filter and paginate
   const filteredVehicles = useMemo(() => {
@@ -394,19 +443,25 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-[#7CB342] animate-spin mx-auto mb-4" />
-          <p className="text-slate-600">Calculating costs...</p>
+          <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Calculating costs...</p>
         </div>
       </div>
     );
   }
 
-  if (!scans.length) {
+  if (!filteredScansForCost.length) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <Droplet className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-600 text-lg">No wash data for selected period</p>
+      <div className="space-y-6">
+        {!permissions.hideCostForecast && (
+          <CostForecast scans={[]} selectedCustomer={selectedCustomer} selectedSite={selectedSite} />
+        )}
+        <div className="flex items-center justify-center py-12 rounded-xl border border-border bg-card">
+          <div className="text-center">
+            <Droplet className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground text-lg">No wash data for selected period</p>
+            <p className="text-sm text-muted-foreground mt-1">Adjust the date range to see cost data</p>
+          </div>
         </div>
       </div>
     );
@@ -416,11 +471,18 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
 
   return (
     <div className="space-y-6 relative">
+      {!permissions.hideCostForecast && (
+        <CostForecast
+          scans={filteredScansForCost}
+          selectedCustomer={selectedCustomer}
+          selectedSite={selectedSite}
+        />
+      )}
       {isFetching && (
-        <div className="absolute inset-0 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
-          <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 px-6 py-3 rounded-xl shadow-lg">
-            <Loader2 className="w-5 h-5 text-[#7CB342] animate-spin" />
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Updating costs...</span>
+        <div className="absolute inset-0 bg-background/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
+          <div className="flex items-center gap-3 bg-card px-6 py-3 rounded-xl shadow-lg border border-border">
+            <Loader2 className="w-5 h-5 text-primary animate-spin" />
+            <span className="text-sm font-medium text-foreground">Updating costs...</span>
           </div>
         </div>
       )}
@@ -429,14 +491,16 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Total Usage Cost</CardTitle>
-              <div className="w-10 h-10 rounded-lg bg-[#7CB342]/10 flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-[#7CB342]" />
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Usage Cost</CardTitle>
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-primary" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-slate-900">${summary.totalCost.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <p className="text-xs text-slate-500 mt-1">Total wash costs (selected period)</p>
+              <div className="text-3xl font-bold text-foreground">${summary.totalCost.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isPaginated && pageCount > 1 ? 'Cost for scans on this page' : 'Total wash costs (selected period)'}
+              </p>
             </CardContent>
           </Card>
         </motion.div>
@@ -444,14 +508,14 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Average Cost Per Scan</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Average Cost Per Scan</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                 <Calculator className="w-5 h-5 text-blue-600" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-slate-900">${summary.avgCostPerScan.toFixed(2)}</div>
-              <p className="text-xs text-slate-500 mt-1">Average cost per wash</p>
+              <div className="text-3xl font-bold text-foreground">${summary.avgCostPerScan.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Average cost per wash</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -459,14 +523,20 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Total Scans</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Scans</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-cyan-100 flex items-center justify-center">
                 <Droplet className="w-5 h-5 text-cyan-600" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-slate-900">{summary.totalScans.toLocaleString()}</div>
-              <p className="text-xs text-slate-500 mt-1">Total washes (selected period)</p>
+              <div className="text-3xl font-bold text-foreground">
+                {filteredScansForCost.length.toLocaleString()}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isPaginated && pageCount > 1
+                  ? `Success scans on page ${currentApiPage} (${filteredScansForCost.length} on this page)`
+                  : 'Success scans (selected period)'}
+              </p>
             </CardContent>
           </Card>
         </motion.div>
@@ -474,18 +544,49 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Most Expensive Site</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Most Expensive Site</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
                 <MapPin className="w-5 h-5 text-purple-600" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold text-slate-900">{summary.mostExpensiveSite.name || 'N/A'}</div>
-              <p className="text-sm text-[#7CB342] font-semibold mt-1">${(summary.mostExpensiveSite.cost || 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
+              <div className="text-xl font-bold text-foreground">{summary.mostExpensiveSite.name || 'N/A'}</div>
+              <p className="text-sm text-primary font-semibold mt-1">${(summary.mostExpensiveSite.cost || 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}</p>
             </CardContent>
           </Card>
         </motion.div>
       </div>
+
+      {/* API pagination: load next/previous page of scans */}
+      {isPaginated && pageCount > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            Scans page <span className="font-semibold text-foreground">{currentApiPage}</span> of <span className="font-semibold text-foreground">{pageCount.toLocaleString()}</span>
+            {' '}({filteredScansForCost.length.toLocaleString()} success scans on this page)
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setApiPage((p) => Math.max(1, p - 1))}
+              disabled={currentApiPage <= 1 || isFetching}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground min-w-[6rem] text-center">
+              {currentApiPage} / {pageCount.toLocaleString()}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setApiPage((p) => Math.min(pageCount, p + 1))}
+              disabled={currentApiPage >= pageCount || isFetching}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Main Table */}
       <Card>
@@ -494,7 +595,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
             <CardTitle>Cost Breakdown by Vehicle</CardTitle>
             <div className="flex items-center gap-3">
               <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search by customer, site, or vehicle..."
                   value={searchQuery}
@@ -502,7 +603,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
                   className="pl-10 w-72"
                 />
               </div>
-              <Button onClick={exportToCSV} variant="outline" className="border-[#7CB342] text-[#7CB342] hover:bg-[#7CB342] hover:text-white">
+              <Button onClick={exportToCSV} variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
                 <Download className="w-4 h-4 mr-2" />
                 Export CSV
               </Button>
@@ -513,7 +614,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#0F172A] text-white">
+                <tr className="bg-primary text-primary-foreground">
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase">Customer</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase">Site</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase">Vehicle</th>
@@ -528,11 +629,11 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
               </thead>
               <tbody>
                 {paginatedVehicles.map((vehicle, index) => (
-                  <tr key={index} className={`border-b ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-[#7CB342]/5`}>
-                    <td className="px-4 py-3 text-sm text-slate-700">{vehicle.customerName}</td>
+                  <tr key={index} className={`border-b ${index % 2 === 0 ? 'bg-card' : 'bg-muted/30'} hover:bg-primary/5`}>
+                    <td className="px-4 py-3 text-sm text-foreground">{vehicle.customerName}</td>
                     <td className="px-4 py-3 text-sm">
                       <div className="flex items-center gap-2">
-                        <span className="text-slate-700">{vehicle.siteName}</span>
+                        <span className="text-foreground">{vehicle.siteName}</span>
                         <Badge className={`text-xs ${
                           vehicle.state === 'QLD' ? 'bg-orange-100 text-orange-800' :
                           vehicle.state === 'VIC' ? 'bg-blue-100 text-blue-800' :
@@ -542,14 +643,14 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
                         </Badge>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm font-semibold text-slate-800">{vehicle.vehicleName}</td>
-                    <td className="px-4 py-3 text-sm font-mono text-slate-500">{vehicle.vehicleRfid}</td>
-                    <td className="px-4 py-3 text-sm text-right text-slate-800">{vehicle.totalScans}</td>
-                    <td className="px-4 py-3 text-sm text-right text-slate-600">{vehicle.litresPerScan}L</td>
-                    <td className="px-4 py-3 text-sm text-right text-slate-600">${vehicle.pricePerLitre.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-sm text-right text-slate-700">${vehicle.costPerScan.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-sm text-right font-bold text-[#7CB342]">${vehicle.totalCost.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-500">{moment(vehicle.lastScan).format('MMM D, YYYY')}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-foreground">{vehicle.vehicleName}</td>
+                    <td className="px-4 py-3 text-sm font-mono text-muted-foreground">{vehicle.vehicleRfid}</td>
+                    <td className="px-4 py-3 text-sm text-right text-foreground">{vehicle.totalScans}</td>
+                    <td className="px-4 py-3 text-sm text-right text-muted-foreground">{vehicle.litresPerScan}L</td>
+                    <td className="px-4 py-3 text-sm text-right text-muted-foreground">${vehicle.pricePerLitre.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-foreground">${vehicle.costPerScan.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-bold text-primary">${vehicle.totalCost.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{moment(vehicle.lastScan).format('MMM D, YYYY')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -580,18 +681,18 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
               <LineChart data={costData.dailyCosts}>
                 <defs>
                   <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#7CB342" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#7CB342" stopOpacity={0.1}/>
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="date" stroke="#64748b" style={{ fontSize: '12px' }} />
-                <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
                 <Tooltip
-                  contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                   formatter={(value) => [`$${value.toFixed(2)}`, 'Cost']}
                 />
-                <Line type="monotone" dataKey="cost" stroke="#7CB342" strokeWidth={2} fill="url(#costGradient)" />
+                <Line type="monotone" dataKey="cost" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#costGradient)" />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -606,15 +707,15 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
               <BarChart data={costData.topSites} layout="vertical">
                 <defs>
                   <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="5%" stopColor="#7CB342" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#9CCC65" stopOpacity={0.8}/>
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.5}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis type="number" stroke="#64748b" style={{ fontSize: '12px' }} />
-                <YAxis dataKey="siteName" type="category" width={100} stroke="#64748b" style={{ fontSize: '11px' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis dataKey="siteName" type="category" width={100} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                 <Tooltip
-                  contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                   formatter={(value, name, props) => [
                     `$${value.toFixed(2)}`,
                     `${props.payload.totalScans} scans`
@@ -635,42 +736,42 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <CardContent>
           <div className="space-y-2">
             {costData.customerSummary.map((customer) => (
-              <div key={customer.customerRef} className="border border-slate-200 rounded-lg overflow-hidden">
+              <div key={customer.customerRef} className="border border-border rounded-lg overflow-hidden">
                 <button
                   onClick={() => toggleCustomer(customer.customerRef)}
-                  className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                  className="w-full px-4 py-3 flex items-center justify-between bg-muted/50 hover:bg-muted transition-colors"
                 >
                   <div className="flex items-center gap-4">
                     {expandedCustomers.has(customer.customerRef) ? 
-                      <ChevronUp className="w-4 h-4 text-slate-600" /> : 
-                      <ChevronDown className="w-4 h-4 text-slate-600" />
+                      <ChevronUp className="w-4 h-4 text-muted-foreground" /> : 
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
                     }
                     <div className="text-left">
-                      <p className="font-semibold text-slate-800">{customer.customerName}</p>
-                      <p className="text-sm text-slate-500">{customer.totalScans} scans</p>
+                      <p className="font-semibold text-foreground">{customer.customerName}</p>
+                      <p className="text-sm text-muted-foreground">{customer.totalScans} scans</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold text-[#7CB342]">${customer.totalCost.toFixed(2)}</p>
+                    <p className="text-lg font-bold text-primary">${customer.totalCost.toFixed(2)}</p>
                   </div>
                 </button>
 
                 {expandedCustomers.has(customer.customerRef) && (
-                  <div className="p-4 bg-white">
+                  <div className="p-4 bg-card">
                     <table className="w-full">
                       <thead>
                         <tr className="border-b">
-                          <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600">Site</th>
-                          <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600">State</th>
-                          <th className="px-2 py-2 text-right text-xs font-semibold text-slate-600">Scans</th>
-                          <th className="px-2 py-2 text-right text-xs font-semibold text-slate-600">Cost/Scan</th>
-                          <th className="px-2 py-2 text-right text-xs font-semibold text-slate-600">Total Cost</th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-muted-foreground">Site</th>
+                          <th className="px-2 py-2 text-left text-xs font-semibold text-muted-foreground">State</th>
+                          <th className="px-2 py-2 text-right text-xs font-semibold text-muted-foreground">Scans</th>
+                          <th className="px-2 py-2 text-right text-xs font-semibold text-muted-foreground">Cost/Scan</th>
+                          <th className="px-2 py-2 text-right text-xs font-semibold text-muted-foreground">Total Cost</th>
                         </tr>
                       </thead>
                       <tbody>
                         {Object.values(customer.sites).map((site, idx) => (
                           <tr key={idx} className="border-b last:border-0">
-                            <td className="px-2 py-2 text-sm text-slate-700">{site.siteName}</td>
+                            <td className="px-2 py-2 text-sm text-foreground">{site.siteName}</td>
                             <td className="px-2 py-2">
                               <Badge className={`text-xs ${
                                 site.state === 'QLD' ? 'bg-orange-100 text-orange-800' :
@@ -680,9 +781,9 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
                                 {site.state}
                               </Badge>
                             </td>
-                            <td className="px-2 py-2 text-sm text-right text-slate-700">{site.totalScans}</td>
-                            <td className="px-2 py-2 text-sm text-right text-slate-600">${site.costPerScan.toFixed(2)}</td>
-                            <td className="px-2 py-2 text-sm text-right font-semibold text-[#7CB342]">${site.totalCost.toFixed(2)}</td>
+                            <td className="px-2 py-2 text-sm text-right text-foreground">{site.totalScans}</td>
+                            <td className="px-2 py-2 text-sm text-right text-muted-foreground">${site.costPerScan.toFixed(2)}</td>
+                            <td className="px-2 py-2 text-sm text-right font-semibold text-primary">${site.totalCost.toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>

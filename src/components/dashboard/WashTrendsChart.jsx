@@ -5,9 +5,9 @@ import { motion } from 'framer-motion';
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white px-4 py-3 rounded-lg shadow-lg border border-slate-100">
-        <p className="text-sm font-medium text-slate-800">{label}</p>
-        <p className="text-lg font-bold text-[#7CB342]">{payload[0].value} washes</p>
+      <div className="bg-card px-4 py-3 rounded-lg shadow-lg border border-border">
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        <p className="text-lg font-bold text-primary">{payload[0].value} washes</p>
       </div>
     );
   }
@@ -20,11 +20,11 @@ export default function WashTrendsChart({ data }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.2 }}
-      className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100"
+      className="bg-card rounded-2xl p-6 shadow-sm border border-border"
     >
       <div className="mb-6">
-        <h3 className="text-lg font-bold text-slate-800">Wash Frequency Trends</h3>
-        <div className="w-10 h-[3px] bg-[#7CB342] rounded-full mt-2" />
+        <h3 className="text-lg font-bold text-foreground">Wash Frequency Trends</h3>
+        <div className="w-10 h-[3px] bg-primary rounded-full mt-2" />
       </div>
       
       <div className="h-[280px]">
@@ -32,28 +32,28 @@ export default function WashTrendsChart({ data }) {
           <AreaChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
             <defs>
               <linearGradient id="washGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#7CB342" stopOpacity={0.2} />
-                <stop offset="100%" stopColor="#7CB342" stopOpacity={0} />
+                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.2} />
+                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
             <XAxis 
               dataKey="date" 
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 12, fill: '#64748B' }}
+              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
             />
             <YAxis 
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 12, fill: '#64748B' }}
+              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
               domain={[0, 'auto']}
             />
             <Tooltip content={<CustomTooltip />} />
             <Area
               type="monotone"
               dataKey="washes"
-              stroke="#7CB342"
+              stroke="hsl(var(--primary))"
               strokeWidth={3}
               fill="url(#washGradient)"
             />

@@ -91,8 +91,8 @@ Deno.serve(async (req) => {
     let branding: { company_name?: string; logo_url?: string; primary_color?: string; secondary_color?: string } = {
       company_name: 'ELORA Solutions',
       logo_url: null,
-      primary_color: '#7CB342',
-      secondary_color: '#9CCC65'
+      primary_color: '#003DA5',
+      secondary_color: '#00A3E0'
     };
 
     try {
@@ -120,10 +120,37 @@ Deno.serve(async (req) => {
       });
     }
 
+    const userRole = user.role || 'user';
+    const defaultAllowedByRole: Record<string, string[]> = {
+      super_admin: ['compliance', 'costs'],
+      admin: ['compliance', 'costs'],
+      manager: ['compliance', 'costs'],
+      user: ['compliance', 'costs'],
+      batcher: ['compliance', 'costs'],
+      driver: ['compliance'],
+      viewer: ['compliance', 'costs'],
+    };
+    let allowedReportTypes: string[] = defaultAllowedByRole[userRole] ?? ['compliance', 'costs'];
+    try {
+      const { data: roleSettings } = await supabase
+        .from('role_tab_settings')
+        .select('visible_email_report_types')
+        .eq('role', userRole)
+        .single();
+      if (roleSettings?.visible_email_report_types && Array.isArray(roleSettings.visible_email_report_types) && roleSettings.visible_email_report_types.length > 0) {
+        allowedReportTypes = roleSettings.visible_email_report_types;
+      }
+    } catch (e) {
+      console.warn('Role tab settings fetch error:', e);
+    }
+
+    const requestedTypes = Array.isArray(reportTypes) && reportTypes.length > 0 ? reportTypes : allowedReportTypes;
+    const filteredReportTypes = requestedTypes.filter((t: string) => allowedReportTypes.includes(t));
+
     const now = new Date();
     let reports: Record<string, unknown> = {};
-    const wantsCompliance = !reportTypes || reportTypes.length === 0 || reportTypes.includes('compliance');
-    const wantsCosts = !reportTypes || reportTypes.length === 0 || reportTypes.includes('costs');
+    const wantsCompliance = filteredReportTypes.includes('compliance');
+    const wantsCosts = filteredReportTypes.includes('costs');
 
     if (reportData?.stats && reportData?.filteredVehicles) {
       const stats = reportData.stats;
@@ -412,13 +439,13 @@ function generateEmailHTML(
   _userEmail: string,
   hasCsvAttachment = false
 ) {
-  const primaryColor = branding?.primary_color || '#7CB342';
-  const secondaryColor = branding?.secondary_color || '#9CCC65';
+  const primaryColor = branding?.primary_color || '#003DA5';
+  const secondaryColor = branding?.secondary_color || '#00A3E0';
   const companyName = branding?.company_name || 'ELORA Solutions';
   const logoUrl = branding?.logo_url;
 
   let content = `
-    <p style="color: #64748b; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
       Here is your fleet compliance report. Below you'll find insights into your fleet's performance.
       ${hasCsvAttachment ? ' A CSV file with vehicle details is attached to this email.' : ''}
     </p>
@@ -433,21 +460,21 @@ function generateEmailHTML(
         <div style="height: 3px; width: 60px; background: linear-gradient(90deg, ${primaryColor} 0%, ${secondaryColor} 100%); border-radius: 2px; margin-top: 12px;"></div>
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 30px;">
-        <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid ${primaryColor};">
+        <div style="background: #f8fafc; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 4px solid ${primaryColor};">
           <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Compliance Rate</h3>
-          <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0;">${s.averageCompliance ?? 0}%</p>
+          <p style="color: ${primaryColor}; font-size: 32px; font-weight: 700; margin: 0;">${s.averageCompliance ?? 0}%</p>
           <p style="color: #64748b; font-size: 14px; margin: 0;">% of vehicles meeting target</p>
         </div>
-        <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid ${secondaryColor};">
+        <div style="background: #f8fafc; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 4px solid ${secondaryColor};">
           <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Total Vehicles</h3>
-          <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0;">${s.totalVehicles ?? 0}</p>
+          <p style="color: ${secondaryColor}; font-size: 32px; font-weight: 700; margin: 0;">${s.totalVehicles ?? 0}</p>
           <p style="color: #64748b; font-size: 14px; margin: 0;">In your fleet</p>
         </div>
       </div>
       ${(s.alerts && s.alerts.length > 0) ? s.alerts.map((a: { title: string; message: string }) => `
-        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 20px; margin: 20px 0;">
-          <h4 style="color: #92400e; font-size: 16px; font-weight: 600; margin: 0 0 8px 0;">${a.title}</h4>
-          <p style="color: #92400e; font-size: 14px; margin: 0;">${a.message}</p>
+        <div style="background: #eff6ff; border-left: 4px solid ${primaryColor}; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <h4 style="color: #1e40af; font-size: 16px; font-weight: 600; margin: 0 0 8px 0;">${a.title}</h4>
+          <p style="color: #1e3a8a; font-size: 14px; margin: 0;">${a.message}</p>
         </div>
       `).join('') : ''}
     `;
@@ -461,9 +488,9 @@ function generateEmailHTML(
         <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0;">Cost & Usage Summary</h2>
         <div style="height: 3px; width: 60px; background: linear-gradient(90deg, ${primaryColor} 0%, ${secondaryColor} 100%); border-radius: 2px; margin-top: 12px;"></div>
       </div>
-      <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid ${primaryColor}; margin-bottom: 30px;">
+      <div style="background: #f8fafc; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 4px solid ${primaryColor}; margin-bottom: 30px;">
         <h3 style="color: #334155; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Total Washes (Period)</h3>
-        <p style="color: #0f172a; font-size: 32px; font-weight: 700; margin: 0;">${cs.totalWashes ?? 0}</p>
+        <p style="color: ${primaryColor}; font-size: 32px; font-weight: 700; margin: 0;">${cs.totalWashes ?? 0}</p>
         <p style="color: #64748b; font-size: 14px; margin: 0;">${cs.washSummary ?? 'In selected period'}</p>
       </div>
     `;
@@ -478,7 +505,7 @@ function generateEmailHTML(
       <title>Fleet Compliance Report</title>
     </head>
     <body style="margin: 0; padding: 0; background: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      <div style="max-width: 680px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+      <div style="max-width: 680px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,61,165,0.08);">
         <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%); padding: 40px 20px; text-align: center;">
           ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" style="max-height: 60px; margin-bottom: 16px;" />` : ''}
           <h1 style="color: white; margin: 0; font-size: 28px;">${companyName}</h1>
@@ -488,8 +515,8 @@ function generateEmailHTML(
           ${content}
         </div>
         <div style="background: #f8fafc; padding: 30px 20px; text-align: center; border-top: 2px solid #e2e8f0;">
-          <p style="color: #64748b; font-size: 14px; margin: 0;">Report from ${companyName} Compliance Portal</p>
-          <p style="color: #94a3b8; font-size: 12px; margin: 10px 0 0 0;">© ${new Date().getFullYear()} ${companyName}</p>
+          <p style="color: #475569; font-size: 14px; margin: 0;">Report from ${companyName} Compliance Portal</p>
+          <p style="color: #64748b; font-size: 12px; margin: 10px 0 0 0;">© ${new Date().getFullYear()} ${companyName}</p>
         </div>
       </div>
     </body>

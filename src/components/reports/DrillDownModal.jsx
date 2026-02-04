@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Search, Download, TrendingUp, TrendingDown } from 'lucide-react';
 import moment from 'moment';
 
-export default function DrillDownModal({ open, onClose, type, data }) {
+function DrillDownModal({ open, onClose, type, data }) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredData = useMemo(() => {
@@ -78,40 +78,40 @@ export default function DrillDownModal({ open, onClose, type, data }) {
           const isCompliant = vehicle.washes_completed >= vehicle.target;
 
           return (
-            <div key={idx} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div key={idx} className="p-4 bg-muted/50 rounded-lg border border-border">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <p className="font-semibold text-slate-800">{vehicle.name}</p>
-                  <p className="text-sm text-slate-600">{vehicle.rfid} • {vehicle.site_name}</p>
+                  <p className="font-semibold text-foreground">{vehicle.name}</p>
+                  <p className="text-sm text-muted-foreground">{vehicle.rfid} • {vehicle.site_name}</p>
                 </div>
-                <Badge className={isCompliant ? 'bg-emerald-500' : 'bg-red-500'}>
+                <Badge className={isCompliant ? 'bg-primary' : 'bg-red-500'}>
                   {isCompliant ? 'Compliant' : 'Non-Compliant'}
                 </Badge>
               </div>
               <div className="grid grid-cols-3 gap-4 mt-3">
                 <div>
-                  <p className="text-xs text-slate-500">Washes</p>
-                  <p className="text-lg font-bold text-slate-800">{vehicle.washes_completed}</p>
+                  <p className="text-xs text-muted-foreground">Washes</p>
+                  <p className="text-lg font-bold text-foreground">{vehicle.washes_completed}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Target</p>
-                  <p className="text-lg font-bold text-slate-800">{vehicle.target}</p>
+                  <p className="text-xs text-muted-foreground">Target</p>
+                  <p className="text-lg font-bold text-foreground">{vehicle.target}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Rate</p>
+                  <p className="text-xs text-muted-foreground">Rate</p>
                   <div className="flex items-center gap-1">
-                    <p className="text-lg font-bold text-slate-800">{compliance}%</p>
+                    <p className="text-lg font-bold text-foreground">{compliance}%</p>
                     {compliance >= 100 ? (
-                      <TrendingUp className="w-4 h-4 text-emerald-600" />
+                      <TrendingUp className="w-4 h-4 text-primary" />
                     ) : (
                       <TrendingDown className="w-4 h-4 text-red-600" />
                     )}
                   </div>
                 </div>
               </div>
-              <div className="mt-3 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
                 <div
-                  className={`h-full transition-all ${isCompliant ? 'bg-emerald-500' : 'bg-red-500'}`}
+                  className={`h-full transition-all ${isCompliant ? 'bg-primary' : 'bg-red-500'}`}
                   style={{ width: `${Math.min(compliance, 100)}%` }}
                 />
               </div>
@@ -129,9 +129,9 @@ export default function DrillDownModal({ open, onClose, type, data }) {
 
     return (
       <div className="space-y-4">
-        <div className="p-4 bg-[#7CB342]/10 rounded-lg border border-[#7CB342]/20">
-          <p className="text-sm text-slate-600">Total Washes Across All Sites</p>
-          <p className="text-3xl font-bold text-slate-800">{totalWashes.toLocaleString()}</p>
+        <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
+          <p className="text-sm text-muted-foreground">Total Washes Across All Sites</p>
+          <p className="text-3xl font-bold text-foreground">{totalWashes.toLocaleString()}</p>
         </div>
         
         <div className="space-y-2 max-h-[400px] overflow-y-auto">
@@ -139,19 +139,19 @@ export default function DrillDownModal({ open, onClose, type, data }) {
             const percentage = ((site.washes / totalWashes) * 100).toFixed(1);
             
             return (
-              <div key={idx} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <div key={idx} className="p-4 bg-muted/50 rounded-lg border border-border">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold text-slate-800">{site.site}</p>
-                  <Badge className="bg-[#7CB342]">{site.washes} washes</Badge>
+                  <p className="font-semibold text-foreground">{site.site}</p>
+                  <Badge className="bg-primary">{site.washes} washes</Badge>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#7CB342]"
+                      className="h-full bg-primary"
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
-                  <span className="text-sm text-slate-600 w-12 text-right">{percentage}%</span>
+                  <span className="text-sm text-muted-foreground w-12 text-right">{percentage}%</span>
                 </div>
               </div>
             );
@@ -176,7 +176,7 @@ export default function DrillDownModal({ open, onClose, type, data }) {
 
         <div className="flex items-center gap-3 mb-4">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search..."
               value={searchQuery}
@@ -196,7 +196,7 @@ export default function DrillDownModal({ open, onClose, type, data }) {
         </div>
 
         {filteredData && (
-          <div className="pt-4 border-t border-slate-200 text-sm text-slate-600">
+          <div className="pt-4 border-t border-border text-sm text-muted-foreground">
             Showing {filteredData.length} result{filteredData.length !== 1 ? 's' : ''}
           </div>
         )}
@@ -204,3 +204,5 @@ export default function DrillDownModal({ open, onClose, type, data }) {
     </Dialog>
   );
 }
+
+export default DrillDownModal;

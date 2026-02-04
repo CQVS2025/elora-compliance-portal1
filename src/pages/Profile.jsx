@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import {
-  ArrowLeft,
   User,
   Phone,
   Briefcase,
@@ -13,17 +10,20 @@ import {
   Save,
   Loader2,
   Camera,
-  CheckCircle,
   Mail,
-  Shield
+  Shield,
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { formatErrorForToast, formatSuccessForToast, getUserFriendlyError } from '@/utils/errorMessages';
+import { toast, toastError, toastSuccess } from '@/lib/toast';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function Profile() {
-  const navigate = useNavigate();
   const { user, userProfile, checkAuth } = useAuth();
-  const { toast } = useToast();
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -41,127 +41,75 @@ export default function Profile() {
     confirmPassword: '',
   });
 
-  // Initialize form data when userProfile loads
   useEffect(() => {
     if (userProfile) {
       setFormData({
         full_name: userProfile.full_name || '',
         phone: userProfile.phone || '',
       });
-      // Reset avatar error when profile changes
       setAvatarError(false);
     }
   }, [userProfile]);
 
   const initials = formData.full_name
-    ? formData.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    ? formData.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
     : user?.email?.[0]?.toUpperCase() || 'U';
 
   const handleAvatarUpload = async (event) => {
     const file = event.target.files?.[0];
-    if (!file || !user) {
-      return;
-    }
-
-    // Validate file type
+    if (!file || !user) return;
     if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File Type",
-        description: "Please select an image file.",
-        variant: "destructive",
-      });
+      toast.error('Please select an image file.', { description: 'Invalid File Type' });
       return;
     }
-
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File Too Large",
-        description: "Please select an image smaller than 5MB.",
-        variant: "destructive",
-      });
+      toast.error('Please select an image smaller than 5MB.', { description: 'File Too Large' });
       return;
     }
-
     setIsUploadingAvatar(true);
-
     try {
-      // Create a unique file path: avatars/{user_id}/{timestamp}_{filename}
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
-
-      // Delete old avatar if it exists
       if (userProfile?.avatar_url) {
         try {
-          // Extract path from public URL
-          // URL format: https://[project].supabase.co/storage/v1/object/public/EloraBucket/avatars/...
           const urlParts = userProfile.avatar_url.split('/EloraBucket/');
           if (urlParts.length > 1) {
-            const oldPath = urlParts[1]; // Everything after /EloraBucket/
-            await supabase.storage.from('EloraBucket').remove([oldPath]);
+            await supabase.storage.from('EloraBucket').remove([urlParts[1]]);
           }
-        } catch (error) {
-          console.warn('Could not delete old avatar:', error);
-          // Continue even if deletion fails
+        } catch (e) {
+          console.warn('Could not delete old avatar:', e);
         }
       }
-
-      // Upload new avatar
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('EloraBucket')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('EloraBucket')
-        .getPublicUrl(filePath);
-
-      const avatarUrl = urlData.publicUrl;
-
-      // Update user profile with new avatar URL
+        .upload(filePath, file, { cacheControl: '3600', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from('EloraBucket').getPublicUrl(filePath);
       const { error: updateError } = await supabase
         .from('user_profiles')
-        .update({
-          avatar_url: avatarUrl,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ avatar_url: urlData.publicUrl, updated_at: new Date().toISOString() })
         .eq('id', user.id);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      toast(formatSuccessForToast('upload', 'avatar'));
-      setAvatarError(false); // Reset error state on successful upload
-      await checkAuth(); // Refresh user data to show new avatar
+      if (updateError) throw updateError;
+      toastSuccess('upload', 'avatar');
+      setAvatarError(false);
+      await checkAuth();
     } catch (error) {
       console.error('Error uploading avatar:', error);
-      toast(formatErrorForToast(error, 'uploading avatar'));
+      toastError(error, 'uploading avatar');
     } finally {
       setIsUploadingAvatar(false);
-      // Reset file input
       event.target.value = '';
     }
   };
 
   const handleSaveProfile = async () => {
     if (!user) {
-      toast(formatErrorForToast('You must be logged in', 'updating profile'));
+      toastError('You must be logged in', 'updating profile');
       return;
     }
-
     setIsSaving(true);
-
     try {
-      // Try to update the existing profile
       const { data, error } = await supabase
         .from('user_profiles')
         .update({
@@ -171,33 +119,20 @@ export default function Profile() {
         })
         .eq('id', user.id)
         .select();
-
       if (error) {
-        // If the error is "no rows found", the profile doesn't exist
         if (error.code === 'PGRST116' || (data && data.length === 0)) {
-          console.log('Profile not found, user may need to be added to a company first');
-          toast({
-            title: "Profile Not Set Up",
-            description: "Please contact your administrator to set up your profile.",
-            variant: "destructive",
-          });
-        } else {
-          throw error;
-        }
+          toast.error('Please contact your administrator to set up your profile.', { description: 'Profile Not Set Up' });
+        } else throw error;
       } else if (!data || data.length === 0) {
-        toast({
-          title: "Profile Not Set Up",
-          description: "Please contact your administrator to set up your profile.",
-          variant: "destructive",
-        });
+        toast.error('Please contact your administrator to set up your profile.', { description: 'Profile Not Set Up' });
       } else {
-        toast(formatSuccessForToast('save', 'profile'));
+        toastSuccess('save', 'profile');
         setIsEditing(false);
-        await checkAuth(); // Refresh user data
+        await checkAuth();
       }
     } catch (error) {
       console.error('Error updating profile:', error);
-      toast(formatErrorForToast(error, 'updating profile'));
+      toastError(error, 'updating profile');
     } finally {
       setIsSaving(false);
     }
@@ -205,411 +140,253 @@ export default function Profile() {
 
   const handleChangePassword = async () => {
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast({
-        title: "Passwords Don't Match",
-        description: "Please make sure both passwords are the same.",
-        variant: "destructive",
-      });
+      toast.error('Please make sure both passwords are the same.', { description: "Passwords Don't Match" });
       return;
     }
-
     if (passwordData.newPassword.length < 6) {
-      toast({
-        title: "Password Too Short",
-        description: "Please use at least 6 characters.",
-        variant: "destructive",
-      });
+      toast.error('Please use at least 6 characters.', { description: 'Password Too Short' });
       return;
     }
-
     setIsSaving(true);
-
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword
-      });
-
+      const { error } = await supabase.auth.updateUser({ password: passwordData.newPassword });
       if (error) throw error;
-
-      toast({
-        title: "Password Changed",
-        description: "Your new password is now active.",
-      });
-
+      toast.success('Password Changed', { description: 'Your new password is now active.' });
       setIsChangingPassword(false);
-      setPasswordData({
-        newPassword: '',
-        confirmPassword: '',
-      });
+      setPasswordData({ newPassword: '', confirmPassword: '' });
     } catch (error) {
       console.error('Error changing password:', error);
-      toast(formatErrorForToast(error, 'changing password'));
+      toastError(error, 'changing password');
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-zinc-950">
-      {/* Header */}
-      <div className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
-                      border-b border-gray-200/20 dark:border-zinc-800/50">
-        <div className="max-w-2xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-gray-600 dark:text-gray-400
-                                   hover:text-gray-900 dark:hover:text-white transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-            <span className="font-medium">Back to Dashboard</span>
-          </Link>
+    <div className="p-6 space-y-6">
+      {/* Profile header: avatar + name + email + role */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-6">
+        <div className="relative shrink-0">
+          <Avatar className="h-24 w-24 border-2 border-border">
+            {userProfile?.avatar_url && !avatarError ? (
+              <AvatarImage src={userProfile.avatar_url} alt="Profile" onError={() => setAvatarError(true)} />
+            ) : null}
+            <AvatarFallback className="text-2xl font-semibold bg-primary text-primary-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <label
+            className="absolute bottom-0 right-0 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-background bg-muted text-muted-foreground shadow hover:bg-muted/80 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            title="Change photo"
+          >
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarUpload}
+              disabled={isUploadingAvatar}
+              className="sr-only"
+            />
+            {isUploadingAvatar ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Camera className="h-4 w-4" />
+            )}
+          </label>
+        </div>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight truncate">
+            {userProfile?.full_name || 'User Profile'}
+          </h1>
+          <div className="flex items-center gap-2 text-muted-foreground mt-1">
+            <Mail className="h-4 w-4 shrink-0" />
+            <span className="truncate">{user?.email}</span>
+          </div>
+          {userProfile?.role && (
+            <Badge variant="secondary" className="mt-2 capitalize">
+              {userProfile.role.replace('_', ' ')}
+            </Badge>
+          )}
         </div>
       </div>
 
-      {/* Content */}
-      <main className="max-w-2xl mx-auto px-6 py-12">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          {/* Profile Header */}
-          <div className="text-center mb-12">
-            <div className="relative inline-block">
-              {userProfile?.avatar_url && !avatarError ? (
-                <div className="w-24 h-24 rounded-full mx-auto mb-4
-                               shadow-lg shadow-emerald-500/30 overflow-hidden
-                               border-2 border-emerald-500/20">
-                  <img
-                    src={userProfile.avatar_url}
-                    alt="Profile avatar"
-                    className="w-full h-full object-cover"
-                    onError={() => setAvatarError(true)}
-                  />
-                </div>
-              ) : (
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600
-                               mx-auto mb-4 flex items-center justify-center
-                               shadow-lg shadow-emerald-500/30">
-                  <span className="text-white text-3xl font-bold">{initials}</span>
-                </div>
-              )}
-              <label className="absolute bottom-4 right-0 w-8 h-8 bg-white dark:bg-zinc-800
-                                rounded-full shadow-md flex items-center justify-center
-                                hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors
-                                border border-gray-200 dark:border-zinc-700 cursor-pointer
-                                disabled:opacity-50 disabled:cursor-not-allowed">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatarUpload}
-                  disabled={isUploadingAvatar}
-                  className="hidden"
-                />
-                {isUploadingAvatar ? (
-                  <Loader2 className="w-4 h-4 text-gray-600 dark:text-gray-400 animate-spin" />
-                ) : (
-                  <Camera className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                )}
-              </label>
-            </div>
-            <h1 className="text-3xl font-bold mb-1">{userProfile?.full_name || 'User Profile'}</h1>
-            <div className="flex items-center justify-center gap-2 text-gray-500 dark:text-gray-400">
-              <Mail className="w-4 h-4" />
-              <span>{user?.email}</span>
-            </div>
-            {userProfile?.role && (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium
-                             bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 mt-3 capitalize">
-                {userProfile.role.replace('_', ' ')}
-              </span>
+      <Separator />
+
+      {/* Profile Information card */}
+      <Card className="border-border">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2">
+          <div>
+            <CardTitle className="text-base">Profile Information</CardTitle>
+            <CardDescription>Update your name and phone</CardDescription>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            {!isEditing ? (
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                Edit Profile
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setFormData({ full_name: userProfile?.full_name || '', phone: userProfile?.phone || '' });
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={handleSaveProfile} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  {isSaving ? 'Saving...' : 'Save'}
+                </Button>
+              </>
             )}
           </div>
-
-          {/* Profile Card */}
-          <div className="backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
-                         rounded-2xl border border-gray-200/20 dark:border-zinc-800/50
-                         shadow-lg shadow-black/5 overflow-hidden">
-
-            {/* Section Header */}
-            <div className="px-8 py-6 border-b border-gray-200/50 dark:border-zinc-800/50
-                           flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Profile Information</h2>
-              <div className="flex gap-3">
-                {!isEditing ? (
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="h-10 px-4 rounded-full text-emerald-600 dark:text-emerald-400
-                              hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors
-                              font-medium text-sm border border-emerald-200 dark:border-emerald-500/30"
-                  >
-                    Edit Profile
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => {
-                        setIsEditing(false);
-                        setFormData({
-                          full_name: userProfile?.full_name || '',
-                          phone: userProfile?.phone || '',
-                        });
-                      }}
-                      className="h-10 px-4 rounded-full text-gray-600 dark:text-gray-400
-                                hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors
-                                font-medium text-sm"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSaveProfile}
-                      disabled={isSaving}
-                      className="h-10 px-6 rounded-full bg-emerald-500 text-white
-                                font-semibold text-sm hover:bg-emerald-600
-                                active:scale-95 transition-all duration-150
-                                shadow-lg shadow-emerald-500/30
-                                disabled:opacity-50 disabled:cursor-not-allowed
-                                flex items-center gap-2"
-                    >
-                      {isSaving ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Save className="w-4 h-4" />
-                      )}
-                      {isSaving ? 'Saving...' : 'Save'}
-                    </button>
-                  </>
-                )}
-              </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 text-muted-foreground">
+              <Mail className="h-4 w-4" />
+              Email
+            </Label>
+            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+              {user?.email || '-'}
             </div>
-
-            {/* Form Fields */}
-            <div className="p-8 space-y-6">
-              {/* Email (Read-only) */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700
-                                 dark:text-gray-300 mb-2">
-                  <Mail className="w-4 h-4" />
-                  Email
-                </label>
-                <div className="w-full h-12 px-4 rounded-xl
-                               bg-gray-50 dark:bg-zinc-900
-                               border border-gray-200 dark:border-zinc-800
-                               flex items-center text-gray-500 dark:text-gray-400">
-                  {user?.email || '-'}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+            <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+          </div>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Full Name
+            </Label>
+            {isEditing ? (
+              <Input
+                value={formData.full_name}
+                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                placeholder="Enter your full name"
+                className="h-10"
+              />
+            ) : (
+              <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 text-sm">
+                {userProfile?.full_name || '-'}
               </div>
-
-              {/* Full Name */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700
-                                 dark:text-gray-300 mb-2">
-                  <User className="w-4 h-4" />
-                  Full Name
-                </label>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({...formData, full_name: e.target.value})}
-                    className="w-full h-12 px-4 rounded-xl
-                              bg-gray-100 dark:bg-zinc-800
-                              border border-gray-200 dark:border-zinc-700
-                              focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20
-                              transition-all outline-none text-base"
-                    placeholder="Enter your full name"
-                  />
-                ) : (
-                  <div className="w-full h-12 px-4 rounded-xl
-                                 bg-gray-50 dark:bg-zinc-900
-                                 border border-gray-200 dark:border-zinc-800
-                                 flex items-center text-gray-900 dark:text-gray-100">
-                    {userProfile?.full_name || '-'}
-                  </div>
-                )}
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Phone className="h-4 w-4" />
+              Phone Number
+            </Label>
+            {isEditing ? (
+              <Input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="Enter your phone number"
+                className="h-10"
+              />
+            ) : (
+              <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 text-sm">
+                {userProfile?.phone || '-'}
               </div>
-
-              {/* Phone Number */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700
-                                 dark:text-gray-300 mb-2">
-                  <Phone className="w-4 h-4" />
-                  Phone Number
-                </label>
-                {isEditing ? (
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="w-full h-12 px-4 rounded-xl
-                              bg-gray-100 dark:bg-zinc-800
-                              border border-gray-200 dark:border-zinc-700
-                              focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20
-                              transition-all outline-none text-base"
-                    placeholder="Enter your phone number"
-                  />
-                ) : (
-                  <div className="w-full h-12 px-4 rounded-xl
-                                 bg-gray-50 dark:bg-zinc-900
-                                 border border-gray-200 dark:border-zinc-800
-                                 flex items-center text-gray-900 dark:text-gray-100">
-                    {userProfile?.phone || '-'}
-                  </div>
-                )}
-              </div>
-
-              {/* Job Title (Read-only) */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700
-                                 dark:text-gray-300 mb-2">
-                  <Briefcase className="w-4 h-4" />
-                  Job Title
-                </label>
-                <div className="w-full h-12 px-4 rounded-xl
-                               bg-gray-50 dark:bg-zinc-900
-                               border border-gray-200 dark:border-zinc-800
-                               flex items-center text-gray-500 dark:text-gray-400">
-                  {userProfile?.job_title || '-'}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Managed by administrator</p>
-              </div>
-
-              {/* Role (Read-only) */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700
-                                 dark:text-gray-300 mb-2">
-                  <Shield className="w-4 h-4" />
-                  Role
-                </label>
-                <div className="w-full h-12 px-4 rounded-xl
-                               bg-gray-50 dark:bg-zinc-900
-                               border border-gray-200 dark:border-zinc-800
-                               flex items-center">
-                  {userProfile?.role && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium
-                                   bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 capitalize">
-                      {userProfile.role.replace('_', ' ')}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Managed by administrator</p>
-              </div>
-
-              {/* Company (Read-only) */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700
-                                 dark:text-gray-300 mb-2">
-                  <Building2 className="w-4 h-4" />
-                  Company
-                </label>
-                <div className="w-full h-12 px-4 rounded-xl
-                               bg-gray-50 dark:bg-zinc-900
-                               border border-gray-200 dark:border-zinc-800
-                               flex items-center text-gray-500 dark:text-gray-400">
-                  {userProfile?.company_name || 'ELORA Solutions'}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Managed by administrator</p>
-              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 text-muted-foreground">
+              <Briefcase className="h-4 w-4" />
+              Job Title
+            </Label>
+            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+              {userProfile?.job_title || '-'}
             </div>
-
-            {/* Security Section */}
-            <div className="px-8 py-6 border-t border-gray-200/50 dark:border-zinc-800/50">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <Lock className="w-4 h-4" />
-                    Security
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Manage your password</p>
-                </div>
-                {!isChangingPassword && (
-                  <button
-                    onClick={() => setIsChangingPassword(true)}
-                    className="h-10 px-4 rounded-full text-gray-600 dark:text-gray-400
-                              hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors
-                              font-medium text-sm flex items-center gap-2
-                              border border-gray-200 dark:border-zinc-700"
-                  >
-                    <Lock className="w-4 h-4" />
-                    Change Password
-                  </button>
-                )}
-              </div>
-
-              {isChangingPassword && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="space-y-4 p-6 bg-gray-50 dark:bg-zinc-800/50 rounded-xl"
-                >
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                      New Password
-                    </label>
-                    <input
-                      type="password"
-                      value={passwordData.newPassword}
-                      onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
-                      className="w-full h-12 px-4 rounded-xl
-                                bg-white dark:bg-zinc-800
-                                border border-gray-200 dark:border-zinc-700
-                                focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20
-                                transition-all outline-none text-base"
-                      placeholder="Enter new password"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                      Confirm New Password
-                    </label>
-                    <input
-                      type="password"
-                      value={passwordData.confirmPassword}
-                      onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
-                      className="w-full h-12 px-4 rounded-xl
-                                bg-white dark:bg-zinc-800
-                                border border-gray-200 dark:border-zinc-700
-                                focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20
-                                transition-all outline-none text-base"
-                      placeholder="Confirm new password"
-                    />
-                  </div>
-
-                  <div className="flex gap-3 justify-end pt-2">
-                    <button
-                      onClick={() => {
-                        setIsChangingPassword(false);
-                        setPasswordData({ newPassword: '', confirmPassword: '' });
-                      }}
-                      className="h-10 px-4 rounded-full text-gray-600 dark:text-gray-400
-                                hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors
-                                font-medium text-sm"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleChangePassword}
-                      disabled={isSaving}
-                      className="h-10 px-6 rounded-full bg-emerald-500 text-white
-                                font-semibold text-sm hover:bg-emerald-600
-                                active:scale-95 transition-all duration-150
-                                shadow-lg shadow-emerald-500/30
-                                disabled:opacity-50 disabled:cursor-not-allowed
-                                flex items-center gap-2"
-                    >
-                      {isSaving ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <CheckCircle className="w-4 h-4" />
-                      )}
-                      {isSaving ? 'Updating...' : 'Update Password'}
-                    </button>
-                  </div>
-                </motion.div>
+            <p className="text-xs text-muted-foreground">Managed by administrator</p>
+          </div>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 text-muted-foreground">
+              <Shield className="h-4 w-4" />
+              Role
+            </Label>
+            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3">
+              {userProfile?.role && (
+                <Badge variant="secondary" className="capitalize">
+                  {userProfile.role.replace('_', ' ')}
+                </Badge>
               )}
             </div>
+            <p className="text-xs text-muted-foreground">Managed by administrator</p>
           </div>
-        </motion.div>
-      </main>
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 text-muted-foreground">
+              <Building2 className="h-4 w-4" />
+              Company
+            </Label>
+            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+              {userProfile?.company_name || 'ELORA Solutions'}
+            </div>
+            <p className="text-xs text-muted-foreground">Managed by administrator</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Security card */}
+      <Card className="border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Lock className="h-4 w-4" />
+            Security
+          </CardTitle>
+          <CardDescription>Manage your password</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!isChangingPassword ? (
+            <Button variant="outline" size="sm" onClick={() => setIsChangingPassword(true)}>
+              <Lock className="mr-2 h-4 w-4" />
+              Change Password
+            </Button>
+          ) : (
+            <div className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  placeholder="Enter new password"
+                  className="h-10"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm New Password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                  placeholder="Confirm new password"
+                  className="h-10"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIsChangingPassword(false);
+                    setPasswordData({ newPassword: '', confirmPassword: '' });
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={handleChangePassword} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isSaving ? 'Updating...' : 'Update Password'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

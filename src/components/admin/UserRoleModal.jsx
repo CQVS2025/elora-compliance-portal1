@@ -6,10 +6,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabaseClient } from "@/api/supabaseClient";
 import { Loader2, Shield } from 'lucide-react';
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "@/lib/toast";
 
 export default function UserRoleModal({ open, onClose, user, vehicles, sites, onSuccess }) {
-  const { toast } = useToast();
   const [role, setRole] = useState('driver');
   const [assignedSites, setAssignedSites] = useState([]);
   const [assignedVehicles, setAssignedVehicles] = useState([]);
@@ -37,11 +36,7 @@ export default function UserRoleModal({ open, onClose, user, vehicles, sites, on
       onSuccess();
     } catch (error) {
       console.error('Error updating user:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update user role. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Failed to update user role. Please try again.", { description: "Error" });
     } finally {
       setLoading(false);
     }
@@ -81,37 +76,37 @@ export default function UserRoleModal({ open, onClose, user, vehicles, sites, on
                 <SelectItem value="admin">
                   <div className="flex flex-col">
                     <span className="font-semibold">Administrator</span>
-                    <span className="text-xs text-slate-500">Full system access, user management</span>
+                    <span className="text-xs text-muted-foreground">Full system access, user management</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="manager">
                   <div className="flex flex-col">
                     <span className="font-semibold">Manager</span>
-                    <span className="text-xs text-slate-500">Fleet operations, reports, data export</span>
+                    <span className="text-xs text-muted-foreground">Fleet operations, reports, data export</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="technician">
                   <div className="flex flex-col">
                     <span className="font-semibold">Technician</span>
-                    <span className="text-xs text-slate-500">Technical operations and vehicle monitoring</span>
+                    <span className="text-xs text-muted-foreground">Technical operations and vehicle monitoring</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="viewer">
                   <div className="flex flex-col">
                     <span className="font-semibold">Viewer</span>
-                    <span className="text-xs text-slate-500">Read-only access to dashboards and reports</span>
+                    <span className="text-xs text-muted-foreground">Read-only access to dashboards and reports</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="site_manager">
                   <div className="flex flex-col">
                     <span className="font-semibold">Site Manager</span>
-                    <span className="text-xs text-slate-500">Manage assigned sites and vehicles</span>
+                    <span className="text-xs text-muted-foreground">Manage assigned sites and vehicles</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="driver">
                   <div className="flex flex-col">
                     <span className="font-semibold">Driver</span>
-                    <span className="text-xs text-slate-500">View assigned vehicles only</span>
+                    <span className="text-xs text-muted-foreground">View assigned vehicles only</span>
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -122,9 +117,9 @@ export default function UserRoleModal({ open, onClose, user, vehicles, sites, on
           {role === 'site_manager' && (
             <div>
               <Label className="text-base font-semibold mb-3 block">Assigned Sites</Label>
-              <div className="border border-slate-200 rounded-lg p-4 max-h-64 overflow-y-auto space-y-2">
+              <div className="border border-border rounded-lg p-4 max-h-64 overflow-y-auto space-y-2">
                 {sites.length === 0 ? (
-                  <p className="text-sm text-slate-500">No sites available</p>
+                  <p className="text-sm text-muted-foreground">No sites available</p>
                 ) : (
                   sites.map((site) => (
                     <div key={site.id} className="flex items-center space-x-2">
@@ -143,7 +138,7 @@ export default function UserRoleModal({ open, onClose, user, vehicles, sites, on
                   ))
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-muted-foreground mt-2">
                 {assignedSites.length} site{assignedSites.length !== 1 ? 's' : ''} selected
               </p>
             </div>
@@ -153,9 +148,9 @@ export default function UserRoleModal({ open, onClose, user, vehicles, sites, on
           {role === 'driver' && (
             <div>
               <Label className="text-base font-semibold mb-3 block">Assigned Vehicles</Label>
-              <div className="border border-slate-200 rounded-lg p-4 max-h-64 overflow-y-auto space-y-2">
+              <div className="border border-border rounded-lg p-4 max-h-64 overflow-y-auto space-y-2">
                 {vehicles.length === 0 ? (
-                  <p className="text-sm text-slate-500">No vehicles available</p>
+                  <p className="text-sm text-muted-foreground">No vehicles available</p>
                 ) : (
                   vehicles.map((vehicle) => (
                     <div key={vehicle.id} className="flex items-center space-x-2">
@@ -174,7 +169,7 @@ export default function UserRoleModal({ open, onClose, user, vehicles, sites, on
                   ))
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-muted-foreground mt-2">
                 {assignedVehicles.length} vehicle{assignedVehicles.length !== 1 ? 's' : ''} selected
               </p>
             </div>
@@ -206,8 +201,8 @@ export default function UserRoleModal({ open, onClose, user, vehicles, sites, on
             </div>
           )}
           {role === 'viewer' && (
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
-              <p className="text-sm text-slate-800">
+            <div className="p-4 bg-muted border border-border rounded-lg">
+              <p className="text-sm text-foreground">
                 <strong>Viewer:</strong> Read-only access to dashboards and reports. 
                 Cannot edit any data or perform actions.
               </p>
@@ -218,7 +213,7 @@ export default function UserRoleModal({ open, onClose, user, vehicles, sites, on
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="bg-[#7CB342] hover:bg-[#689F38]">
+            <Button type="submit" disabled={loading} className="">
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Update Role
             </Button>

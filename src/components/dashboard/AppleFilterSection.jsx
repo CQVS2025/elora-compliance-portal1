@@ -42,11 +42,7 @@ export default function AppleFilterSection({
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="
-            backdrop-blur-xl bg-amber-50/80 dark:bg-amber-500/10
-            border border-amber-200/50 dark:border-amber-500/20
-            rounded-2xl p-4 flex items-start gap-3
-          "
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-start gap-3"
         >
           <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
@@ -76,22 +72,14 @@ export default function AppleFilterSection({
             disabled={lockCustomerFilter}
           >
             <SelectTrigger
-              className={`
-                h-10 px-4 rounded-xl min-w-[180px]
-                bg-white/80 dark:bg-zinc-900/80
-                border border-gray-200/50 dark:border-zinc-800/50
-                backdrop-blur-xl
-                hover:bg-white dark:hover:bg-zinc-900
-                transition-colors
-                ${lockCustomerFilter ? 'opacity-60 cursor-not-allowed' : ''}
-              `}
+              className={`min-w-[180px] ${lockCustomerFilter ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <SelectValue placeholder="All Customers" />
             </SelectTrigger>
-            <SelectContent className="rounded-xl border-gray-200/50 dark:border-zinc-800">
-              <SelectItem value="all" className="rounded-lg">All Customers</SelectItem>
+            <SelectContent>
+              <SelectItem value="all">All Customers</SelectItem>
               {customers.map((customer) => (
-                <SelectItem key={customer.id} value={customer.id} className="rounded-lg">
+                <SelectItem key={customer.id} value={customer.id}>
                   {customer.name}
                 </SelectItem>
               ))}
@@ -110,22 +98,14 @@ export default function AppleFilterSection({
             disabled={lockSiteFilter}
           >
             <SelectTrigger
-              className={`
-                h-10 px-4 rounded-xl min-w-[160px]
-                bg-white/80 dark:bg-zinc-900/80
-                border border-gray-200/50 dark:border-zinc-800/50
-                backdrop-blur-xl
-                hover:bg-white dark:hover:bg-zinc-900
-                transition-colors
-                ${lockSiteFilter ? 'opacity-60 cursor-not-allowed' : ''}
-              `}
+              className={`min-w-[160px] ${lockSiteFilter ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <SelectValue placeholder="All Sites" />
             </SelectTrigger>
-            <SelectContent className="rounded-xl border-gray-200/50 dark:border-zinc-800">
-              <SelectItem value="all" className="rounded-lg">All Sites</SelectItem>
+            <SelectContent>
+              <SelectItem value="all">All Sites</SelectItem>
               {sites.filter(site => site.name !== 'All Sites').map((site) => (
-                <SelectItem key={site.id} value={site.id} className="rounded-lg">
+                <SelectItem key={site.id} value={site.id}>
                   {site.name}
                 </SelectItem>
               ))}

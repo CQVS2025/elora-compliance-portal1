@@ -1,11 +1,13 @@
 import { queryOptions } from '@tanstack/react-query';
 import { callEdgeFunction } from '@/lib/supabase';
+import { getEloraTenantContext } from '@/lib/eloraTenantContext';
 import { queryKeys } from '../keys';
 
 /**
  * Customer Query Options
  * 
  * Provides customer-related queries with tenant isolation.
+ * API does not support customer filter; we fetch all and filter client-side for non-super-admin.
  */
 
 /**
@@ -16,9 +18,16 @@ export const customersOptions = (companyId) =>
     queryKey: queryKeys.tenant.customers(companyId),
     queryFn: async ({ signal }) => {
       const response = await callEdgeFunction('elora_customers', {});
-      const data = response?.data ?? response ?? [];
-      
-      // Transform to consistent format
+      let data = response?.data ?? response ?? [];
+      const { companyEloraCustomerRef, isSuperAdmin } = getEloraTenantContext();
+      // Include items with null ref (trust backend); only exclude when ref differs.
+      if (!isSuperAdmin && companyEloraCustomerRef && Array.isArray(data)) {
+        data = data.filter((c) => {
+          const ref = c.ref ?? c.id ?? null;
+          if (ref == null) return true;
+          return ref === companyEloraCustomerRef;
+        });
+      }
       return data.map((c) => ({
         id: c.ref,
         name: c.name,
@@ -38,7 +47,15 @@ export const customerOptions = (companyId, customerId) =>
     queryKey: queryKeys.tenant.customer(companyId, customerId),
     queryFn: async ({ signal }) => {
       const response = await callEdgeFunction('elora_customers', {});
-      const customers = response?.data ?? response ?? [];
+      let customers = response?.data ?? response ?? [];
+      const { companyEloraCustomerRef, isSuperAdmin } = getEloraTenantContext();
+      if (!isSuperAdmin && companyEloraCustomerRef && Array.isArray(customers)) {
+        customers = customers.filter((c) => {
+          const ref = c.ref ?? c.id ?? null;
+          if (ref == null) return true;
+          return ref === companyEloraCustomerRef;
+        });
+      }
       return customers.find((c) => c.ref === customerId);
     },
     staleTime: 5 * 60 * 1000,

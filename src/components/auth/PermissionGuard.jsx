@@ -108,6 +108,27 @@ export function getEffectiveConfig(email) {
 }
 
 /**
+ * Compute effective visible tab values for the current user.
+ * Priority: user visible_tabs > user hidden_tabs > role override (Super Admin config) > role defaults.
+ */
+function getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides) {
+  if (perms.visible_tabs && perms.visible_tabs.length > 0) {
+    return perms.visible_tabs;
+  }
+  if (perms.hidden_tabs && perms.hidden_tabs.length > 0) {
+    const allTabValues = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard'];
+    return allTabValues.filter((v) => !perms.hidden_tabs.includes(v));
+  }
+  const role = userProfile?.role;
+  const roleData = role && roleTabOverrides?.[role];
+  const roleTabs = Array.isArray(roleData) ? roleData : roleData?.visible_tabs;
+  if (role && roleTabs && roleTabs.length > 0) {
+    return roleTabs;
+  }
+  return getAccessibleTabs(userProfile) || [];
+}
+
+/**
  * Main permissions hook used throughout the app
  */
 export function usePermissions() {
@@ -115,9 +136,14 @@ export function usePermissions() {
   const userEmail = authUser?.email || userProfile?.email;
 
   const { permissions: dbPermissions, isLoading: permissionsLoading } = useUserPermissions(userEmail);
+  const { data: roleTabOverrides = {} } = useQuery(roleTabSettingsOptions());
 
   const permissions = useMemo(() => {
     const perms = dbPermissions || DEFAULT_PERMISSIONS;
+    const effectiveTabs = getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides);
+    // Driver Leaderboard visibility is controlled only by tab visibility (same as other tabs).
+    // Default: visible for all roles; Super Admin can turn off per role in Admin Console.
+    const hideLeaderboard = !effectiveTabs.includes('leaderboard');
 
     return {
       // Role checks based on user profile
@@ -142,9 +168,9 @@ export function usePermissions() {
       canEditSites: perms.can_edit_sites ?? true,
       canDeleteRecords: perms.can_delete_records ?? false,
 
-      // UI visibility from database
+      // UI visibility from database (leaderboard driven by tab visibility when not user-overridden)
       hideCostForecast: perms.hide_cost_forecast ?? false,
-      hideLeaderboard: perms.hide_leaderboard ?? false,
+      hideLeaderboard,
       hideUsageCosts: perms.hide_usage_costs ?? false,
 
       // Data restrictions from database
@@ -170,7 +196,7 @@ export function usePermissions() {
       // Raw permissions data
       _raw: perms,
     };
-  }, [dbPermissions, authUser, userProfile, permissionsLoading]);
+  }, [dbPermissions, authUser, userProfile, permissionsLoading, roleTabOverrides]);
 
   return permissions;
 }
@@ -201,19 +227,17 @@ export function PermissionGuard({ children, require, fallback = null }) {
 }
 
 /**
- * Filter data based on user permissions and role
- * 
- * Role-based filtering rules:
+ * Filter data based on user permissions and role.
+ * Tenant isolation: non-super_admin users only see data for their company's ACATC customer ref
+ * (companies.elora_customer_ref, e.g. "20191002210559S12659"). Super admin sees all.
+ *
+ * Role-based filtering (applied after tenant filter):
  * - super_admin: ALL companies, ALL sites, ALL vehicles
- * - admin: Their company only, all sites within their company
- * - manager: Their company, only the sites they manage (assigned_sites)
- * - user: Their selected company/companies only, all sites selected
- * - batcher: Their company + their assigned site ONLY (single site)
+ * - admin: Their company only (filtered by company_elora_customer_ref)
+ * - manager: Their company, only assigned sites
+ * - batcher: Their company + single assigned site ONLY
  * - driver: Their assigned vehicle(s) ONLY
- * - viewer: Their company only, all sites (READ-ONLY)
- * 
- * Note: Sites from Elora API use customer_ref, not company_id
- * We need to map company_id to customer_ref for filtering
+ * - user/viewer: Their company only (filtered by company_elora_customer_ref)
  */
 export function useFilteredData(vehicles, sites, customers = []) {
   const permissions = usePermissions();
@@ -221,94 +245,95 @@ export function useFilteredData(vehicles, sites, customers = []) {
 
   return useMemo(() => {
     const role = userProfile?.role;
-    const companyId = userProfile?.company_id;
+    const companyCustomerRef = userProfile?.company_elora_customer_ref?.trim() || null;
 
-    // SUPER_ADMIN: See everything
+    // SUPER_ADMIN: See everything (no tenant filter)
     if (role === 'super_admin') {
       return { filteredVehicles: vehicles, filteredSites: sites };
     }
 
-    // For other roles, we need to map company_id to customer_ref
-    // Since the Elora API uses customer_ref (not company_id), we need to find the customer
-    // that matches the user's company. For now, we'll use the restrictedCustomer from permissions
-    // or filter based on assigned sites/vehicles
-    
-    // ADMIN: See their company only (all sites within their company)
+    // Non-super_admin: restrict to company's ACATC customer ref first (tenant isolation)
+    let tenantVehicles = vehicles;
+    let tenantSites = sites;
+    let tenantCustomers = customers;
+    if (companyCustomerRef) {
+      tenantSites = sites.filter(s => (s.customer_ref || s.customerRef) === companyCustomerRef);
+      tenantVehicles = vehicles.filter(v => (v.customer_ref || v.customerId) === companyCustomerRef);
+      tenantCustomers = customers.filter(c => (c.id || c.ref) === companyCustomerRef);
+    } else {
+      // Company has no ACATC ref set: show no data so admin must set it
+      tenantSites = [];
+      tenantVehicles = [];
+      tenantCustomers = [];
+    }
+
+    // ADMIN: Their company only (already restricted by tenant above)
     if (role === 'admin') {
-      // If restrictedCustomer is set, use that to filter sites
       if (permissions.restrictedCustomer) {
-        const filteredSites = sites.filter(s => 
+        const filteredSites = tenantSites.filter(s =>
           s.customer_name && s.customer_name.toUpperCase().includes(permissions.restrictedCustomer.toUpperCase())
         );
         const siteIds = filteredSites.map(s => s.id);
-        const filteredVehicles = vehicles.filter(v => siteIds.includes(v.site_id));
+        const filteredVehicles = tenantVehicles.filter(v => siteIds.includes(v.site_id));
         return { filteredVehicles, filteredSites };
       }
-      // Otherwise, show all (admin sees their company's data)
-      return { filteredVehicles: vehicles, filteredSites: sites };
+      return { filteredVehicles: tenantVehicles, filteredSites: tenantSites };
     }
 
-    // MANAGER: See their company, only assigned sites
+    // MANAGER: Their company, only assigned sites
     if (role === 'manager') {
       const assignedSiteIds = permissions.assignedSites || [];
       if (assignedSiteIds.length > 0) {
-        const filteredSites = sites.filter(s => assignedSiteIds.includes(s.id));
+        const filteredSites = tenantSites.filter(s => assignedSiteIds.includes(s.id));
         const siteIds = filteredSites.map(s => s.id);
-        const filteredVehicles = vehicles.filter(v => siteIds.includes(v.site_id));
+        const filteredVehicles = tenantVehicles.filter(v => siteIds.includes(v.site_id));
         return { filteredVehicles, filteredSites };
       }
-      // If no assigned sites, show all (fallback)
-      return { filteredVehicles: vehicles, filteredSites: sites };
+      return { filteredVehicles: tenantVehicles, filteredSites: tenantSites };
     }
 
-    // BATCHER: See their company + single assigned site ONLY
+    // BATCHER: Their company + single assigned site ONLY
     if (role === 'batcher') {
       const assignedSiteIds = permissions.assignedSites || [];
       if (assignedSiteIds.length > 0) {
-        // Batcher should only have ONE assigned site
-        const filteredSites = sites.filter(s => assignedSiteIds.includes(s.id));
+        const filteredSites = tenantSites.filter(s => assignedSiteIds.includes(s.id));
         const siteIds = filteredSites.map(s => s.id);
-        const filteredVehicles = vehicles.filter(v => siteIds.includes(v.site_id));
+        const filteredVehicles = tenantVehicles.filter(v => siteIds.includes(v.site_id));
         return { filteredVehicles, filteredSites };
       }
-      // If no assigned sites, show nothing
       return { filteredVehicles: [], filteredSites: [] };
     }
 
-    // DRIVER: See their assigned vehicles ONLY (or all company vehicles if none assigned)
+    // DRIVER: Their assigned vehicles ONLY (within tenant)
     if (role === 'driver') {
       const assignedVehicleIds = permissions.assignedVehicles || [];
       const hasAssignment = assignedVehicleIds.length > 0;
       const filteredVehicles = hasAssignment
-        ? vehicles.filter(v =>
+        ? tenantVehicles.filter(v =>
             assignedVehicleIds.includes(v.id) ||
             assignedVehicleIds.includes(v.rfid) ||
             assignedVehicleIds.includes(String(v.id)) ||
             assignedVehicleIds.includes(String(v.rfid))
           )
-        : vehicles; // Fallback: no assignment = see all company vehicles
+        : tenantVehicles;
       return { filteredVehicles, filteredSites: [] };
     }
 
-    // USER: See their selected company/companies (demo users)
-    // VIEWER: See their company only (read-only)
+    // USER / VIEWER: Their company only (already restricted by tenant above)
     if (role === 'user' || role === 'viewer') {
-      // If restrictedCustomer is set, use that to filter
       if (permissions.restrictedCustomer) {
-        const filteredSites = sites.filter(s => 
+        const filteredSites = tenantSites.filter(s =>
           s.customer_name && s.customer_name.toUpperCase().includes(permissions.restrictedCustomer.toUpperCase())
         );
         const siteIds = filteredSites.map(s => s.id);
-        const filteredVehicles = vehicles.filter(v => siteIds.includes(v.site_id));
+        const filteredVehicles = tenantVehicles.filter(v => siteIds.includes(v.site_id));
         return { filteredVehicles, filteredSites };
       }
-      // Otherwise, show all
-      return { filteredVehicles: vehicles, filteredSites: sites };
+      return { filteredVehicles: tenantVehicles, filteredSites: tenantSites };
     }
 
-    // Default: return everything (fallback)
-    return { filteredVehicles: vehicles, filteredSites: sites };
-  }, [vehicles, sites, permissions, userProfile]);
+    return { filteredVehicles: tenantVehicles, filteredSites: tenantSites };
+  }, [vehicles, sites, customers, permissions, userProfile]);
 }
 
 /**
@@ -332,8 +357,10 @@ export function useAvailableTabs(allTabs) {
 
     // Second, check role-based tab overrides (Super Admin config)
     const role = userProfile?.role;
-    if (role && roleTabOverrides[role] && roleTabOverrides[role].length > 0) {
-      return allTabs.filter(tab => roleTabOverrides[role].includes(tab.value));
+    const roleData = role && roleTabOverrides[role];
+    const visibleTabs = Array.isArray(roleData) ? roleData : roleData?.visible_tabs;
+    if (role && visibleTabs && visibleTabs.length > 0) {
+      return allTabs.filter(tab => visibleTabs.includes(tab.value));
     }
 
     // Fallback to default role-based tabs from permissions.js

@@ -195,40 +195,53 @@ export function getAccessibleTabs(userProfile) {
 
   // Super admin sees all tabs (Users tab moved to Admin console)
   if (role === 'super_admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard'];
   }
 
   // Admin sees all tabs except users, but includes branding
   if (role === 'admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard'];
   }
 
   // Manager sees most tabs (limited to assigned sites)
   if (role === 'manager') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard'];
   }
 
   // User (demo) sees same as admin but limited to assigned company/companies
   if (role === 'user') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard'];
   }
 
   // Batcher sees same as admin but locked to a single assigned site
   if (role === 'batcher') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard'];
   }
 
-  // Driver sees only compliance (assigned vehicles only)
+  // Driver sees only compliance and leaderboard (assigned vehicles only)
   if (role === 'driver') {
-    return ['compliance'];
+    return ['compliance', 'leaderboard'];
   }
 
   // Viewer sees read-only tabs
   if (role === 'viewer') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard'];
   }
 
-  return ['compliance'];
+  return ['compliance', 'leaderboard'];
+}
+
+/**
+ * Get default email report types allowed for a role (when no Super Admin override).
+ * Roles with email-reports tab get both; driver only gets compliance.
+ */
+export function getDefaultEmailReportTypes(userProfile) {
+  if (!userProfile) return ['compliance', 'costs'];
+  const role = userProfile.role;
+  const hasEmailReports = getAccessibleTabs(userProfile).includes('email-reports');
+  if (!hasEmailReports) return [];
+  if (role === 'driver') return ['compliance'];
+  return ['compliance', 'costs'];
 }
 
 /**

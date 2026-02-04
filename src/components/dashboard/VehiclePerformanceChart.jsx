@@ -1,84 +1,69 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
-import { motion } from 'framer-motion';
+import { BarChart, Bar, XAxis, YAxis, LabelList } from 'recharts';
+import { Card, CardContent } from '@/components/ui/card';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 
-const CustomTooltip = ({ active, payload }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white px-4 py-3 rounded-lg shadow-lg border border-slate-100">
-        <p className="text-sm font-medium text-slate-800">{payload[0].payload.name}</p>
-        <p className="text-lg font-bold text-[#7CB342]">{payload[0].value} washes</p>
-      </div>
-    );
-  }
-  return null;
-};
+const chartConfig = { washes: { label: 'Washes', color: 'hsl(var(--primary))' } };
 
 export default function VehiclePerformanceChart({ vehicles }) {
   const data = [...vehicles]
-    .sort((a, b) => b.washes_completed - a.washes_completed)
+    .sort((a, b) => (b.washes_completed ?? 0) - (a.washes_completed ?? 0))
     .slice(0, 10)
-    .map(v => ({
-      name: v.name,
-      washes: v.washes_completed,
-    }));
+    .map(v => {
+      const displayName = [v.name, v.site_name].filter(Boolean).join(' • ') || v.rfid || 'Unknown';
+      return {
+        name: displayName,
+        washes: v.washes_completed ?? 0,
+      };
+    });
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.3 }}
-      className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100"
-    >
-      <div className="mb-6">
-        <h3 className="text-lg font-bold text-slate-800">Vehicle Performance</h3>
-        <div className="w-10 h-[3px] bg-[#7CB342] rounded-full mt-2" />
-      </div>
-      
-      <div className="h-[280px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart 
-            data={data} 
-            layout="vertical" 
+    <Card className="overflow-hidden">
+      <CardContent className="pt-6">
+        <div className="mb-6">
+          <h3 className="text-lg font-bold text-foreground">Vehicle Performance</h3>
+          <div className="w-10 h-[3px] bg-primary rounded-full mt-2" />
+        </div>
+
+        <ChartContainer config={chartConfig} className="h-[280px] w-full">
+          <BarChart
+            data={data}
+            layout="vertical"
             margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
           >
             <defs>
-              <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#7CB342" />
-                <stop offset="100%" stopColor="#9CCC65" />
+              <linearGradient id="barGradientVpc" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="hsl(var(--primary))" />
+                <stop offset="100%" stopColor="hsl(var(--primary) / 0.8)" />
               </linearGradient>
             </defs>
-            <XAxis 
-              type="number" 
+            <XAxis
+              type="number"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 12, fill: '#64748B' }}
+              tick={{ fontSize: 12 }}
               domain={[0, 'dataMax + 1']}
             />
-            <YAxis 
-              type="category" 
-              dataKey="name" 
+            <YAxis
+              type="category"
+              dataKey="name"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 12, fill: '#1E293B', fontWeight: 600 }}
-              width={80}
+              tick={{ fontSize: 11, fontWeight: 600 }}
+              width={120}
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(124, 179, 66, 0.08)' }} />
-            <Bar 
-              dataKey="washes" 
-              fill="url(#barGradient)"
+            <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={{ fill: 'hsl(var(--primary) / 0.08)' }} />
+            <Bar
+              dataKey="washes"
+              fill="url(#barGradientVpc)"
               radius={[0, 4, 4, 0]}
               barSize={24}
             >
-              <LabelList 
-                dataKey="washes" 
-                position="right" 
-                style={{ fontSize: 12, fontWeight: 600, fill: '#64748B' }}
-              />
+              <LabelList dataKey="washes" position="right" />
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </motion.div>
+        </ChartContainer>
+      </CardContent>
+    </Card>
   );
 }

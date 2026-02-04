@@ -2,17 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Apple-style base typography and smooth rendering */
+/* shadcn theme: blue + neutral base + medium radius; dark mode supported */
 @layer base {
   :root {
-    /* Light mode colors - Apple aesthetic */
+    /* Light mode - blue theme, neutral base */
     --background: 0 0% 100%;
     --foreground: 220 13% 9%;
     --card: 0 0% 100%;
     --card-foreground: 220 13% 9%;
     --popover: 0 0% 100%;
     --popover-foreground: 220 13% 9%;
-    --primary: 160 84% 39%; /* emerald-500 */
+    --primary: 217 91% 60%;
+    /* blue-500 */
     --primary-foreground: 0 0% 100%;
     --secondary: 220 14% 96%;
     --secondary-foreground: 220 13% 9%;
@@ -24,13 +25,15 @@
     --destructive-foreground: 0 0% 100%;
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 160 84% 39%;
+    --ring: 217 91% 60%;
+    /* blue-500 for focus rings */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.75rem;
+    --radius: 0.5rem;
+    /* medium radius */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
@@ -38,18 +41,19 @@
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 160 84% 39%;
+    --sidebar-ring: 217 91% 60%;
   }
 
   .dark {
-    /* Dark mode colors - Apple aesthetic */
+    /* Dark mode - blue theme */
     --background: 0 0% 4%;
     --foreground: 0 0% 98%;
     --card: 0 0% 7%;
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 7%;
     --popover-foreground: 0 0% 98%;
-    --primary: 160 84% 39%;
+    --primary: 217 91% 60%;
+    /* blue-500 */
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 15%;
     --secondary-foreground: 0 0% 98%;
@@ -61,7 +65,8 @@
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 15%;
     --input: 0 0% 15%;
-    --ring: 160 84% 39%;
+    --ring: 217 91% 60%;
+    /* blue-500 */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -69,12 +74,13 @@
     --chart-5: 340 75% 55%;
     --sidebar-background: 0 0% 7%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary: 217 91% 60%;
+    /* blue-500 */
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 0 0% 12%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 160 84% 39%;
+    --sidebar-ring: 217 91% 60%;
   }
 }
 
@@ -89,17 +95,24 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* Reserve space for scrollbar to prevent layout shift when dropdowns/modals open */
+    scrollbar-gutter: stable;
   }
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'SF Pro Display', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
     line-height: 1.5;
   }
 
   /* Apple-style headings */
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply tracking-tight font-semibold;
   }
 
@@ -119,9 +132,9 @@
     @apply text-lg font-semibold;
   }
 
-  /* Focus states - Apple style ring */
+  /* Focus states - blue theme (primary) */
   *:focus-visible {
-    @apply outline-none ring-2 ring-emerald-500/40 ring-offset-2 ring-offset-background;
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
 
   /* Remove default tap highlight on mobile */
@@ -131,72 +144,55 @@
 }
 
 @layer components {
-  /* Apple-style glass card */
+
+  /* shadcn-style card (theme tokens) */
   .glass-card {
-    @apply backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
-           border border-gray-200/20 dark:border-zinc-800/50
-           rounded-2xl shadow-apple;
+    @apply rounded-xl border bg-card text-card-foreground shadow-sm;
   }
 
   /* Apple-style subtle shadow on hover */
   .hover-lift {
-    @apply transition-all duration-300 ease-apple
-           hover:shadow-apple-md hover:-translate-y-0.5;
+    @apply transition-all duration-300 ease-apple hover:shadow-apple-md hover:-translate-y-0.5;
   }
 
   /* Apple-style pill button */
   .btn-pill {
-    @apply h-11 px-6 rounded-full font-semibold text-sm
-           transition-all duration-150
-           active:scale-95;
+    @apply h-11 px-6 rounded-full font-semibold text-sm transition-all duration-150 active:scale-95;
   }
 
   .btn-pill-primary {
-    @apply btn-pill bg-emerald-500 text-white
-           hover:bg-emerald-600
-           shadow-lg shadow-emerald-500/30;
+    @apply btn-pill bg-primary text-primary-foreground hover:bg-primary/90 shadow-md;
   }
 
   .btn-pill-secondary {
-    @apply btn-pill bg-gray-100 dark:bg-zinc-800
-           text-gray-900 dark:text-white
-           hover:bg-gray-200 dark:hover:bg-zinc-700;
+    @apply btn-pill bg-secondary text-secondary-foreground hover:bg-secondary/80;
   }
 
   .btn-pill-ghost {
-    @apply btn-pill text-blue-500
-           hover:bg-blue-500/10;
+    @apply btn-pill text-primary hover:bg-accent;
   }
 
   .btn-pill-destructive {
-    @apply btn-pill bg-red-500/10 text-red-500
-           hover:bg-red-500/20;
+    @apply btn-pill bg-destructive/10 text-destructive hover:bg-destructive/20;
   }
 
-  /* Apple-style input */
+  /* shadcn-style input (theme tokens) */
   .input-apple {
-    @apply w-full h-11 px-4 rounded-xl
-           bg-gray-100 dark:bg-zinc-900
-           border border-gray-200 dark:border-zinc-800
-           focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20
-           transition-all outline-none text-base
-           placeholder:text-gray-400 dark:placeholder:text-zinc-500;
+    @apply w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
   }
 
-  /* Apple-style floating header */
+  /* shadcn-style header */
   .header-glass {
-    @apply sticky top-0 z-50
-           backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
-           border-b border-gray-200/20 dark:border-zinc-800/50;
+    @apply sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60;
   }
 
-  /* Status indicators */
+  /* Status indicators (theme tokens) */
   .status-dot {
     @apply w-2.5 h-2.5 rounded-full;
   }
 
   .status-dot-success {
-    @apply status-dot bg-emerald-500;
+    @apply status-dot bg-primary;
   }
 
   .status-dot-warning {
@@ -213,6 +209,7 @@
 }
 
 @layer utilities {
+
   /* Apple-style text gradient */
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r;
@@ -291,14 +288,18 @@
   background: #52525b;
 }
 
-/* Selection color - Apple emerald accent */
+/* Selection color - blue theme (primary) */
 ::selection {
-  background: rgba(16, 185, 129, 0.2);
+  background: hsl(var(--primary) / 0.2);
   color: inherit;
 }
 
 /* Smooth transitions for all interactive elements */
-button, a, input, select, textarea {
+button,
+a,
+input,
+select,
+textarea {
   @apply transition-all duration-200 ease-apple;
 }
 

@@ -3,6 +3,8 @@ import { supabase } from './supabase';
 import { performCompleteLogout } from '@/utils/storageCleanup';
 import { queryClientInstance, clearAllCache } from '@/lib/query-client';
 import { clearTenantContextCache } from '@/api/edgeFetch';
+import { setEloraTenantContext, clearEloraTenantContext } from '@/lib/eloraTenantContext';
+import { upsertPresenceOnLogin, startHeartbeat, stopHeartbeat } from '@/lib/userPresence';
 
 const AuthContext = createContext();
 
@@ -74,8 +76,10 @@ export const AuthProvider = ({ children }) => {
           }
         } else {
           currentProfileId = null;
+          stopHeartbeat();
           setUser(null);
           setUserProfile(null);
+          clearEloraTenantContext();
           setIsAuthenticated(false);
           setProfileLoadAttempts(0);
         }
@@ -184,6 +188,7 @@ export const AuthProvider = ({ children }) => {
         // User exists in auth but not in profiles table
         setUserProfile(null);
         userProfileRef.current = null;
+        clearEloraTenantContext();
         const errorMsg = 'User profile not found. Please contact your administrator.';
         setAuthError({
           type: 'user_not_registered',
@@ -198,6 +203,7 @@ export const AuthProvider = ({ children }) => {
         console.log('User account is inactive:', profile.email);
         setUserProfile(null);
         userProfileRef.current = null;
+        clearEloraTenantContext();
         const errorMsg = 'Your account has been deactivated. Please contact your administrator.';
         setAuthError({
           type: 'account_deactivated',
@@ -216,6 +222,7 @@ export const AuthProvider = ({ children }) => {
         console.log('User is unassigned (no company):', profile.email);
         setUserProfile(null);
         userProfileRef.current = null;
+        clearEloraTenantContext();
         const errorMsg = 'You are not assigned to any company. Please contact your administrator.';
         setAuthError({
           type: 'user_unassigned',
@@ -229,9 +236,49 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: errorMsg };
       }
 
-      setUserProfile(profile);
-      userProfileRef.current = profile;
-      console.log('User profile loaded:', profile);
+      // Enrich profile with company name/logo and check company is active (super_admin can deactivate companies)
+      let enrichedProfile = { ...profile };
+      if (profile.company_id) {
+        const { data: company } = await supabase
+          .from('companies')
+          .select('name, logo_url, is_active, elora_customer_ref')
+          .eq('id', profile.company_id)
+          .single();
+        // If company is set inactive by super_admin, no user from that company can log in (including company admin)
+        if (company?.is_active === false) {
+          console.log('User company is inactive:', profile.company_id, profile.email);
+          setUserProfile(null);
+          userProfileRef.current = null;
+        clearEloraTenantContext();
+        const errorMsg = 'Your company has been deactivated. Please contact your administrator.';
+          setAuthError({
+            type: 'company_deactivated',
+            message: errorMsg
+          });
+          try {
+            sessionStorage.setItem('elora_login_rejection', JSON.stringify({ type: 'company_deactivated', message: errorMsg }));
+          } catch (_) {}
+          await supabase.auth.signOut();
+          setIsAuthenticated(false);
+          return { success: false, error: errorMsg };
+        }
+        enrichedProfile.company_name = company?.name ?? null;
+        enrichedProfile.company_logo_url = company?.logo_url ?? null;
+        enrichedProfile.company_elora_customer_ref = company?.elora_customer_ref ?? null;
+      } else if (profile.role === 'super_admin') {
+        enrichedProfile.company_name = null; // super_admin may not belong to a company
+        enrichedProfile.company_logo_url = null;
+      }
+      setUserProfile(enrichedProfile);
+      userProfileRef.current = enrichedProfile;
+      setEloraTenantContext({
+        companyEloraCustomerRef: enrichedProfile.company_elora_customer_ref ?? null,
+        isSuperAdmin: enrichedProfile.role === 'super_admin',
+      });
+      // Update presence (last_login + last_seen) and start heartbeat
+      upsertPresenceOnLogin(user.id, enrichedProfile.company_id ?? null);
+      startHeartbeat(user.id, enrichedProfile.company_id ?? null);
+      console.log('User profile loaded:', enrichedProfile);
       setIsAuthenticated(true);
       // Clear any previous auth errors since profile loaded successfully
       setAuthError(null);
@@ -250,6 +297,7 @@ export const AuthProvider = ({ children }) => {
       
       setUserProfile(null);
       userProfileRef.current = null;
+      clearEloraTenantContext();
       const errorMsg = 'Failed to load user profile. Please try again.';
       setAuthError({
         type: 'profile_load_error',
@@ -320,13 +368,14 @@ export const AuthProvider = ({ children }) => {
     try {
       // Get user email before clearing everything
       const userEmail = user?.email || userProfile?.email;
-      
+      stopHeartbeat();
       // Sign out from Supabase first (this clears Supabase session)
       await supabase.auth.signOut();
       
       // NEW: Clear TanStack Query cache and tenant context
       clearAllCache();
       clearTenantContextCache();
+      clearEloraTenantContext();
       
       // Clear all storage, cookies, and cache
       await performCompleteLogout(queryClientInstance, userEmail);
@@ -349,6 +398,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         setUserProfile(null);
         userProfileRef.current = null;
+        clearEloraTenantContext();
         setIsAuthenticated(false);
         setAuthError(null);
         setProfileLoadAttempts(0);

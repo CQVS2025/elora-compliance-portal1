@@ -65,9 +65,9 @@ export default function QuickActions({ vehicles, onOpenVehicle, onOpenDevices })
 
   if (urgentItems.length === 0) {
     return (
-      <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+      <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
         <CardContent className="p-6 text-center">
-          <div className="w-12 h-12 rounded-full bg-green-100 mx-auto mb-3 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full bg-primary/10 mx-auto mb-3 flex items-center justify-center">
             <motion.div
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
@@ -75,8 +75,8 @@ export default function QuickActions({ vehicles, onOpenVehicle, onOpenDevices })
               ✓
             </motion.div>
           </div>
-          <p className="text-lg font-semibold text-green-800">All Clear!</p>
-          <p className="text-sm text-green-600 mt-1">No urgent actions required at this time</p>
+          <p className="text-lg font-semibold text-primary">All Clear!</p>
+          <p className="text-sm text-primary/80 mt-1">No urgent actions required at this time</p>
         </CardContent>
       </Card>
     );
@@ -104,13 +104,13 @@ export default function QuickActions({ vehicles, onOpenVehicle, onOpenDevices })
                     <Icon className="w-5 h-5" />
                     <h4 className="font-semibold">{item.title}</h4>
                   </div>
-                  <Badge variant="secondary" className="bg-white/50">
+                  <Badge variant="secondary" className="bg-background/60">
                     {item.count}
                   </Badge>
                 </div>
                 <p className="text-sm mb-3">{item.description}</p>
                 <button 
-                  className="w-full px-4 py-2 text-sm font-medium border border-slate-300 rounded-md hover:bg-white transition-all flex items-center justify-center gap-2 cursor-pointer bg-white shadow-sm hover:shadow-md active:scale-95"
+                  className="w-full px-4 py-2 text-sm font-medium border border-border rounded-md bg-background hover:bg-accent transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-md active:scale-95 text-foreground"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();

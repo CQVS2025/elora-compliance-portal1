@@ -4,10 +4,10 @@ module.exports = {
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
   theme: {
   	extend: {
-  		// Apple-style font family
+  		// shadcn: Inter first (theme = blue, font = inter)
   		fontFamily: {
-  			sans: ['SF Pro Display', 'Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-  			display: ['SF Pro Display', 'Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+  			sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+  			display: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
   		},
   		// Apple-style border radius
   		borderRadius: {
@@ -30,10 +30,10 @@ module.exports = {
   			'glass-lg': '0 16px 48px rgba(0, 0, 0, 0.12)',
   		},
   		colors: {
-  			// ELORA Brand Colors - Updated for Apple aesthetic
-  			'elora-primary': '#10B981', // emerald-500 (main accent)
-  			'elora-primary-light': '#34D399', // emerald-400
-  			'elora-primary-dark': '#059669', // emerald-600
+  			// Brand accent (fallback; primary from CSS vars is blue theme)
+  			'elora-primary': 'hsl(var(--primary))',
+  			'elora-primary-light': 'hsl(var(--primary) / 0.9)',
+  			'elora-primary-dark': 'hsl(var(--primary) / 0.8)',
 
   			// Apple-style gray scale
   			'apple-gray': {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -11,13 +12,15 @@ export default function DataPagination({
   totalPages,
   totalItems,
   itemsPerPage,
+  pageSize,
   onPageChange,
   className = ''
 }) {
   if (totalPages <= 1) return null;
 
-  const startItem = ((currentPage - 1) * itemsPerPage) + 1;
-  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+  const perPage = itemsPerPage ?? pageSize ?? 10;
+  const startItem = ((currentPage - 1) * perPage) + 1;
+  const endItem = Math.min(currentPage * perPage, totalItems);
 
   // Generate page numbers to show
   const getPageNumbers = () => {
@@ -63,11 +66,11 @@ export default function DataPagination({
   const pageNumbers = getPageNumbers();
 
   return (
-    <div className={`flex items-center justify-between pt-4 border-t border-gray-200 dark:border-zinc-800 ${className}`}>
-      <div className="text-sm text-gray-600 dark:text-gray-400">
-        Showing <span className="font-medium text-gray-900 dark:text-white">{startItem}</span> to{' '}
-        <span className="font-medium text-gray-900 dark:text-white">{endItem}</span> of{' '}
-        <span className="font-medium text-gray-900 dark:text-white">{totalItems}</span> results
+    <div className={cn('flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-border', className)}>
+      <div className="text-sm text-muted-foreground">
+        Showing <span className="font-medium text-foreground">{startItem}</span> to{' '}
+        <span className="font-medium text-foreground">{endItem}</span> of{' '}
+        <span className="font-medium text-foreground">{totalItems}</span> results
       </div>
 
       <div className="flex items-center gap-1">
@@ -88,7 +91,7 @@ export default function DataPagination({
               return (
                 <span
                   key={`ellipsis-${index}`}
-                  className="px-2 text-gray-400 dark:text-gray-500"
+                  className="px-2 text-muted-foreground"
                 >
                   ...
                 </span>
@@ -101,11 +104,7 @@ export default function DataPagination({
                 variant={currentPage === page ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => onPageChange(page)}
-                className={`h-9 w-9 p-0 ${
-                  currentPage === page
-                    ? 'bg-[#7CB342] hover:bg-[#689F38] text-white border-[#7CB342]'
-                    : ''
-                }`}
+                className="h-9 w-9 p-0"
               >
                 {page}
               </Button>

@@ -10,8 +10,8 @@ export const colors = {
     text: '#111827', // gray-900
     textSecondary: '#6B7280', // gray-500
     textTertiary: '#9CA3AF', // gray-400
-    accent: '#10B981', // emerald-500 (ELORA green for compliance)
-    accentLight: '#D1FAE5', // emerald-100
+    accent: 'hsl(var(--primary))', // blue theme
+    accentLight: 'hsl(var(--primary) / 0.1)',
     interactive: '#3B82F6', // blue-500
     interactiveHover: '#2563EB', // blue-600
     border: '#E5E7EB', // gray-200
@@ -30,8 +30,8 @@ export const colors = {
     text: '#FFFFFF',
     textSecondary: '#A1A1AA', // zinc-400
     textTertiary: '#71717A', // zinc-500
-    accent: '#10B981', // emerald-500
-    accentLight: '#064E3B', // emerald-900
+    accent: 'hsl(var(--primary))',
+    accentLight: 'hsl(var(--primary) / 0.2)',
     interactive: '#60A5FA', // blue-400
     interactiveHover: '#3B82F6', // blue-500
     border: '#27272A', // zinc-800
@@ -76,7 +76,7 @@ export const shadows = {
   modal: 'shadow-2xl shadow-black/20',
   dropdown: 'shadow-xl shadow-black/10',
   button: 'shadow-md shadow-black/5',
-  buttonAccent: 'shadow-lg shadow-emerald-500/30',
+  buttonAccent: 'shadow-md',
 };
 
 export const borderRadius = {
@@ -131,9 +131,8 @@ export const glass = {
 // Button variants
 export const buttonVariants = {
   primary: `
-    h-11 px-6 rounded-full bg-emerald-500 text-white font-semibold text-sm
-    hover:bg-emerald-600 active:scale-95 transition-all duration-150
-    shadow-lg shadow-emerald-500/30
+    h-10 px-6 rounded-md bg-primary text-primary-foreground font-medium text-sm
+    hover:bg-primary/90 transition-all duration-150 shadow-md
   `,
   secondary: `
     h-11 px-6 rounded-full bg-gray-100 dark:bg-zinc-800

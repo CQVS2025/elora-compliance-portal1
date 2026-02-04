@@ -89,12 +89,18 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
     enabled: open && !!vehicle?.id
   });
 
-  // Process wash history (scans)
+  // Process wash history (scans); include when vehicleRef, vehicleName, or deviceRef matches (null refs still show)
   const washHistory = useMemo(() => {
     if (!scans || !vehicle) return [];
+    const ts = (s) => s.createdAt ?? s.timestamp ?? 0;
     return scans
-      .filter(scan => scan.vehicleRef === vehicle.id || scan.vehicleName === vehicle.name)
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      .filter(scan =>
+        scan.vehicleRef === vehicle.id ||
+        scan.vehicleName === vehicle.name ||
+        (vehicle.device_ref && scan.deviceRef === vehicle.device_ref) ||
+        (vehicle.id && scan.deviceRef === vehicle.id)
+      )
+      .sort((a, b) => new Date(ts(b)) - new Date(ts(a)));
   }, [scans, vehicle]);
 
   // Compliance over time
@@ -186,7 +192,7 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#7CB342] to-[#9CCC65] flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
               <Truck className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -217,7 +223,7 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                   <Badge 
                     className={`px-4 py-2 text-lg font-semibold ${
                       isCompliant 
-                        ? 'bg-emerald-500 text-white' 
+                        ? 'bg-primary text-primary-foreground' 
                         : 'bg-red-500 text-white'
                     }`}
                   >
@@ -237,7 +243,7 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                         className="h-full rounded-full transition-all"
                         style={{ 
                           width: `${progress}%`,
-                          background: 'linear-gradient(90deg, #7CB342 0%, #9CCC65 100%)'
+                          background: 'linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.8) 100%)'
                         }}
                       />
                     </div>
@@ -270,7 +276,7 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-bold text-[#7CB342]">${usageCosts.totalCost.toFixed(2)}</p>
+                    <p className="text-2xl font-bold text-primary">${usageCosts.totalCost.toFixed(2)}</p>
                     <p className="text-xs text-slate-500">{usageCosts.totalScans} washes • ${usageCosts.costPerScan.toFixed(2)}/wash</p>
                   </CardContent>
                 </Card>
@@ -335,11 +341,11 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                 <CardContent>
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={complianceOverTime}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="month" stroke="#64748b" style={{ fontSize: '12px' }} />
-                      <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
-                      <Tooltip />
-                      <Bar dataKey="washes" fill="#7CB342" radius={[4, 4, 0, 0]} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                      <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                      <Bar dataKey="washes" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -368,7 +374,7 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                             {moment(scan.timestamp).format('h:mm A')} • {scan.siteName || vehicle.site_name}
                           </p>
                         </div>
-                        <Badge className="bg-[#7CB342]/10 text-[#7CB342]">
+                        <Badge className="bg-primary/10 text-primary">
                           Wash #{washHistory.length - idx}
                         </Badge>
                       </div>
@@ -407,7 +413,7 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                       <CardTitle className="text-sm">Total Usage Cost</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-3xl font-bold text-[#7CB342]">
+                      <p className="text-3xl font-bold text-primary">
                         ${usageCosts.totalCost.toFixed(2)}
                       </p>
                       <p className="text-xs text-slate-500 mt-1">AUD</p>
@@ -446,16 +452,16 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                   <CardContent>
                     <ResponsiveContainer width="100%" height={250}>
                       <LineChart data={usageCosts.costTrend}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="month" stroke="#64748b" style={{ fontSize: '12px' }} />
-                        <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
-                        <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                        <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                        <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value) => `$${value.toFixed(2)}`} />
                         <Line 
                           type="monotone" 
                           dataKey="cost" 
-                          stroke="#7CB342" 
+                          stroke="hsl(var(--primary))" 
                           strokeWidth={2}
-                          dot={{ fill: '#7CB342', r: 4 }}
+                          dot={{ fill: 'hsl(var(--primary))', r: 4 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -509,8 +515,8 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                 <CardTitle className="text-sm">Current Assignment</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-[#7CB342]/10 to-[#9CCC65]/10 rounded-lg">
-                  <div className="w-12 h-12 rounded-full bg-[#7CB342] flex items-center justify-center">
+                <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg">
+                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center">
                     <Users className="w-6 h-6 text-white" />
                   </div>
                   <div>
@@ -532,7 +538,7 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                 <div className="space-y-4">
                   <div className="flex items-start gap-4 relative">
                     <div className="flex flex-col items-center">
-                      <div className="w-10 h-10 rounded-full bg-[#7CB342] flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
                         <Users className="w-5 h-5 text-white" />
                       </div>
                       <div className="w-0.5 h-full bg-slate-200 absolute top-10 left-5" />

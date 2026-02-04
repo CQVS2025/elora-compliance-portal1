@@ -1,18 +1,20 @@
 import React from 'react';
 import './App.css'
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from "@/components/ui/sonner"
+import { ThemeProvider } from "@/components/theme-provider"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import ProtectedRoute, { AdminRoute, SuperAdminRoute, AuthenticatedRoute, PublicRoute } from '@/components/auth/ProtectedRoute';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -38,7 +40,7 @@ const AuthenticatedApp = () => {
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
-    } else if (authError.type === 'user_unassigned') {
+    } else if (authError.type === 'user_unassigned' || authError.type === 'company_deactivated' || authError.type === 'account_deactivated') {
       navigateToLogin();
       return null;
     } else if (authError.type === 'auth_required') {
@@ -84,164 +86,229 @@ const AuthenticatedApp = () => {
         {/* Protected route - Main Dashboard (requires authentication) */}
         <Route path="/" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName={mainPageKey}>
+            <DashboardLayout>
               <MainPage />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
-        {/* Admin routes - require admin or super_admin role */}
+        {/* Dashboard section routes - same Dashboard, content by path */}
+        <Route path="/usage-costs" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/refills" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/device-health" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/sites" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/reports" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/email-reports" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/branding" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+
+        {/* Admin routes - same layout as app, permission-based content */}
         <Route path="/admin" element={
           <AdminRoute>
-            <Pages.admin />
+            <DashboardLayout>
+              <Pages.admin />
+            </DashboardLayout>
           </AdminRoute>
         } />
         <Route path="/admin/users" element={
           <AdminRoute>
-            {React.createElement(Pages['admin/users'])}
+            <DashboardLayout>
+              {React.createElement(Pages['admin/users'])}
+            </DashboardLayout>
           </AdminRoute>
         } />
-        
-        {/* Super Admin only route - Company Management */}
+
         <Route path="/admin/companies" element={
           <SuperAdminRoute>
-            {React.createElement(Pages['admin/companies'])}
+            <DashboardLayout>
+              {React.createElement(Pages['admin/companies'])}
+            </DashboardLayout>
           </SuperAdminRoute>
         } />
 
-        {/* Super Admin only route - User Role Management (read-only reference) */}
         <Route path="/admin/role-management" element={
           <SuperAdminRoute>
-            {React.createElement(Pages['admin/role-management'])}
+            <DashboardLayout>
+              {React.createElement(Pages['admin/role-management'])}
+            </DashboardLayout>
           </SuperAdminRoute>
         } />
 
-        {/* Super Admin only route - Tab Visibility by Role */}
         <Route path="/admin/tab-visibility" element={
           <SuperAdminRoute>
-            {React.createElement(Pages['admin/tab-visibility'])}
+            <DashboardLayout>
+              {React.createElement(Pages['admin/tab-visibility'])}
+            </DashboardLayout>
           </SuperAdminRoute>
+        } />
+
+        {/* Redirect legacy super-dashboard URL to unified admin */}
+        <Route path="/admin/super-dashboard" element={
+          <AdminRoute>
+            <Navigate to="/admin" replace />
+          </AdminRoute>
         } />
 
         {/* Protected authenticated routes */}
         <Route path="/Dashboard" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="Dashboard">
+            <DashboardLayout>
               <Pages.Dashboard />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
         <Route path="/dashboard" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="Dashboard">
+            <DashboardLayout>
               <Pages.Dashboard />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
         <Route path="/Home" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="Home">
+            <DashboardLayout>
               <Pages.Home />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
         <Route path="/Leaderboard" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="Leaderboard">
+            <DashboardLayout>
               <Pages.Leaderboard />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
         <Route path="/leaderboard" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="Leaderboard">
+            <DashboardLayout>
               <Pages.Leaderboard />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
         <Route path="/MobileDashboard" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="MobileDashboard">
+            <DashboardLayout>
               <Pages.MobileDashboard />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
         <Route path="/NotificationSettings" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="NotificationSettings">
+            <DashboardLayout>
               <Pages.NotificationSettings />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
         <Route path="/notification-settings" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="NotificationSettings">
+            <DashboardLayout>
               <Pages.NotificationSettings />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
         <Route path="/SiteAnalytics" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="SiteAnalytics">
+            <DashboardLayout>
               <Pages.SiteAnalytics />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
         <Route path="/site-analytics" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="SiteAnalytics">
+            <DashboardLayout>
               <Pages.SiteAnalytics />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
         <Route path="/EmailReportSettings" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="EmailReportSettings">
+            <DashboardLayout>
               <Pages.EmailReportSettings />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
         <Route path="/email-report-settings" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="EmailReportSettings">
+            <DashboardLayout>
               <Pages.EmailReportSettings />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
         <Route path="/Profile" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="Profile">
+            <DashboardLayout>
               <Pages.Profile />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
         <Route path="/profile" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="Profile">
+            <DashboardLayout>
               <Pages.Profile />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
         <Route path="/Settings" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="Settings">
+            <DashboardLayout>
               <Pages.Settings />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
         <Route path="/settings" element={
           <AuthenticatedRoute>
-            <LayoutWrapper currentPageName="Settings">
+            <DashboardLayout>
               <Pages.Settings />
-            </LayoutWrapper>
+            </DashboardLayout>
           </AuthenticatedRoute>
         } />
 
@@ -258,13 +325,15 @@ function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <NavigationTracker />
-          <AuthenticatedApp />
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+            <NavigationTracker />
+            <AuthenticatedApp />
+            <Toaster />
+          </ThemeProvider>
         </Router>
-        <Toaster />
         <VisualEditAgent />
-        
+
         {/* TanStack Query DevTools - Only in development */}
         {import.meta.env.DEV && (
           <ReactQueryDevtools

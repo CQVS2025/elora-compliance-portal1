@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Star, StarOff, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import moment from 'moment';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 // NEW: Import query options and mutations
 import { favoritesOptions } from '@/query/options';
@@ -93,7 +93,7 @@ export function FavoriteButton({ vehicleRef, vehicleName, userEmail, className =
       className={`
         p-1.5 rounded-lg transition-colors flex-shrink-0
         ${hasUserEmail 
-          ? 'hover:bg-yellow-50 hover:scale-110 active:scale-95 cursor-pointer' 
+          ? 'hover:bg-muted hover:scale-110 active:scale-95 cursor-pointer' 
           : 'opacity-50 cursor-not-allowed'
         }
         ${className}
@@ -108,7 +108,7 @@ export function FavoriteButton({ vehicleRef, vehicleName, userEmail, className =
       ) : favorite ? (
         <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
       ) : (
-        <Star className={`w-5 h-5 ${hasUserEmail ? 'text-slate-400 hover:text-yellow-500' : 'text-slate-300'}`} />
+        <Star className={`w-5 h-5 ${hasUserEmail ? 'text-muted-foreground hover:text-yellow-500' : 'text-muted-foreground/60'}`} />
       )}
     </button>
   );
@@ -144,8 +144,8 @@ export function FavoritesFilter({ vehicles, userEmail, onFilterChange }) {
       onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
         showOnlyFavorites
-          ? 'bg-yellow-100 text-yellow-700 border-2 border-yellow-300'
-          : 'bg-white text-slate-600 border-2 border-slate-200 hover:border-slate-300'
+          ? 'bg-primary/10 text-primary border-2 border-primary/30'
+          : 'bg-card text-foreground border-2 border-border hover:border-input'
       }`}
     >
       {showOnlyFavorites ? (
@@ -173,14 +173,14 @@ export function FavoritesQuickList({ userEmail, onVehicleClick, className = '' }
 
   if (isLoading) {
     return (
-      <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 p-6 ${className}`}>
-        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+      <div className={`bg-card rounded-2xl shadow-sm border border-border p-6 ${className}`}>
+        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
           <Star className="w-5 h-5 text-yellow-500" />
           Favorite Vehicles
         </h3>
         <div className="animate-pulse space-y-2">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-12 bg-slate-200 rounded-lg" />
+            <div key={i} className="h-12 bg-muted rounded-lg" />
           ))}
         </div>
       </div>
@@ -189,12 +189,12 @@ export function FavoritesQuickList({ userEmail, onVehicleClick, className = '' }
 
   if (!favorites || favorites.length === 0) {
     return (
-      <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 p-6 ${className}`}>
-        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+      <div className={`bg-card rounded-2xl shadow-sm border border-border p-6 ${className}`}>
+        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
           <Star className="w-5 h-5 text-yellow-500" />
           Favorite Vehicles
         </h3>
-        <p className="text-slate-500 text-sm text-center py-4">
+        <p className="text-muted-foreground text-sm text-center py-4">
           Click the star icon on any vehicle to add it to your favorites
         </p>
       </div>
@@ -202,11 +202,11 @@ export function FavoritesQuickList({ userEmail, onVehicleClick, className = '' }
   }
 
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 p-6 ${className}`}>
-      <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+    <div className={`bg-card rounded-2xl shadow-sm border border-border p-6 ${className}`}>
+      <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
         <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
         Favorite Vehicles
-        <span className="ml-auto text-sm font-normal text-slate-500">
+        <span className="ml-auto text-sm font-normal text-muted-foreground">
           {favorites.length}
         </span>
       </h3>
@@ -216,10 +216,10 @@ export function FavoritesQuickList({ userEmail, onVehicleClick, className = '' }
           <button
             key={fav.id || fav.vehicleRef}
             onClick={() => onVehicleClick && onVehicleClick(fav.vehicleRef)}
-            className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors text-left"
+            className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
           >
             <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
-            <span className="text-sm font-medium text-slate-800 truncate">
+            <span className="text-sm font-medium text-foreground truncate">
               {fav.vehicleName}
             </span>
           </button>
@@ -252,14 +252,14 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+      <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
           <Star className="w-5 h-5 text-yellow-500" />
           Favorite Vehicles
         </h3>
         <div className="animate-pulse space-y-2">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-12 bg-slate-200 rounded-lg" />
+            <div key={i} className="h-12 bg-muted rounded-lg" />
           ))}
         </div>
       </div>
@@ -268,12 +268,12 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
 
   if (!userEmail) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-        <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+      <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
           <Star className="w-5 h-5 text-yellow-500" />
           Favorite Vehicles
         </h3>
-        <p className="text-slate-500 text-sm text-center py-4">
+        <p className="text-muted-foreground text-sm text-center py-4">
           Please log in to use favorites
         </p>
       </div>
@@ -281,13 +281,13 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+    <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+        <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
           <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
           Favorite Vehicles
           {favorites && favorites.length > 0 && (
-            <span className="ml-2 px-2 py-0.5 text-sm font-normal bg-yellow-100 text-yellow-700 rounded-full">
+            <span className="ml-2 px-2 py-0.5 text-sm font-normal bg-primary/10 text-primary rounded-full">
               {favorites.length}
             </span>
           )}
@@ -296,11 +296,11 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
 
       {favoriteVehicles.length === 0 ? (
         <div className="text-center py-8">
-          <Star className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 text-sm mb-2">
+          <Star className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground text-sm mb-2">
             No favorite vehicles yet
           </p>
-          <p className="text-slate-400 text-xs">
+          <p className="text-muted-foreground/80 text-xs">
             Click the star icon on any vehicle in the list below to add it to your favorites
           </p>
         </div>
@@ -317,20 +317,20 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="
-                  backdrop-blur-xl bg-white/80 dark:bg-zinc-900/80
-                  border border-gray-200/20 dark:border-zinc-800/50
+                  bg-card
+                  border border-border
                   rounded-xl p-4
-                  shadow-sm shadow-black/[0.02]
-                  hover:shadow-md hover:shadow-black/[0.04]
+                  shadow-sm
+                  hover:shadow-md
                   transition-all duration-200
                 "
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-slate-800 truncate">
+                    <h4 className="font-semibold text-foreground truncate">
                       {vehicle.name}
                     </h4>
-                    <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
                       {vehicle.site_name}
                     </p>
                   </div>
@@ -340,30 +340,30 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
                       toggleFavorite(vehicleRef, vehicle.name);
                     }}
                     disabled={togglingVehicleRef === vehicleRef}
-                    className="p-1 rounded-lg hover:bg-yellow-50 transition-colors flex-shrink-0 ml-2"
+                    className="p-1 rounded-lg hover:bg-muted transition-colors flex-shrink-0 ml-2"
                     title={favorite ? 'Remove from favorites' : 'Add to favorites'}
                   >
                     {togglingVehicleRef === vehicleRef ? (
                       <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
                     ) : (
-                      <Star className={`w-4 h-4 ${favorite ? 'text-yellow-500 fill-yellow-500' : 'text-slate-300'}`} />
+                      <Star className={`w-4 h-4 ${favorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'}`} />
                     )}
                   </button>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Washes</span>
-                    <span className="text-sm font-semibold text-slate-800">
+                    <span className="text-xs text-muted-foreground">Washes</span>
+                    <span className="text-sm font-semibold text-foreground">
                       {vehicle.washes_completed}/{vehicle.target}
                     </span>
                   </div>
 
-                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${
                         isCompliant
-                          ? 'bg-emerald-500'
+                          ? 'bg-primary'
                           : 'bg-amber-500'
                       }`}
                       style={{
@@ -373,7 +373,7 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
                   </div>
 
                   {vehicle.last_scan && (
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-muted-foreground">
                       Last: {moment(vehicle.last_scan).fromNow()}
                     </p>
                   )}

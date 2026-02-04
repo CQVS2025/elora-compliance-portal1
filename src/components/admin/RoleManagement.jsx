@@ -37,7 +37,7 @@ const ROLE_CONFIG = {
   },
   user: {
     label: 'User',
-    color: 'bg-slate-500',
+    color: 'bg-primary',
     description: 'Standard user (demo/guest)',
     permissions: ['Assigned companies', 'All tabs (no users)', 'View & export', 'No admin']
   },
@@ -55,7 +55,7 @@ const ROLE_CONFIG = {
   },
   viewer: {
     label: 'Viewer',
-    color: 'bg-gray-500',
+    color: 'bg-muted-foreground',
     description: 'Read-only access',
     permissions: ['All tabs (read-only)', 'View reports', 'No editing', 'No admin']
   }
@@ -99,8 +99,8 @@ export default function RoleManagement({ vehicles, sites }) {
   if (!permissions.canManageUsers) {
     return (
       <div className="text-center py-12">
-        <Shield className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-        <p className="text-slate-600">Only administrators can manage user roles</p>
+        <Shield className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+        <p className="text-muted-foreground">Only administrators can manage user roles</p>
       </div>
     );
   }
@@ -108,7 +108,7 @@ export default function RoleManagement({ vehicles, sites }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 text-[#7CB342] animate-spin" />
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
       </div>
     );
   }
@@ -116,8 +116,8 @@ export default function RoleManagement({ vehicles, sites }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-slate-800">Assign User Roles</h2>
-        <p className="text-slate-600 mt-1">Manage and assign roles to users</p>
+        <h2 className="text-2xl font-bold text-foreground">Assign User Roles</h2>
+        <p className="text-muted-foreground mt-1">Manage and assign roles to users</p>
       </div>
 
       {/* Filters */}
@@ -127,7 +127,7 @@ export default function RoleManagement({ vehicles, sites }) {
             <CardTitle>Users</CardTitle>
             <div className="flex items-center gap-3">
               <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search users..."
                   value={searchQuery}
@@ -156,29 +156,29 @@ export default function RoleManagement({ vehicles, sites }) {
         <CardContent>
           <div className="space-y-2">
             {filteredUsers.length === 0 ? (
-              <p className="text-center text-slate-500 py-8">No users found</p>
+              <p className="text-center text-muted-foreground py-8">No users found</p>
             ) : (
               filteredUsers.map((user) => {
                 const roleConfig = ROLE_CONFIG[user.role || 'driver'] || ROLE_CONFIG.driver;
                 return (
                   <div
                     key={user.id}
-                    className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
+                    className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border hover:bg-muted transition-colors"
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 ${roleConfig.color} rounded-full flex items-center justify-center text-white font-semibold`}>
                         {user.full_name?.charAt(0) || user.email?.charAt(0) || '?'}
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-800">{user.full_name || 'No Name'}</p>
-                        <p className="text-sm text-slate-600">{user.email}</p>
+                        <p className="font-semibold text-foreground">{user.full_name || 'No Name'}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
                         {user.role === 'batcher' && user.assigned_sites?.length > 0 && (
-                          <p className="text-xs text-slate-500 mt-1">
+                          <p className="text-xs text-muted-foreground mt-1">
                             {user.assigned_sites.length} site{user.assigned_sites.length !== 1 ? 's' : ''} assigned
                           </p>
                         )}
                         {user.role === 'driver' && user.assigned_vehicles?.length > 0 && (
-                          <p className="text-xs text-slate-500 mt-1">
+                          <p className="text-xs text-muted-foreground mt-1">
                             {user.assigned_vehicles.length} vehicle{user.assigned_vehicles.length !== 1 ? 's' : ''} assigned
                           </p>
                         )}

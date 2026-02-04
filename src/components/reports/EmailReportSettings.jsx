@@ -1,18 +1,26 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
+import { roleTabSettingsOptions } from '@/query/options';
+import { getDefaultEmailReportTypes } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
-import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Bell } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Chart } from 'chart.js/auto';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/lib/toast';
 
-export default function EmailReportSettings({ reportData, onSetDateRange }) {
+export default function EmailReportSettings({ reportData, onSetDateRange, isReportDataUpdating = false }) {
   const queryClient = useQueryClient();
-  const { user: currentUser, isLoading: userLoading } = useAuth();
-  const { toast } = useToast();
+  const { user: currentUser, userProfile, isLoading: userLoading } = useAuth();
   const [userError, setUserError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -66,16 +74,40 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
     duration_count: 1
   });
 
-  // Update form when preferences load
+  // All report types (filtered by role's allowed types)
+  const ALL_REPORT_TYPES = [
+    { id: 'compliance', label: 'Compliance Summary', icon: '📊', description: 'Vehicle compliance rates and wash tracking' },
+    { id: 'costs', label: 'Cost Analysis', icon: '💰', description: 'Cost and financial trends' }
+  ];
+
+  const { data: roleTabSettings = {} } = useQuery(roleTabSettingsOptions());
+  const allowedEmailReportTypeIds = useMemo(() => {
+    const role = userProfile?.role;
+    if (!role) return ['compliance', 'costs'];
+    const stored = roleTabSettings[role];
+    if (stored?.visible_email_report_types !== undefined && stored?.visible_email_report_types !== null) {
+      return stored.visible_email_report_types;
+    }
+    return getDefaultEmailReportTypes(userProfile);
+  }, [userProfile, roleTabSettings]);
+
+  const reportTypes = useMemo(() =>
+    ALL_REPORT_TYPES.filter(r => allowedEmailReportTypeIds.includes(r.id)),
+    [allowedEmailReportTypeIds]
+  );
+
+  // Update form when preferences load (filter report_types to allowed for this role)
   useEffect(() => {
     if (preferences) {
+      const prefsTypes = preferences.report_types || [];
+      const filtered = prefsTypes.filter(id => allowedEmailReportTypeIds.includes(id));
       setFormData(prev => ({
         ...prev,
-        report_types: preferences.report_types || [],
+        report_types: filtered,
         include_charts: preferences.include_charts !== false
       }));
     }
-  }, [preferences]);
+  }, [preferences, allowedEmailReportTypeIds]);
 
   // Compute date range from duration and apply to dashboard filters
   const getDateRangeFromDuration = (type, count) => {
@@ -148,25 +180,12 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
           onConflict: 'user_email'
         });
 
-      toast({
-        title: "Settings Updated",
-        description: `Email notifications ${enabled ? 'enabled' : 'disabled'} successfully.`,
-      });
+      toast.success('Settings Updated', { description: `Email notifications ${enabled ? 'enabled' : 'disabled'} successfully.` });
     } catch (error) {
       console.error('Error saving email notifications:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update email notifications. Please try again.",
-        variant: "destructive",
-      });
+      toast.error('Failed to update email notifications. Please try again.', { description: 'Error' });
     }
   };
-
-  // Available report types
-  const reportTypes = [
-    { id: 'compliance', label: 'Compliance Summary', icon: '📊', description: 'Vehicle compliance rates and wash tracking' },
-    { id: 'costs', label: 'Cost Analysis', icon: '💰', description: 'Cost and financial trends' }
-  ];
 
   // Handle report type toggle
   const handleReportTypeToggle = (reportId) => {
@@ -245,8 +264,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
       return;
     }
 
-    if (formData.report_types.length === 0) {
-      console.warn('[handleSendNow] No report types selected');
+    const effectiveReportTypes = formData.report_types.filter(id => allowedEmailReportTypeIds.includes(id));
+    if (effectiveReportTypes.length === 0) {
+      console.warn('[handleSendNow] No report types selected or allowed for role');
       alert('Please select at least one report type to send');
       return;
     }
@@ -255,13 +275,13 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
     try {
       console.log('[handleSendNow] Sending email report with params:', {
         userEmail,
-        reportTypes: formData.report_types,
+        reportTypes: effectiveReportTypes,
         includeCharts: formData.include_charts
       });
 
       await supabaseClient.reports.send({
         userEmail,
-        reportTypes: formData.report_types,
+        reportTypes: effectiveReportTypes,
         includeCharts: formData.include_charts,
         reportData: reportData || null
       });
@@ -321,7 +341,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
           labels: ['Compliant', 'At Risk'],
           datasets: [{
             data: total > 0 ? [compliant, atRisk] : [1],
-            backgroundColor: total > 0 ? [primaryColor || '#7CB342', '#ef4444'] : ['#e2e8f0'],
+            backgroundColor: total > 0 ? [primaryColor || 'hsl(var(--primary))', '#ef4444'] : ['#e2e8f0'],
             borderWidth: 3,
             borderColor: '#fff',
             hoverOffset: 4
@@ -357,8 +377,8 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
             label: hasBoth ? 'Value' : 'Total Washes',
             data: values,
             backgroundColor: hasBoth
-              ? [primaryColor || '#7CB342', '#10b981']
-              : primaryColor || '#7CB342',
+              ? [primaryColor || 'hsl(var(--primary))', '#10b981']
+              : primaryColor || 'hsl(var(--primary))',
             borderRadius: 6,
             borderSkipped: false
           }]
@@ -399,12 +419,13 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
   };
 
   const buildEnhancedReportHtml = async (reportData, clientBranding = null, includeCharts = true) => {
+    const requested = formData.report_types.length > 0 ? formData.report_types : allowedEmailReportTypeIds;
     const selectedReports = [...new Set(
-      formData.report_types.length > 0 ? formData.report_types : ['compliance', 'costs']
+      requested.filter(id => allowedEmailReportTypeIds.includes(id))
     )];
 
     // Use client branding if provided, otherwise use default colors
-    const primaryColor = clientBranding?.primary_color || '#7CB342';
+    const primaryColor = clientBranding?.primary_color || 'hsl(var(--primary))';
     const secondaryColor = clientBranding?.secondary_color || '#9CCC65';
     const companyName = clientBranding?.company_name || 'ELORA';
     const logoUrl = clientBranding?.logo_url || null;
@@ -626,7 +647,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
           branding = {
             company_name: 'ELORA',
             logo_url: null,
-            primary_color: '#7CB342',
+            primary_color: '',
             secondary_color: '#9CCC65'
           };
         }
@@ -635,7 +656,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
         branding = {
           company_name: 'ELORA',
           logo_url: null,
-          primary_color: '#7CB342',
+          primary_color: '',
           secondary_color: '#9CCC65'
         };
       }
@@ -776,29 +797,27 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
   // Show error state if user failed to load
   if (userError && !userLoading) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-lg">
+      <div className="w-full p-6">
+        <div className="bg-destructive/10 border-l-4 border-destructive p-6 rounded-lg">
           <div className="flex items-start">
             <div className="flex-shrink-0">
-              <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-6 w-6 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
             <div className="ml-4 flex-1">
-              <h3 className="text-lg font-semibold text-red-800 mb-2">Failed to Load User Information</h3>
-              <p className="text-red-700 mb-4">
+              <h3 className="text-lg font-semibold text-destructive mb-2">Failed to Load User Information</h3>
+              <p className="text-foreground mb-4">
                 We couldn't load your user information. This might be due to a temporary connection issue.
               </p>
-              <p className="text-sm text-red-600 mb-4">Error: {userError}</p>
-              <button
+              <p className="text-sm text-destructive mb-4">Error: {userError}</p>
+              <Button
                 onClick={handleRetryUserLoad}
-                className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+                variant="destructive"
+                className="gap-2"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
                 Try Again
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -810,90 +829,90 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-elora-primary mx-auto mb-4" />
-          <p className="text-slate-600">Loading email report settings...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading email report settings...</p>
           {retryCount > 0 && (
-            <p className="text-slate-500 text-sm mt-2">Retrying... (attempt {retryCount + 1})</p>
+            <p className="text-muted-foreground text-sm mt-2">Retrying... (attempt {retryCount + 1})</p>
           )}
         </div>
       </div>
     );
   }
 
+  const durationOptions = [
+    { id: 'today', label: 'Today' },
+    { id: 'days', label: 'Last X days' },
+    { id: 'weeks', label: 'Last X weeks' },
+    { id: 'months', label: 'Last X months' },
+  ];
+
+  const handleDurationChange = (value) => {
+    const count = value === 'days' ? 7 : value === 'weeks' ? 1 : value === 'months' ? 1 : null;
+    setFormData(prev => ({
+      ...prev,
+      duration_type: value,
+      duration_count: count ?? prev.duration_count,
+    }));
+    if (value !== 'today') {
+      applyDurationToFilters(value, count ?? (value === 'days' ? 7 : 1));
+    } else {
+      applyDurationToFilters('today', null);
+    }
+  };
+
+  const actionDisabled = sendingNow || exportingPdf || userLoading || isReportDataUpdating || !userEmail || formData.report_types.length === 0;
+
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-elora-primary to-elora-primary-light text-white rounded-xl p-8 shadow-lg">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-white/20 backdrop-blur-sm rounded-lg">
-            <Mail className="w-8 h-8" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Email Report Settings</h1>
-            <p className="text-white/90">Request and configure email reports</p>
-          </div>
-        </div>
+    <div className="w-full space-y-6">
+      {/* Page header */}
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Email Report Settings</h1>
+        <p className="text-sm text-muted-foreground">Request and configure email reports for your account.</p>
       </div>
 
-      {/* Success Message */}
+      {/* Success message */}
       {successMessage && (
-        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg flex items-center gap-3">
-          <CheckCircle className="w-5 h-5 text-green-500" />
-          <p className="text-green-800 font-medium">{successMessage}</p>
-        </div>
+        <Alert className="border-primary/50 bg-primary/5">
+          <CheckCircle className="h-4 w-4 text-primary" />
+          <AlertDescription className="text-foreground">{successMessage}</AlertDescription>
+        </Alert>
       )}
 
-
-      {/* Report Duration - data range for the email */}
-      <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
-        <div className="flex items-center gap-3 mb-4">
-          <Clock className="w-5 h-5 text-slate-600" />
-          <h2 className="text-lg font-semibold text-slate-800">Report Duration</h2>
-        </div>
-        <p className="text-sm text-slate-600 mb-6">
-          Select the date range for the report data. The filters above will update to match.
-        </p>
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-3">
-            {[
-              { id: 'today', label: 'Today' },
-              { id: 'days', label: 'Last X days' },
-              { id: 'weeks', label: 'Last X weeks' },
-              { id: 'months', label: 'Last X months' }
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => {
-                  const count = opt.id === 'days' ? 7 : opt.id === 'weeks' ? 1 : opt.id === 'months' ? 1 : null;
-                  setFormData(prev => ({
-                    ...prev,
-                    duration_type: opt.id,
-                    duration_count: count ?? prev.duration_count
-                  }));
-                  if (opt.id !== 'today') {
-                    applyDurationToFilters(opt.id, count ?? (opt.id === 'days' ? 7 : 1));
-                  } else {
-                    applyDurationToFilters('today', null);
-                  }
-                }}
-                className={`px-4 py-2.5 rounded-lg border-2 transition-all text-sm font-medium ${
-                  formData.duration_type === opt.id
-                    ? 'border-elora-primary bg-elora-primary/5 text-elora-primary'
-                    : 'border-slate-200 text-slate-600 hover:border-elora-primary/50'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+      {/* Report duration */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-base">Report duration</CardTitle>
           </div>
+          <CardDescription>
+            Choose the date range for the report. The dashboard filters above will update to match.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <RadioGroup
+            value={formData.duration_type}
+            onValueChange={handleDurationChange}
+            className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+          >
+            {durationOptions.map((opt) => (
+              <div key={opt.id} className="flex items-center space-x-2">
+                <RadioGroupItem value={opt.id} id={`duration-${opt.id}`} />
+                <Label htmlFor={`duration-${opt.id}`} className="cursor-pointer text-sm font-normal">
+                  {opt.label}
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
           {(formData.duration_type === 'days' || formData.duration_type === 'weeks' || formData.duration_type === 'months') && (
-            <div className="flex items-center gap-3 flex-wrap">
-              <label className="text-sm font-medium text-slate-600">
-                {formData.duration_type === 'days' && 'Number of days:'}
-                {formData.duration_type === 'weeks' && 'Number of weeks:'}
-                {formData.duration_type === 'months' && 'Number of months:'}
-              </label>
-              <input
+            <div className="flex flex-wrap items-center gap-3">
+              <Label htmlFor="duration-count" className="text-sm text-muted-foreground shrink-0">
+                {formData.duration_type === 'days' && 'Number of days'}
+                {formData.duration_type === 'weeks' && 'Number of weeks'}
+                {formData.duration_type === 'months' && 'Number of months'}
+              </Label>
+              <Input
+                id="duration-count"
                 type="number"
                 min={1}
                 max={formData.duration_type === 'days' ? 365 : formData.duration_type === 'weeks' ? 52 : 60}
@@ -903,117 +922,158 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
                   setFormData(prev => ({ ...prev, duration_count: val }));
                   applyDurationToFilters(formData.duration_type, val);
                 }}
-                className="w-20 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-elora-primary focus:border-transparent"
+                className="w-24"
               />
-              <span className="text-sm text-slate-500">
+              <span className="text-sm text-muted-foreground">
                 {formData.duration_type === 'days' && `Last ${formData.duration_count} day${formData.duration_count > 1 ? 's' : ''}`}
                 {formData.duration_type === 'weeks' && `Last ${formData.duration_count} week${formData.duration_count > 1 ? 's' : ''}`}
                 {formData.duration_type === 'months' && `Last ${formData.duration_count} month${formData.duration_count > 1 ? 's' : ''}`}
               </span>
             </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Report Types Selection */}
-      <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Mail className="w-5 h-5 text-slate-600" />
-            <h2 className="text-lg font-semibold text-slate-800">Select Reports to Include</h2>
+      {/* Report types */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div className="space-y-1.5">
+            <CardTitle className="text-base">Reports to include</CardTitle>
+            <CardDescription>Select which sections appear in the email and PDF report.</CardDescription>
           </div>
-          <button
-            onClick={handleAllReportsToggle}
-            className="px-4 py-2 text-sm font-medium text-elora-primary hover:bg-elora-primary/5 rounded-lg transition-colors"
-          >
-            {reportTypes.every(r => formData.report_types.includes(r.id)) ? 'Deselect All' : 'Select All'}
-          </button>
-        </div>
-
-        <div className="grid gap-4">
-          {reportTypes.map((report) => (
-            <label
-              key={report.id}
-              className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                formData.report_types.includes(report.id)
-                  ? 'border-elora-primary bg-elora-primary/5'
-                  : 'border-slate-200 hover:border-elora-primary/30'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={formData.report_types.includes(report.id)}
-                onChange={() => handleReportTypeToggle(report.id)}
-                className="mt-1 w-5 h-5 text-elora-primary border-slate-300 rounded focus:ring-elora-primary"
-              />
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">{report.icon}</span>
-                  <span className="font-semibold text-slate-800">{report.label}</span>
+          {reportTypes.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={handleAllReportsToggle}>
+              {reportTypes.every((r) => formData.report_types.includes(r.id)) ? 'Deselect all' : 'Select all'}
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {reportTypes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              No report types are available for your role. Contact your administrator to enable report types.
+            </p>
+          ) : (
+            <div className="grid gap-3">
+              {reportTypes.map((report) => (
+                <div
+                  key={report.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleReportTypeToggle(report.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleReportTypeToggle(report.id);
+                    }
+                  }}
+                  className="flex items-start space-x-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 cursor-pointer select-none"
+                >
+                  <div onClick={(e) => e.stopPropagation()} className="shrink-0 pt-0.5">
+                    <Checkbox
+                      id={`report-${report.id}`}
+                      checked={formData.report_types.includes(report.id)}
+                      onCheckedChange={() => handleReportTypeToggle(report.id)}
+                    />
+                  </div>
+                  <div className="grid gap-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-medium leading-none">
+                      <span className="text-base" aria-hidden>{report.icon}</span>
+                      {report.label}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{report.description}</p>
+                  </div>
                 </div>
-                <p className="text-sm text-slate-600">{report.description}</p>
-              </div>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <button
-          onClick={handleSendNow}
-          disabled={sendingNow || userLoading || !userEmail || formData.report_types.length === 0}
-          className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 px-6 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-          title={
-            userLoading ? 'Loading user information...' :
-            !userEmail ? 'User email not available' :
-            formData.report_types.length === 0 ? 'Please select at least one report type' :
-            'Send email report now'
-          }
-        >
-          {sendingNow ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Sending...
-            </>
-          ) : userLoading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Loading...
-            </>
-          ) : (
-            <>
-              <Send className="w-5 h-5" />
-              Email Me Now
-            </>
+              ))}
+            </div>
           )}
-        </button>
+        </CardContent>
+      </Card>
 
-        <button
-          onClick={handleExportPdf}
-          disabled={exportingPdf || userLoading || !userEmail || formData.report_types.length === 0}
-          className="flex-1 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-semibold py-4 px-6 rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-          title={
-            userLoading ? 'Loading user information...' :
-            !userEmail ? 'User email not available' :
-            formData.report_types.length === 0 ? 'Please select at least one report type' :
-            'Export report to PDF'
-          }
-        >
-          {exportingPdf ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Exporting...
-            </>
-          ) : (
-            <>
-              <FileDown className="w-5 h-5" />
-              Export to PDF
-            </>
-          )}
-        </button>
-      </div>
+      {/* Data updating notice */}
+      {isReportDataUpdating && (
+        <Alert className="border-amber-500/50 bg-amber-500/10">
+          <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-500" />
+          <AlertDescription>
+            <span className="font-medium text-foreground">Data is updating.</span> Wait for the report data above to finish loading before sending or exporting.
+          </AlertDescription>
+        </Alert>
+      )}
 
+      {/* Actions */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button
+              size="lg"
+              className="flex-1 gap-2"
+              onClick={handleSendNow}
+              disabled={actionDisabled}
+              title={
+                isReportDataUpdating ? 'Please wait for data to finish updating' :
+                userLoading ? 'Loading user information...' :
+                !userEmail ? 'User email not available' :
+                formData.report_types.length === 0 ? 'Please select at least one report type' :
+                'Send email report now'
+              }
+            >
+              {sendingNow ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : userLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading...
+                </>
+              ) : isReportDataUpdating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Wait for data...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Email me now
+                </>
+              )}
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="flex-1 gap-2"
+              onClick={handleExportPdf}
+              disabled={actionDisabled}
+              title={
+                isReportDataUpdating ? 'Please wait for data to finish updating' :
+                userLoading ? 'Loading user information...' :
+                !userEmail ? 'User email not available' :
+                formData.report_types.length === 0 ? 'Please select at least one report type' :
+                'Export report to PDF'
+              }
+            >
+              {exportingPdf ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Exporting...
+                </>
+              ) : isReportDataUpdating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Wait for data...
+                </>
+              ) : (
+                <>
+                  <FileDown className="h-4 w-4" />
+                  Export to PDF
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Hidden PDF container */}
       <div
         ref={pdfContainerRef}
         style={{
@@ -1027,19 +1087,20 @@ export default function EmailReportSettings({ reportData, onSetDateRange }) {
           pointerEvents: 'none',
           zIndex: -9999,
           overflow: 'visible',
-          visibility: pdfHtml ? 'visible' : 'hidden'
+          visibility: pdfHtml ? 'visible' : 'hidden',
         }}
         aria-hidden="true"
         dangerouslySetInnerHTML={{ __html: pdfHtml }}
       />
 
-      {/* Info Box */}
-      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
-        <p className="text-sm text-blue-800">
-          <strong>Note:</strong> The report uses the date range and filters (customer, site) selected above. Reports will be sent to{' '}
-          <strong className="text-blue-900">{userEmail || 'your email'}</strong>.{' '}
-        </p>
-      </div>
+      {/* Info */}
+      <Alert className="border-border bg-muted/30">
+        <Info className="h-4 w-4 text-muted-foreground" />
+        <AlertDescription>
+          The report uses the date range and filters (customer, site) selected above. Reports will be sent to{' '}
+          <strong className="text-foreground">{userEmail || 'your email'}</strong>.
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

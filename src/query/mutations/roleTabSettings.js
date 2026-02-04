@@ -11,13 +11,18 @@ import { queryKeys } from '../keys';
 
 export function useSaveRoleTabSettings() {
   return useMutation({
-    mutationFn: async ({ role, visibleTabs }) => {
+    mutationFn: async ({ role, visibleTabs, visibleEmailReportTypes }) => {
+      const payload = {
+        role,
+        visible_tabs: visibleTabs,
+        updated_at: new Date().toISOString(),
+      };
+      if (visibleEmailReportTypes !== undefined) {
+        payload.visible_email_report_types = visibleEmailReportTypes;
+      }
       const { data, error } = await supabase
         .from('role_tab_settings')
-        .upsert(
-          { role, visible_tabs: visibleTabs, updated_at: new Date().toISOString() },
-          { onConflict: 'role' }
-        )
+        .upsert(payload, { onConflict: 'role' })
         .select()
         .single();
       if (error) throw error;

@@ -1,4 +1,4 @@
-import { corsHeaders, handleCors } from '../_shared/cors.ts';
+import { corsHeadersForRequest, handleCors } from '../_shared/cors.ts';
 import { createSupabaseAdminClient } from '../_shared/supabase.ts';
 
 interface CreateCompanyRequest {
@@ -25,6 +25,8 @@ Deno.serve(async (req) => {
   // Handle CORS preflight
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
+
+  const corsHeaders = corsHeadersForRequest(req);
 
   try {
     const adminSupabase = createSupabaseAdminClient();
@@ -98,7 +100,22 @@ Deno.serve(async (req) => {
     // ========================================
     // STEP 1: Create Company
     // ========================================
-    const slug = company_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    let baseSlug = company_name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    if (!baseSlug) {
+      baseSlug = `company-${crypto.randomUUID().slice(0, 8)}`;
+    }
+    let slug = baseSlug;
+    let suffix = 0;
+    while (true) {
+      const { data: existing } = await adminSupabase
+        .from('companies')
+        .select('id')
+        .eq('slug', slug)
+        .maybeSingle();
+      if (!existing) break;
+      suffix += 1;
+      slug = `${baseSlug}-${suffix}`;
+    }
 
     const { data: company, error: companyError } = await adminSupabase
       .from('companies')
@@ -152,8 +169,8 @@ Deno.serve(async (req) => {
     // ========================================
     // STEP 3: Create User Permissions
     // ========================================
-    // Domain-level permissions
-    await adminSupabase.from('user_permissions').insert({
+    // Domain-level permissions (ignore errors e.g. duplicate)
+    const { error: domainPermError } = await adminSupabase.from('user_permissions').insert({
       company_id: companyId,
       scope: 'domain',
       email_domain: email_domain,
@@ -168,10 +185,11 @@ Deno.serve(async (req) => {
       can_edit_vehicles: true,
       can_edit_sites: true,
       is_active: true,
-    }).catch(() => {}); // Ignore if already exists
+    });
+    if (domainPermError) console.error('Domain permissions insert (non-fatal):', domainPermError.message);
 
-    // User-specific admin permissions
-    await adminSupabase.from('user_permissions').insert({
+    // User-specific admin permissions (ignore errors e.g. duplicate)
+    const { error: userPermError } = await adminSupabase.from('user_permissions').insert({
       company_id: companyId,
       scope: 'user',
       user_email: admin_email,
@@ -187,7 +205,8 @@ Deno.serve(async (req) => {
       can_edit_sites: true,
       can_delete_records: true,
       is_active: true,
-    }).catch(() => {}); // Ignore if already exists
+    });
+    if (userPermError) console.error('User permissions insert (non-fatal):', userPermError.message);
 
     // ========================================
     // STEP 4: Create Auth User

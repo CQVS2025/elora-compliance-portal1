@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Mail, Bell, Clock, Check, Loader2, Save } from 'lucide-react';
 import { supabaseClient } from "@/api/supabaseClient";
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 

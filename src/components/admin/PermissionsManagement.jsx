@@ -54,7 +54,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/lib/toast';
 
 // Available tabs for visibility control
 const ALL_TABS = [
@@ -95,7 +95,6 @@ const DEFAULT_FORM = {
 
 export default function PermissionsManagement() {
   const { userProfile } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -153,10 +152,10 @@ export default function PermissionsManagement() {
       setShowModal(false);
       setEditingPermission(null);
       setFormData(DEFAULT_FORM);
-      toast({ title: 'Permissions Saved', description: 'User permissions have been updated.' });
+      toast.success('Permissions Saved', { description: 'User permissions have been updated.' });
     },
     onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast.error(error.message, { description: 'Error' });
     },
   });
 
@@ -172,10 +171,10 @@ export default function PermissionsManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['adminPermissions']);
-      toast({ title: 'Deleted', description: 'Permission configuration has been removed.' });
+      toast.success('Deleted', { description: 'Permission configuration has been removed.' });
     },
     onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast.error(error.message, { description: 'Error' });
     },
   });
 
@@ -207,11 +206,11 @@ export default function PermissionsManagement() {
 
   const handleSubmit = () => {
     if (formData.scope === 'user' && !formData.user_email) {
-      toast({ title: 'Error', description: 'User email is required', variant: 'destructive' });
+      toast.error('User email is required', { description: 'Error' });
       return;
     }
     if (formData.scope === 'domain' && !formData.email_domain) {
-      toast({ title: 'Error', description: 'Email domain is required', variant: 'destructive' });
+      toast.error('Email domain is required', { description: 'Error' });
       return;
     }
 
@@ -254,15 +253,15 @@ export default function PermissionsManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Shield className="w-5 h-5 text-emerald-500" />
+          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <Shield className="w-5 h-5 text-primary" />
             User Permissions
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Configure access controls and visibility settings for users
           </p>
         </div>
-        <Button onClick={handleCreate} className="bg-emerald-500 hover:bg-emerald-600">
+        <Button onClick={handleCreate} className="bg-primary hover:bg-primary/90">
           <Plus className="w-4 h-4 mr-2" />
           Add Permission
         </Button>
@@ -270,7 +269,7 @@ export default function PermissionsManagement() {
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           placeholder="Search by email, domain, or customer..."
           value={searchQuery}
@@ -282,13 +281,13 @@ export default function PermissionsManagement() {
       {/* Permissions List */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       ) : filteredPermissions.length === 0 ? (
-        <div className="text-center py-12 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl rounded-2xl border border-gray-200/20 dark:border-zinc-800/50">
-          <Shield className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">No permission configurations found</p>
-          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+        <div className="text-center py-12 bg-card rounded-2xl border border-border">
+          <Shield className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+          <p className="text-muted-foreground">No permission configurations found</p>
+          <p className="text-sm text-muted-foreground dark:text-muted-foreground mt-1">
             All users have default full access. Create a permission to restrict access.
           </p>
         </div>
@@ -301,7 +300,7 @@ export default function PermissionsManagement() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl rounded-xl border border-gray-200/20 dark:border-zinc-800/50 p-4"
+                className="bg-card rounded-xl border border-border p-4"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
@@ -318,7 +317,7 @@ export default function PermissionsManagement() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900 dark:text-white">
+                        <span className="font-semibold text-foreground">
                           {permission.scope === 'domain'
                             ? `@${permission.email_domain}`
                             : permission.user_email}
@@ -396,7 +395,7 @@ export default function PermissionsManagement() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-emerald-500" />
+              <Shield className="w-5 h-5 text-primary" />
               {editingPermission ? 'Edit Permission' : 'Create Permission'}
             </DialogTitle>
           </DialogHeader>
@@ -448,7 +447,7 @@ export default function PermissionsManagement() {
                   onChange={(e) => setFormData({ ...formData, email_domain: e.target.value })}
                   placeholder="example.com"
                 />
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   Applies to all users with this email domain
                 </p>
               </div>
@@ -491,7 +490,7 @@ export default function PermissionsManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label>Lock Customer Filter</Label>
-                        <p className="text-xs text-gray-500">Prevent changing customer selection</p>
+                        <p className="text-xs text-muted-foreground">Prevent changing customer selection</p>
                       </div>
                       <Switch
                         checked={formData.lock_customer_filter}
@@ -502,7 +501,7 @@ export default function PermissionsManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label>Show All Data</Label>
-                        <p className="text-xs text-gray-500">Access to all fleet data</p>
+                        <p className="text-xs text-muted-foreground">Access to all fleet data</p>
                       </div>
                       <Switch
                         checked={formData.show_all_data}
@@ -555,12 +554,12 @@ export default function PermissionsManagement() {
                                   ? tabVisibilityMode === 'visible'
                                     ? 'bg-green-50 border-green-200 dark:bg-green-500/10 dark:border-green-500/30'
                                     : 'bg-red-50 border-red-200 dark:bg-red-500/10 dark:border-red-500/30'
-                                  : 'hover:bg-gray-50 dark:hover:bg-zinc-800 border-gray-200 dark:border-zinc-700'
+                                  : 'hover:bg-muted/50 border-border'
                               }`}
                               onClick={() => toggleTab(tab.value, listType.replace('_tabs', ''))}
                             >
                               <Checkbox checked={isSelected} />
-                              <Icon className="w-4 h-4 text-gray-500" />
+                              <Icon className="w-4 h-4 text-muted-foreground" />
                               <span className="text-sm">{tab.label}</span>
                             </div>
                           );
@@ -584,7 +583,7 @@ export default function PermissionsManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label>Hide Cost Forecast</Label>
-                        <p className="text-xs text-gray-500">Hide cost forecasting section</p>
+                        <p className="text-xs text-muted-foreground">Hide cost forecasting section</p>
                       </div>
                       <Switch
                         checked={formData.hide_cost_forecast}
@@ -595,7 +594,7 @@ export default function PermissionsManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label>Hide Leaderboard</Label>
-                        <p className="text-xs text-gray-500">Hide driver leaderboard link</p>
+                        <p className="text-xs text-muted-foreground">Hide driver leaderboard link</p>
                       </div>
                       <Switch
                         checked={formData.hide_leaderboard}
@@ -606,7 +605,7 @@ export default function PermissionsManagement() {
                     <div className="flex items-center justify-between">
                       <div>
                         <Label>Hide Usage Costs in Vehicle Profile</Label>
-                        <p className="text-xs text-gray-500">Hide cost data in vehicle details</p>
+                        <p className="text-xs text-muted-foreground">Hide cost data in vehicle details</p>
                       </div>
                       <Switch
                         checked={formData.hide_usage_costs}
@@ -641,7 +640,7 @@ export default function PermissionsManagement() {
                       <div key={perm.key} className="flex items-center justify-between">
                         <div>
                           <Label>{perm.label}</Label>
-                          <p className="text-xs text-gray-500">{perm.desc}</p>
+                          <p className="text-xs text-muted-foreground">{perm.desc}</p>
                         </div>
                         <Switch
                           checked={formData[perm.key]}
@@ -655,10 +654,10 @@ export default function PermissionsManagement() {
             </Accordion>
 
             {/* Active Status */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-800 rounded-lg">
+            <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
               <div>
                 <Label>Permission Active</Label>
-                <p className="text-xs text-gray-500">Enable or disable this permission configuration</p>
+                <p className="text-xs text-muted-foreground">Enable or disable this permission configuration</p>
               </div>
               <Switch
                 checked={formData.is_active}
@@ -674,7 +673,7 @@ export default function PermissionsManagement() {
             <Button
               onClick={handleSubmit}
               disabled={saveMutation.isPending}
-              className="bg-emerald-500 hover:bg-emerald-600"
+              className="bg-primary hover:bg-primary/90"
             >
               {saveMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

@@ -1,12 +1,12 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, AlertTriangle, DollarSign } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { TrendingUp, TrendingDown, AlertTriangle, DollarSign, Info } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import moment from 'moment';
 
 export default function CostForecast({ scans, selectedCustomer, selectedSite }) {
-  const forecast = useMemo(() => {
+  const costData = useMemo(() => {
     if (!scans.length) return null;
 
     // Get pricing rules
@@ -19,28 +19,53 @@ export default function CostForecast({ scans, selectedCustomer, selectedSite }) 
 
     // Group by month
     const monthlyData = {};
+    let totalCost = 0;
+    let totalScans = 0;
+    
     scans.forEach(scan => {
-      const month = moment(scan.timestamp).format('YYYY-MM');
+      const month = moment(scan.timestamp ?? scan.createdAt).format('YYYY-MM');
       if (!monthlyData[month]) {
         monthlyData[month] = { month, scans: 0, cost: 0 };
       }
+      const price = getPricing(scan);
       monthlyData[month].scans++;
-      monthlyData[month].cost += getPricing(scan);
+      monthlyData[month].cost += price;
+      totalCost += price;
+      totalScans++;
     });
 
     const months = Object.values(monthlyData).sort((a, b) => a.month.localeCompare(b.month));
+    const lastMonth = months[months.length - 1];
+    const avgCostPerScan = totalScans > 0 ? totalCost / totalScans : 0;
     
-    if (months.length < 2) return null;
+    // If we have less than 2 months, we can't calculate a full forecast
+    // but we can still show current data
+    if (months.length < 2) {
+      return {
+        hasFullForecast: false,
+        currentMonth: lastMonth?.cost ?? 0,
+        currentMonthLabel: lastMonth ? moment(lastMonth.month, 'YYYY-MM').format('MMM YYYY') : 'Current',
+        totalCost,
+        totalScans,
+        avgCostPerScan,
+        chartData: months.map(m => ({
+          month: moment(m.month, 'YYYY-MM').format('MMM YY'),
+          cost: m.cost,
+          scans: m.scans
+        })),
+        monthCount: months.length
+      };
+    }
 
-    // Calculate trend
+    // Calculate trend with 2+ months
     const recentMonths = months.slice(-3);
-    const avgScans = recentMonths.reduce((sum, m) => sum + m.scans, 0) / recentMonths.length;
     const avgCost = recentMonths.reduce((sum, m) => sum + m.cost, 0) / recentMonths.length;
 
     // Calculate growth rate
-    const lastMonth = months[months.length - 1];
     const prevMonth = months[months.length - 2];
-    const growthRate = ((lastMonth.cost - prevMonth.cost) / prevMonth.cost) * 100;
+    const growthRate = prevMonth.cost > 0 
+      ? ((lastMonth.cost - prevMonth.cost) / prevMonth.cost) * 100 
+      : 0;
 
     // Forecast next month
     const nextMonthCost = avgCost * (1 + (growthRate / 100));
@@ -54,23 +79,27 @@ export default function CostForecast({ scans, selectedCustomer, selectedSite }) 
     }];
 
     return {
+      hasFullForecast: true,
       currentMonth: lastMonth.cost,
+      currentMonthLabel: moment(lastMonth.month, 'YYYY-MM').format('MMM YYYY'),
       nextMonth: nextMonthCost,
       growthRate,
       avgMonthly: avgCost,
+      totalCost,
+      totalScans,
+      avgCostPerScan,
       chartData: chartData.map(m => ({
         month: moment(m.month, 'YYYY-MM').format('MMM YY'),
         cost: m.cost,
         forecast: m.forecast
       })),
       nextMonthDate,
-      alert: nextMonthCost > avgCost * 1.2 // Alert if 20% above average
+      alert: nextMonthCost > avgCost * 1.2, // Alert if 20% above average
+      monthCount: months.length
     };
   }, [scans, selectedCustomer]);
 
-  if (!forecast) return null;
-
-  const trend = forecast.growthRate > 0 ? 'up' : 'down';
+  const trend = costData?.hasFullForecast ? (costData.growthRate > 0 ? 'up' : 'down') : null;
 
   return (
     <Card>
@@ -81,58 +110,123 @@ export default function CostForecast({ scans, selectedCustomer, selectedSite }) 
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {forecast.alert && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            <p className="text-sm text-red-800">
-              <strong>Budget Alert:</strong> Next month's costs projected 20% above average
-            </p>
+        {costData ? (
+          <>
+            {/* Info banner when we only have partial data */}
+            {!costData.hasFullForecast && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2 dark:bg-blue-950/30 dark:border-blue-900">
+                <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Limited data on this page:</strong> Showing costs for {costData.totalScans} scans. 
+                  Full forecast requires data spanning multiple months. Navigate through scan pages or adjust date range for complete trend analysis.
+                </div>
+              </div>
+            )}
+
+            {costData.hasFullForecast && costData.alert && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 dark:bg-red-950/30 dark:border-red-900">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  <strong>Budget Alert:</strong> Next month's costs projected 20% above average
+                </p>
+              </div>
+            )}
+
+            <div className={`grid gap-4 ${costData.hasFullForecast ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  {costData.hasFullForecast ? 'Current Month' : `Cost (${costData.currentMonthLabel})`}
+                </p>
+                <p className="text-2xl font-bold text-foreground">
+                  ${costData.currentMonth.toFixed(2)}
+                </p>
+              </div>
+              
+              {costData.hasFullForecast ? (
+                <>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Projected {costData.nextMonthDate}</p>
+                    <p className="text-2xl font-bold text-[#7CB342]">
+                      ${costData.nextMonth.toFixed(2)}
+                    </p>
+                    <Badge className={trend === 'up' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}>
+                      {trend === 'up' ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                      {Math.abs(costData.growthRate).toFixed(1)}%
+                    </Badge>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground">3-Month Average</p>
+                    <p className="text-2xl font-bold text-foreground">
+                      ${costData.avgMonthly.toFixed(2)}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Cost (this page)</p>
+                    <p className="text-2xl font-bold text-[#7CB342]">
+                      ${costData.totalCost.toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground">Scans</p>
+                    <p className="text-2xl font-bold text-foreground">
+                      {costData.totalScans}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground">Avg Cost/Scan</p>
+                    <p className="text-2xl font-bold text-foreground">
+                      ${costData.avgCostPerScan.toFixed(2)}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {costData.chartData.length > 0 && (
+              <ResponsiveContainer width="100%" height={200}>
+                {costData.hasFullForecast ? (
+                  <LineChart data={costData.chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="cost" 
+                      stroke="#7CB342" 
+                      strokeWidth={2}
+                      dot={{ fill: '#7CB342' }}
+                      strokeDasharray={(entry) => entry.forecast ? '5 5' : '0'}
+                    />
+                  </LineChart>
+                ) : (
+                  <BarChart data={costData.chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} />
+                    <Bar dataKey="cost" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <DollarSign className="w-12 h-12 mb-3 opacity-50" />
+            <p className="text-sm font-medium">No cost data for selected period</p>
+            <p className="text-xs mt-1">Adjust the date range to see forecast</p>
+            <div className="mt-4 w-full h-[200px] rounded-lg border border-dashed border-border bg-muted/20 flex items-center justify-center">
+              <span className="text-xs text-muted-foreground">Chart will appear when data is available</span>
+            </div>
           </div>
         )}
-
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <p className="text-sm text-slate-600">Current Month</p>
-            <p className="text-2xl font-bold text-slate-800">
-              ${forecast.currentMonth.toFixed(2)}
-            </p>
-          </div>
-          
-          <div>
-            <p className="text-sm text-slate-600">Projected {forecast.nextMonthDate}</p>
-            <p className="text-2xl font-bold text-[#7CB342]">
-              ${forecast.nextMonth.toFixed(2)}
-            </p>
-            <Badge className={trend === 'up' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}>
-              {trend === 'up' ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-              {Math.abs(forecast.growthRate).toFixed(1)}%
-            </Badge>
-          </div>
-
-          <div>
-            <p className="text-sm text-slate-600">3-Month Average</p>
-            <p className="text-2xl font-bold text-slate-800">
-              ${forecast.avgMonthly.toFixed(2)}
-            </p>
-          </div>
-        </div>
-
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={forecast.chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
-            <Line 
-              type="monotone" 
-              dataKey="cost" 
-              stroke="#7CB342" 
-              strokeWidth={2}
-              dot={{ fill: '#7CB342' }}
-              strokeDasharray={(entry) => entry.forecast ? '5 5' : '0'}
-            />
-          </LineChart>
-        </ResponsiveContainer>
       </CardContent>
     </Card>
   );

@@ -42,16 +42,22 @@ import {
 } from 'recharts';
 import moment from 'moment';
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
 export default function RefillAnalytics({ refills, scans, sites, selectedCustomer, selectedSite, dateRange }) {
   const [productFilter, setProductFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [refSearch, setRefSearch] = useState('');
+  const [areaManagerFilter, setAreaManagerFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50; // Match client system (50 per page)
+  const [pageSize, setPageSize] = useState(10);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or page size change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCustomer, selectedSite, productFilter, statusFilter]);
+  }, [selectedCustomer, selectedSite, productFilter, statusFilter, refSearch, areaManagerFilter, dateFrom, dateTo, pageSize]);
 
   const uniqueProducts = useMemo(() => {
     const products = new Set(refills?.map(r => r.productName) || []);
@@ -61,6 +67,11 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
   const uniqueStatuses = useMemo(() => {
     const statuses = new Set(refills?.map(r => r.status) || []);
     return ['all', ...Array.from(statuses).sort()];
+  }, [refills]);
+
+  const uniqueAreaManagers = useMemo(() => {
+    const managers = new Set(refills?.map(r => r.areaManager).filter(Boolean) || []);
+    return ['all', ...Array.from(managers).sort()];
   }, [refills]);
 
   // Apply filters to refills (NO date filter - show all refills including future scheduled)
@@ -79,20 +90,36 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
     }
     
     const filtered = refills.filter(refill => {
-      // NO date filter - show ALL refills (past, present, and future scheduled)
-      // This matches the client's original system behavior
+      // Customer filter; include refills with null customer so nothing is hidden
+      const matchesCustomer = !selectedCustomer || selectedCustomer === 'all' || refill.customer === selectedCustomer || refill.customer == null;
       
-      // Customer filter (use Dashboard selectedCustomer)
-      const matchesCustomer = !selectedCustomer || selectedCustomer === 'all' || refill.customer === selectedCustomer;
+      // Site filter; include refills with null site so nothing is hidden
+      const matchesSite = !selectedSite || selectedSite === 'all' || refill.site === selectedSite || refill.site == null;
       
-      // Site filter (use Dashboard selectedSite)
-      const matchesSite = !selectedSite || selectedSite === 'all' || refill.site === selectedSite;
-      
-      // Product and status filters (component-specific)
+      // Product and status filters
       const matchesProduct = productFilter === 'all' || refill.productName === productFilter;
       const matchesStatus = statusFilter === 'all' || refill.status === statusFilter;
       
-      return matchesCustomer && matchesSite && matchesProduct && matchesStatus;
+      // Ref search (partial match, case-insensitive)
+      const refStr = String(refill.ref || '').toLowerCase();
+      const matchesRef = !refSearch.trim() || refStr.includes(refSearch.trim().toLowerCase());
+      
+      // Area manager filter
+      const matchesAreaManager = areaManagerFilter === 'all' || refill.areaManager === areaManagerFilter;
+      
+      // Date range filter (refill date)
+      let matchesDate = true;
+      if (dateFrom || dateTo) {
+        const refillDate = refill.date ? moment(refill.date) : null;
+        if (refillDate) {
+          if (dateFrom && refillDate.isBefore(moment(dateFrom).startOf('day'))) matchesDate = false;
+          if (dateTo && refillDate.isAfter(moment(dateTo).endOf('day'))) matchesDate = false;
+        } else {
+          matchesDate = false;
+        }
+      }
+      
+      return matchesCustomer && matchesSite && matchesProduct && matchesStatus && matchesRef && matchesAreaManager && matchesDate;
     });
     
     console.log('✅ REFILL FILTERING COMPLETE:', {
@@ -111,7 +138,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
     });
     
     return filtered;
-  }, [refills, selectedCustomer, selectedSite, productFilter, statusFilter]);
+  }, [refills, selectedCustomer, selectedSite, productFilter, statusFilter, refSearch, areaManagerFilter, dateFrom, dateTo]);
 
   const analysis = useMemo(() => {
     if (!filteredRefills?.length) return null;
@@ -498,21 +525,25 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
   const handleClearFilters = () => {
     setProductFilter('all');
     setStatusFilter('all');
+    setRefSearch('');
+    setAreaManagerFilter('all');
+    setDateFrom('');
+    setDateTo('');
   };
 
-  const hasActiveFilters = productFilter !== 'all' || statusFilter !== 'all';
+  const hasActiveFilters = productFilter !== 'all' || statusFilter !== 'all' || refSearch.trim() || areaManagerFilter !== 'all' || dateFrom || dateTo;
 
   if (!analysis) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Droplet className="w-5 h-5 text-[#7CB342]" />
+            <Droplet className="w-5 h-5 text-primary" />
             Refill Intelligence
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-slate-600">No refill data available for analysis.</p>
+          <p className="text-sm text-muted-foreground">No refill data available for analysis.</p>
         </CardContent>
       </Card>
     );
@@ -520,43 +551,43 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
 
   const getUrgencyColor = (urgency) => {
     switch(urgency) {
-      case 'critical': return 'bg-red-100 text-red-800 border-red-300';
-      case 'warning': return 'bg-orange-100 text-orange-800 border-orange-300';
-      case 'attention': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      default: return 'bg-green-100 text-green-800 border-green-300';
+      case 'critical': return 'bg-destructive/10 text-destructive border-destructive/30';
+      case 'warning': return 'bg-chart-4/10 text-chart-4 border-chart-4/30';
+      case 'attention': return 'bg-chart-5/10 text-chart-5 border-chart-5/30';
+      default: return 'bg-primary/10 text-primary border-primary/30';
     }
   };
 
   return (
     <div className="space-y-6">
       {/* DEBUG INFO CARD */}
-      <Card className="bg-blue-50 border-blue-200">
+      <Card className="bg-muted/30 border-border">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-blue-900">
-            <Activity className="w-5 h-5" />
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <Activity className="w-5 h-5 text-primary" />
             Refills Data Debug Info
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div className="bg-white p-3 rounded-lg border border-blue-200">
-              <div className="text-xs text-slate-600 mb-1">Total Refills (API)</div>
-              <div className="text-2xl font-bold text-blue-900">{refills?.length || 0}</div>
+            <div className="bg-card p-3 rounded-lg border border-border">
+              <div className="text-xs text-muted-foreground mb-1">Total Refills (API)</div>
+              <div className="text-2xl font-bold text-foreground">{refills?.length || 0}</div>
             </div>
-            <div className="bg-white p-3 rounded-lg border border-blue-200">
-              <div className="text-xs text-slate-600 mb-1">After Filters</div>
-              <div className="text-2xl font-bold text-blue-900">{filteredRefills?.length || 0}</div>
+            <div className="bg-card p-3 rounded-lg border border-border">
+              <div className="text-xs text-muted-foreground mb-1">After Filters</div>
+              <div className="text-2xl font-bold text-foreground">{filteredRefills?.length || 0}</div>
             </div>
-            <div className="bg-white p-3 rounded-lg border border-blue-200">
-              <div className="text-xs text-slate-600 mb-1">Unique Customers</div>
-              <div className="text-2xl font-bold text-blue-900">{[...new Set(refills?.map(r => r.customer) || [])].length}</div>
+            <div className="bg-card p-3 rounded-lg border border-border">
+              <div className="text-xs text-muted-foreground mb-1">Unique Customers</div>
+              <div className="text-2xl font-bold text-foreground">{[...new Set(refills?.map(r => r.customer) || [])].length}</div>
             </div>
-            <div className="bg-white p-3 rounded-lg border border-blue-200">
-              <div className="text-xs text-slate-600 mb-1">Unique Sites</div>
-              <div className="text-2xl font-bold text-blue-900">{[...new Set(refills?.map(r => r.site) || [])].length}</div>
+            <div className="bg-card p-3 rounded-lg border border-border">
+              <div className="text-xs text-muted-foreground mb-1">Unique Sites</div>
+              <div className="text-2xl font-bold text-foreground">{[...new Set(refills?.map(r => r.site) || [])].length}</div>
             </div>
           </div>
-          <div className="mt-3 text-xs text-slate-600">
+          <div className="mt-3 text-xs text-muted-foreground">
             <strong>Expected:</strong> 3782 refills from client system | 
             <strong className="ml-2">Current Filters:</strong> Customer: {selectedCustomer || 'all'}, Site: {selectedSite || 'all'}, Product: {productFilter}, Status: {statusFilter}
           </div>
@@ -568,7 +599,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-[#7CB342]" />
+              <Filter className="w-5 h-5 text-primary" />
               Refill Filters
             </CardTitle>
             {hasActiveFilters && (
@@ -588,7 +619,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Product Filter */}
             <div>
-              <label className="text-xs text-slate-600 mb-1 block">Product</label>
+              <label className="text-xs text-muted-foreground mb-1 block">Product</label>
               <Select value={productFilter} onValueChange={setProductFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Products" />
@@ -605,7 +636,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
 
             {/* Status Filter */}
             <div>
-              <label className="text-xs text-slate-600 mb-1 block">Status</label>
+              <label className="text-xs text-muted-foreground mb-1 block">Status</label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Statuses" />
@@ -619,12 +650,32 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Page size */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Rows per page</label>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => setPageSize(Number(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Active Filters Badge */}
           {hasActiveFilters && (
-            <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
-              <Badge className="bg-[#7CB342] text-white">
+            <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+              <Badge className="bg-primary text-primary-foreground">
                 {filteredRefills.length} of {refills?.length || 0} deliveries shown
               </Badge>
             </div>
@@ -638,11 +689,11 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Critical Sites</p>
-                <p className="text-3xl font-bold text-red-600">{analysis.criticalSites}</p>
-                <p className="text-xs text-slate-500 mt-1">Need refill within 3 days</p>
+                <p className="text-sm text-muted-foreground">Critical Sites</p>
+                <p className="text-3xl font-bold text-destructive">{analysis.criticalSites}</p>
+                <p className="text-xs text-muted-foreground mt-1">Need refill within 3 days</p>
               </div>
-              <AlertTriangle className="w-10 h-10 text-red-600 opacity-20" />
+              <AlertTriangle className="w-10 h-10 text-destructive opacity-20" />
             </div>
           </CardContent>
         </Card>
@@ -651,11 +702,11 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Attention Needed</p>
-                <p className="text-3xl font-bold text-orange-600">{analysis.warningSites}</p>
-                <p className="text-xs text-slate-500 mt-1">Within 7 days</p>
+                <p className="text-sm text-muted-foreground">Attention Needed</p>
+                <p className="text-3xl font-bold text-chart-4">{analysis.warningSites}</p>
+                <p className="text-xs text-muted-foreground mt-1">Within 7 days</p>
               </div>
-              <Calendar className="w-10 h-10 text-orange-600 opacity-20" />
+              <Calendar className="w-10 h-10 text-chart-4 opacity-20" />
             </div>
           </CardContent>
         </Card>
@@ -664,28 +715,28 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600">Total Monitored</p>
-                <p className="text-3xl font-bold text-[#7CB342]">{analysis.totalSites}</p>
-                <p className="text-xs text-slate-500 mt-1">Active sites</p>
+                <p className="text-sm text-muted-foreground">Total Monitored</p>
+                <p className="text-3xl font-bold text-primary">{analysis.totalSites}</p>
+                <p className="text-xs text-muted-foreground mt-1">Active sites</p>
               </div>
-              <Droplet className="w-10 h-10 text-[#7CB342] opacity-20" />
+              <Droplet className="w-10 h-10 text-primary opacity-20" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Predictive Alerts */}
-      <Card>
+      {/* Predictive Alerts - commented out per request */}
+      {/* <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-[#7CB342]" />
+            <Zap className="w-5 h-5 text-primary" />
             Predictive Refill Alerts
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {analysis.predictions
-              .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+              .slice((currentPage - 1) * pageSize, currentPage * pageSize)
               .map((pred, idx) => (
               <div 
                 key={idx} 
@@ -697,7 +748,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                       <MapPin className="w-4 h-4" />
                       <div className="flex flex-col">
                         <h4 className="font-semibold">{pred.site}</h4>
-                        <p className="text-xs text-slate-600">{pred.customer}</p>
+                        <p className="text-xs text-muted-foreground">{pred.customer}</p>
                       </div>
                       <Badge className={getUrgencyColor(pred.urgency)}>
                         {pred.urgency.toUpperCase()}
@@ -705,81 +756,80 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                       <div>
-                        <p className="text-slate-600">Current Stock</p>
+                        <p className="text-muted-foreground">Current Stock</p>
                         <p className="font-semibold">{pred.currentStock}L</p>
-                        <p className="text-xs text-slate-500">{pred.stockAfterLastRefill}L @ last refill</p>
+                        <p className="text-xs text-muted-foreground">{pred.stockAfterLastRefill}L @ last refill</p>
                       </div>
                       <div>
-                        <p className="text-slate-600">Usage Since Refill</p>
+                        <p className="text-muted-foreground">Usage Since Refill</p>
                         <p className="font-semibold">{pred.scansSinceLastRefill} scans</p>
-                        <p className="text-xs text-slate-500">{(pred.stockAfterLastRefill - pred.currentStock).toFixed(1)}L consumed</p>
+                        <p className="text-xs text-muted-foreground">{(pred.stockAfterLastRefill - pred.currentStock).toFixed(1)}L consumed</p>
                       </div>
                       <div>
-                        <p className="text-slate-600">Daily Consumption</p>
+                        <p className="text-muted-foreground">Daily Consumption</p>
                         <div className="flex items-center gap-1">
                           <p className="font-semibold">{pred.adjustedDailyConsumption}L/day</p>
-                          {pred.consumptionTrend === 'increasing' && <TrendingUp className="w-3 h-3 text-red-600" />}
-                          {pred.consumptionTrend === 'decreasing' && <TrendingDown className="w-3 h-3 text-green-600" />}
-                          {pred.consumptionTrend === 'stable' && <Minus className="w-3 h-3 text-slate-600" />}
+                          {pred.consumptionTrend === 'increasing' && <TrendingUp className="w-3 h-3 text-destructive" />}
+                          {pred.consumptionTrend === 'decreasing' && <TrendingDown className="w-3 h-3 text-primary" />}
+                          {pred.consumptionTrend === 'stable' && <Minus className="w-3 h-3 text-muted-foreground" />}
                         </div>
-                        <p className="text-xs text-slate-500 capitalize">{pred.consumptionTrend} trend</p>
+                        <p className="text-xs text-muted-foreground capitalize">{pred.consumptionTrend} trend</p>
                       </div>
                       <div>
-                        <p className="text-slate-600">Refill Needed In</p>
+                        <p className="text-muted-foreground">Refill Needed In</p>
                         <p className="font-semibold">{pred.daysUntilRefill} days</p>
-                        <p className="text-xs text-slate-500">{pred.predictedRefillDate}</p>
+                        <p className="text-xs text-muted-foreground">{pred.predictedRefillDate}</p>
                       </div>
                       <div>
-                        <p className="text-slate-600">Confidence</p>
+                        <p className="text-muted-foreground">Confidence</p>
                         <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-slate-200 rounded-full h-2">
+                          <div className="flex-1 bg-muted rounded-full h-2">
                             <div 
                               className="h-2 rounded-full transition-all"
                               style={{ 
                                 width: `${pred.confidence}%`,
-                                backgroundColor: pred.confidence >= 80 ? '#7CB342' : 
-                                                pred.confidence >= 65 ? '#F59E0B' : '#EF4444'
+                                backgroundColor: pred.confidence >= 80 ? 'hsl(var(--primary))' : 
+                                                pred.confidence >= 65 ? 'hsl(var(--chart-4))' : 'hsl(var(--destructive))'
                               }}
                             />
                           </div>
                           <span className="font-semibold text-xs">{pred.confidence}%</span>
                         </div>
-                        <p className="text-xs text-slate-500 capitalize">{pred.dataQuality} data</p>
+                        <p className="text-xs text-muted-foreground capitalize">{pred.dataQuality} data</p>
                       </div>
                     </div>
                     
-                    {/* Additional insights */}
                     <div className="mt-3 pt-3 border-t border-current/20 grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
                       <div>
-                        <p className="text-slate-600">Consumed Since Refill</p>
+                        <p className="text-muted-foreground">Consumed Since Refill</p>
                         <p className="font-medium">{pred.stockAfterLastRefill - pred.currentStock}L</p>
                       </div>
                       <div>
-                        <p className="text-slate-600">Avg Refill Volume</p>
+                        <p className="text-muted-foreground">Avg Refill Volume</p>
                         <p className="font-medium">{pred.avgRefillVolume}L</p>
                       </div>
                       <div>
-                        <p className="text-slate-600">Avg Refill Interval</p>
+                        <p className="text-muted-foreground">Avg Refill Interval</p>
                         <p className="font-medium">{pred.avgRefillInterval} days</p>
                       </div>
                       <div>
-                        <p className="text-slate-600">Days Since Last Refill</p>
+                        <p className="text-muted-foreground">Days Since Last Refill</p>
                         <div className="flex items-center gap-2">
                           <p className="font-medium">{pred.daysSinceLastRefill} days</p>
                           {pred.hasOverdueScheduled && (
-                            <Badge className="bg-red-600 text-white text-xs px-1 py-0">
+                            <Badge variant="destructive" className="text-xs px-1 py-0">
                               OVERDUE
                             </Badge>
                           )}
                         </div>
                         {pred.hasOverdueScheduled && (
-                          <p className="text-xs text-red-600 font-semibold mt-0.5">
+                          <p className="text-xs text-destructive font-semibold mt-0.5">
                             {pred.overdueScheduledCount} scheduled refill{pred.overdueScheduledCount > 1 ? 's' : ''} overdue
                           </p>
                         )}
                       </div>
                       <div>
-                        <p className="text-slate-600">Last Refill</p>
+                        <p className="text-muted-foreground">Last Refill</p>
                         <p className="font-medium">{pred.lastRefillDate}</p>
                       </div>
                     </div>
@@ -789,19 +839,18 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
             ))}
           </div>
           
-          {/* Pagination */}
-          {Math.ceil(analysis.predictions.length / itemsPerPage) > 1 && (
+          {Math.ceil(analysis.predictions.length / pageSize) > 1 && (
             <DataPagination
               currentPage={currentPage}
-              totalPages={Math.ceil(analysis.predictions.length / itemsPerPage)}
+              totalPages={Math.ceil(analysis.predictions.length / pageSize)}
               totalItems={analysis.predictions.length}
-              itemsPerPage={itemsPerPage}
+              pageSize={pageSize}
               onPageChange={setCurrentPage}
               className="mt-4"
             />
           )}
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Data Visualizations */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -809,7 +858,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="w-5 h-5 text-[#7CB342]" />
+              <Activity className="w-5 h-5 text-primary" />
               Daily Consumption Trends (90 Days)
             </CardTitle>
           </CardHeader>
@@ -818,11 +867,11 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
               <AreaChart data={analysis.consumptionTrends}>
                 <defs>
                   <linearGradient id="colorLitres" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#7CB342" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#7CB342" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis 
                   dataKey="date" 
                   tick={{ fontSize: 12 }}
@@ -831,15 +880,15 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip 
                   contentStyle={{ 
-                    backgroundColor: 'white', 
-                    border: '1px solid #e2e8f0',
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
                     borderRadius: '8px'
                   }}
                 />
                 <Area 
                   type="monotone" 
                   dataKey="litres" 
-                  stroke="#7CB342" 
+                  stroke="hsl(var(--primary))" 
                   fillOpacity={1} 
                   fill="url(#colorLitres)"
                   name="Litres Consumed"
@@ -853,21 +902,21 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-[#7CB342]" />
+              <TrendingUp className="w-5 h-5 text-primary" />
               Monthly Refill Trends
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={analysis.monthlyTrends}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
                 <Tooltip 
                   contentStyle={{ 
-                    backgroundColor: 'white', 
-                    border: '1px solid #e2e8f0',
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
                     borderRadius: '8px'
                   }}
                 />
@@ -876,7 +925,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                   yAxisId="left"
                   type="monotone" 
                   dataKey="totalLitres" 
-                  stroke="#7CB342" 
+                  stroke="hsl(var(--primary))" 
                   strokeWidth={2}
                   name="Total Litres"
                   dot={{ r: 4 }}
@@ -885,7 +934,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                   yAxisId="right"
                   type="monotone" 
                   dataKey="count" 
-                  stroke="#3B82F6" 
+                  stroke="hsl(var(--chart-2))" 
                   strokeWidth={2}
                   name="Refill Count"
                   dot={{ r: 4 }}
@@ -899,20 +948,20 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Target className="w-5 h-5 text-[#7CB342]" />
+              <Target className="w-5 h-5 text-primary" />
               Top Sites by Total Volume
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={analysis.refillVolumesBySite} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis type="number" tick={{ fontSize: 12 }} />
                 <YAxis dataKey="site" type="category" width={120} tick={{ fontSize: 11 }} />
                 <Tooltip 
                   contentStyle={{ 
-                    backgroundColor: 'white', 
-                    border: '1px solid #e2e8f0',
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
                     borderRadius: '8px'
                   }}
                   formatter={(value, name) => {
@@ -920,7 +969,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                     return [value, name];
                   }}
                 />
-                <Bar dataKey="totalLitres" fill="#7CB342" radius={[0, 8, 8, 0]} />
+                <Bar dataKey="totalLitres" fill="hsl(var(--primary))" radius={[0, 8, 8, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -930,43 +979,43 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Zap className="w-5 h-5 text-[#7CB342]" />
+              <Zap className="w-5 h-5 text-primary" />
               Usage Efficiency (Litres per Scan)
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={analysis.usageEfficiency} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis type="number" tick={{ fontSize: 12 }} />
                 <YAxis dataKey="site" type="category" width={120} tick={{ fontSize: 11 }} />
                 <Tooltip 
                   contentStyle={{ 
-                    backgroundColor: 'white', 
-                    border: '1px solid #e2e8f0',
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
                     borderRadius: '8px'
                   }}
                   formatter={(value) => [`${value}L/scan`, 'Efficiency']}
                 />
                 <Bar dataKey="litresPerScan" radius={[0, 8, 8, 0]}>
                   {analysis.usageEfficiency.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.litresPerScan > 6 ? '#EF4444' : entry.litresPerScan > 5 ? '#F59E0B' : '#7CB342'} />
+                    <Cell key={`cell-${index}`} fill={entry.litresPerScan > 6 ? 'hsl(var(--destructive))' : entry.litresPerScan > 5 ? 'hsl(var(--chart-4))' : 'hsl(var(--primary))'} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
             <div className="mt-4 flex gap-4 text-xs">
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-[#7CB342]" />
-                <span className="text-slate-600">Efficient (≤5L)</span>
+                <div className="w-3 h-3 rounded-full bg-primary" />
+                <span className="text-muted-foreground">Efficient (≤5L)</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-[#F59E0B]" />
-                <span className="text-slate-600">Moderate (5-6L)</span>
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(var(--chart-4))' }} />
+                <span className="text-muted-foreground">Moderate (5-6L)</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-[#EF4444]" />
-                <span className="text-slate-600">High ({'>'}6L)</span>
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(var(--destructive))' }} />
+                <span className="text-muted-foreground">High ({'>'}6L)</span>
               </div>
             </div>
           </CardContent>
@@ -977,14 +1026,14 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Droplet className="w-5 h-5 text-[#7CB342]" />
+            <Droplet className="w-5 h-5 text-primary" />
             Current Stock Levels by Site
           </CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={400}>
             <BarChart data={analysis.stockLevels}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis 
                 dataKey="site" 
                 tick={{ fontSize: 11, angle: -45 }}
@@ -994,8 +1043,8 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
               <YAxis tick={{ fontSize: 12 }} label={{ value: 'Litres', angle: -90, position: 'insideLeft' }} />
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: 'white', 
-                  border: '1px solid #e2e8f0',
+                  backgroundColor: 'hsl(var(--card))', 
+                  border: '1px solid hsl(var(--border))',
                   borderRadius: '8px'
                 }}
                 formatter={(value) => [`${value}L`, 'Current Stock']}
@@ -1005,10 +1054,10 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                   <Cell 
                     key={`cell-${index}`} 
                     fill={
-                      entry.status === 'critical' ? '#EF4444' : 
-                      entry.status === 'warning' ? '#F59E0B' : 
-                      entry.status === 'attention' ? '#FCD34D' : 
-                      '#7CB342'
+                      entry.status === 'critical' ? 'hsl(var(--destructive))' : 
+                      entry.status === 'warning' ? 'hsl(var(--chart-4))' : 
+                      entry.status === 'attention' ? 'hsl(var(--chart-5))' : 
+                      'hsl(var(--primary))'
                     } 
                   />
                 ))}
@@ -1021,41 +1070,131 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
       {/* ALL REFILLS TABLE - Matching Client System */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Droplet className="w-5 h-5 text-[#7CB342]" />
-            All Refills ({filteredRefills.length} total)
-          </CardTitle>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <Droplet className="w-5 h-5 text-primary" />
+                All Refills ({filteredRefills.length} total)
+              </CardTitle>
+              {hasActiveFilters && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearFilters}
+                  className="gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+            {/* Filters - inline above table */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Ref</label>
+                <Input
+                  placeholder="Search by ref..."
+                  value={refSearch}
+                  onChange={(e) => setRefSearch(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Product</label>
+                <Select value={productFilter} onValueChange={setProductFilter}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="All Products" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueProducts.map(product => (
+                      <SelectItem key={product} value={product}>
+                        {product === 'all' ? 'All Products' : product}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Status</label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueStatuses.map(status => (
+                      <SelectItem key={status} value={status}>
+                        {status === 'all' ? 'All Statuses' : status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Area Manager</label>
+                <Select value={areaManagerFilter} onValueChange={setAreaManagerFilter}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="All Managers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueAreaManagers.map(manager => (
+                      <SelectItem key={manager} value={manager}>
+                        {manager === 'all' ? 'All Managers' : manager}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Date From</label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Date To</label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b-2 border-slate-200">
+              <thead className="bg-muted/50 border-b-2 border-border">
                 <tr>
-                  <th className="text-left p-3 font-semibold text-slate-700">Ref</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Customer</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Site</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Area Manager</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Date</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Invoice No</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Product</th>
-                  <th className="text-right p-3 font-semibold text-slate-700">Start (L)</th>
-                  <th className="text-right p-3 font-semibold text-slate-700">New Total (L)</th>
-                  <th className="text-right p-3 font-semibold text-slate-700">Delivered (L)</th>
-                  <th className="text-right p-3 font-semibold text-slate-700">Rate ($)</th>
-                  <th className="text-right p-3 font-semibold text-slate-700">Total (Ex.GST)</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">PO</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Status</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Ref</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Customer</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Site</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Area Manager</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Date</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Invoice No</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Product</th>
+                  <th className="text-right p-3 font-semibold text-foreground">Start (L)</th>
+                  <th className="text-right p-3 font-semibold text-foreground">New Total (L)</th>
+                  <th className="text-right p-3 font-semibold text-foreground">Delivered (L)</th>
+                  <th className="text-right p-3 font-semibold text-foreground">Rate ($)</th>
+                  <th className="text-right p-3 font-semibold text-foreground">Total (Ex.GST)</th>
+                  <th className="text-left p-3 font-semibold text-foreground">PO</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRefills
-                  .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                  .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                   .map((refill, index) => (
                     <tr 
                       key={refill.ref || index} 
-                      className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                      className="border-b border-border hover:bg-muted/50 transition-colors"
                     >
-                      <td className="p-3 font-medium text-blue-600">{refill.ref}</td>
+                      <td className="p-3 font-medium text-primary">{refill.ref}</td>
                       <td className="p-3">{refill.customer}</td>
                       <td className="p-3">{refill.site}</td>
                       <td className="p-3">{refill.areaManager || '---'}</td>
@@ -1082,31 +1221,31 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
                     </tr>
                   ))}
               </tbody>
-              <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
+              <tfoot className="bg-muted/50 border-t-2 border-border font-semibold">
                 <tr>
                   <td colSpan="7" className="p-3 text-right">Totals (Page):</td>
                   <td className="p-3 text-right">
                     {filteredRefills
-                      .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                      .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                       .reduce((sum, r) => sum + (r.startLitres || 0), 0)
                       .toFixed(1)}
                   </td>
                   <td className="p-3 text-right">
                     {filteredRefills
-                      .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                      .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                       .reduce((sum, r) => sum + (r.newTotalLitres || 0), 0)
                       .toFixed(1)}
                   </td>
                   <td className="p-3 text-right">
                     {filteredRefills
-                      .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                      .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                       .reduce((sum, r) => sum + (r.deliveredLitres || 0), 0)
                       .toFixed(1)}
                   </td>
                   <td className="p-3"></td>
                   <td className="p-3 text-right">
                     ${filteredRefills
-                      .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                      .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                       .reduce((sum, r) => sum + (r.totalExGst || 0), 0)
                       .toFixed(2)}
                   </td>
@@ -1120,10 +1259,10 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
           <div className="mt-4">
             <DataPagination
               currentPage={currentPage}
-              totalPages={Math.ceil(filteredRefills.length / itemsPerPage)}
+              totalPages={Math.ceil(filteredRefills.length / pageSize)}
               onPageChange={setCurrentPage}
               totalItems={filteredRefills.length}
-              itemsPerPage={itemsPerPage}
+              pageSize={pageSize}
               itemName="refills"
             />
           </div>

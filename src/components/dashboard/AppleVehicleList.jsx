@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Download, ChevronDown, ChevronUp, ChevronRight, Truck, Filter } from 'lucide-react';
 import moment from 'moment';
-import AppleButton from '@/components/ui/AppleButton';
+import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { FavoriteButton } from '@/components/dashboard/FavoriteVehicles';
 import VehicleProfileModal from '@/components/vehicles/VehicleProfileModal';
@@ -37,9 +37,10 @@ export default function AppleVehicleList({ vehicles, scans, searchQuery, setSear
   };
 
   const filteredVehicles = useMemo(() => {
+    const q = (searchQuery ?? '').toLowerCase();
     return vehicles.filter(v =>
-      v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.rfid?.toLowerCase().includes(searchQuery.toLowerCase())
+      (v.name ?? '').toLowerCase().includes(q) ||
+      (v.rfid ?? '').toLowerCase().includes(q)
     );
   }, [vehicles, searchQuery]);
 
@@ -82,17 +83,20 @@ export default function AppleVehicleList({ vehicles, scans, searchQuery, setSear
     a.click();
   };
 
-  const getVehicleScans = (vehicleRef) => {
+  const getVehicleScans = (vehicleRef, vehicle = null) => {
     if (!scans) return [];
-    const filtered = scans.filter(scan => scan.vehicleRef === vehicleRef);
+    const ts = (s) => s.createdAt ?? s.timestamp ?? 0;
+    const filtered = scans.filter(scan => {
+      if (scan.vehicleRef === vehicleRef || scan.vehicleName === vehicle?.name) return true;
+      if (vehicle && (scan.deviceRef === vehicle.device_ref || scan.deviceRef === vehicle.id)) return true;
+      return false;
+    });
     const uniqueScans = filtered.reduce((acc, scan) => {
-      const key = `${scan.timestamp}_${scan.scanRef || scan.washNumber || ''}`;
-      if (!acc.find(s => `${s.timestamp}_${s.scanRef || s.washNumber || ''}` === key)) {
-        acc.push(scan);
-      }
+      const key = `${ts(scan)}_${scan.scanRef || scan.washNumber || ''}`;
+      if (!acc.find(s => `${ts(s)}_${s.scanRef || s.washNumber || ''}` === key)) acc.push(scan);
       return acc;
     }, []);
-    return uniqueScans.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return uniqueScans.sort((a, b) => new Date(ts(b)) - new Date(ts(a)));
   };
 
   return (
@@ -124,7 +128,7 @@ export default function AppleVehicleList({ vehicles, scans, searchQuery, setSear
                 backdrop-blur-xl
                 text-sm text-gray-900 dark:text-white
                 placeholder:text-gray-400
-                focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500
+                focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary
                 transition-all
               "
             />
@@ -162,9 +166,10 @@ export default function AppleVehicleList({ vehicles, scans, searchQuery, setSear
 
           {/* Export */}
           {permissions.canExportData && (
-            <AppleButton variant="secondary" icon={Download} onClick={exportToCSV}>
+            <Button variant="secondary" onClick={exportToCSV}>
+              <Download className="mr-2 h-4 w-4" />
               Export
-            </AppleButton>
+            </Button>
           )}
         </div>
       </div>
@@ -187,7 +192,7 @@ export default function AppleVehicleList({ vehicles, scans, searchQuery, setSear
               key={vehicle.id}
               vehicle={vehicle}
               index={index}
-              scans={getVehicleScans(vehicle.id)}
+              scans={getVehicleScans(vehicle.id, vehicle)}
               isExpanded={expandedVehicleId === vehicle.id}
               onToggleExpand={() => setExpandedVehicleId(expandedVehicleId === vehicle.id ? null : vehicle.id)}
               onViewProfile={() => {
@@ -261,7 +266,7 @@ function VehicleCard({ vehicle, index, scans, isExpanded, onToggleExpand, onView
           {/* Status indicator */}
           <div
             className={`w-3 h-3 rounded-full flex-shrink-0 ${
-              isCompliant ? 'bg-emerald-500' : 'bg-amber-500'
+              isCompliant ? 'bg-primary' : 'bg-amber-500'
             }`}
           />
 
@@ -282,12 +287,12 @@ function VehicleCard({ vehicle, index, scans, isExpanded, onToggleExpand, onView
                   e.stopPropagation();
                   onViewProfile();
                 }}
-                className="font-semibold text-lg text-gray-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                className="font-semibold text-lg text-gray-900 dark:text-white hover:text-primary transition-colors"
               >
                 {vehicle.name}
               </button>
               {isCompliant && (
-                <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-full">
+                <span className="px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary rounded-full">
                   Compliant
                 </span>
               )}
@@ -326,7 +331,7 @@ function VehicleCard({ vehicle, index, scans, isExpanded, onToggleExpand, onView
             transition={{ duration: 0.8, ease: 'easeOut' }}
             className={`h-full rounded-full ${
               isCompliant
-                ? 'bg-emerald-500'
+                ? 'bg-primary'
                 : progress >= 75
                 ? 'bg-amber-500'
                 : 'bg-red-500'
@@ -361,8 +366,8 @@ function VehicleCard({ vehicle, index, scans, isExpanded, onToggleExpand, onView
                       className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 rounded-xl"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
-                          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-xs font-semibold text-primary">
                             {idx + 1}
                           </span>
                         </div>
@@ -375,7 +380,7 @@ function VehicleCard({ vehicle, index, scans, isExpanded, onToggleExpand, onView
                           </p>
                         </div>
                       </div>
-                      <span className="text-xs font-medium px-2 py-1 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-full">
+                      <span className="text-xs font-medium px-2 py-1 bg-primary/10 text-primary rounded-full">
                         Wash
                       </span>
                     </div>
@@ -463,7 +468,7 @@ function Pagination({ currentPage, totalPages, totalItems, itemsPerPage, onPageC
                 transition-colors
                 ${
                   currentPage === pageNum
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                    ? 'bg-primary text-primary-foreground shadow-md'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'
                 }
               `}
