@@ -9,6 +9,7 @@ import {
   FileText,
   Mail,
   Palette,
+  Sparkles,
 } from 'lucide-react';
 import { useAvailableTabs } from '@/components/auth/PermissionGuard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -20,6 +21,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 const ALL_TABS = [
@@ -33,57 +35,83 @@ const ALL_TABS = [
   { value: 'branding', label: 'Branding', icon: Palette, path: '/branding' },
 ];
 
+const INTELLIGENCE_TABS = [
+  { value: 'ai-insights', label: 'AI Insights', icon: Sparkles, path: '/ai-insights', showNewBadge: false },
+];
+
 /**
- * Main sidebar navigation: Compliance, Usage Costs, Refills, etc.
+ * Renders a single nav item with optional "New" badge.
+ */
+function NavItem({ item, isActive, onNavigate }) {
+  const Icon = item.icon;
+  return (
+    <SidebarMenuItem key={item.value}>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SidebarMenuButton asChild isActive={isActive}>
+              <a
+                href={item.path}
+                className="flex items-center gap-2"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigate(item.path);
+                }}
+              >
+                <Icon className="size-4" />
+                <span>{item.label}</span>
+                {item.showNewBadge && (
+                  <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">New</Badge>
+                )}
+              </a>
+            </SidebarMenuButton>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>{item.label}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </SidebarMenuItem>
+  );
+}
+
+/**
+ * Main sidebar navigation: Navigation group + Intelligence (AI Insights).
  * Filtered by role using useAvailableTabs.
  */
 export default function NavMain() {
   const navigate = useNavigate();
   const location = useLocation();
   const availableTabs = useAvailableTabs(ALL_TABS);
+  const availableIntelligenceTabs = useAvailableTabs(INTELLIGENCE_TABS);
   const currentPath = location.pathname;
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {availableTabs.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentPath === item.path;
-
-            return (
-              <SidebarMenuItem key={item.value}>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isActive}
-                      >
-                        <a
-                          href={item.path}
-                          className="flex items-center gap-2"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigate(item.path);
-                          }}
-                        >
-                          <Icon className="size-4" />
-                          <span>{item.label}</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>{item.label}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </SidebarMenuItem>
-            );
-          })}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <>
+      <SidebarGroup>
+        <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {availableTabs.map((item) => {
+              const isActive = currentPath === item.path;
+              return <NavItem key={item.value} item={item} isActive={isActive} onNavigate={navigate} />;
+            })}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+      {availableIntelligenceTabs.length > 0 && (
+        <SidebarGroup>
+          <SidebarGroupLabel>Intelligence</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {availableIntelligenceTabs.map((item) => {
+                const isActive = currentPath === item.path;
+                return <NavItem key={item.value} item={item} isActive={isActive} onNavigate={navigate} />;
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      )}
+    </>
   );
 }

@@ -26,6 +26,7 @@ const ALL_TABS = [
   { value: 'email-reports', label: 'Email Reports' },
   { value: 'branding', label: 'Branding' },
   { value: 'leaderboard', label: 'Driver Leaderboard' },
+  { value: 'ai-insights', label: 'AI Insights' },
 ];
 
 const ROLES = [

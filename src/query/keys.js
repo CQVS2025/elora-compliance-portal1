@@ -170,6 +170,17 @@ export const queryKeys = {
     siteOverrides: () => ['siteOverrides'],
     // User presence (last_seen, online status) for admin
     userPresence: () => ['userPresence'],
+    // AI Insights (global settings; predictions/recommendations are tenant-scoped)
+    aiSettings: () => ['aiSettings'],
+  },
+  // AI Insights (tenant-scoped)
+  ai: {
+    predictions: (companyId, date) => ['tenant', companyId, 'aiPredictions', date],
+    recommendations: (companyId) => ['tenant', companyId, 'aiRecommendations'],
+    washWindows: (companyId) => ['tenant', companyId, 'aiWashWindows'],
+    driverPatterns: (companyId) => ['tenant', companyId, 'aiDriverPatterns'],
+    siteInsights: (companyId) => ['tenant', companyId, 'aiSiteInsights'],
+    patternSummary: (companyId) => ['tenant', companyId, 'aiPatternSummary'],
   },
 };
 

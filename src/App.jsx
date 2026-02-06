@@ -142,6 +142,13 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        <Route path="/ai-insights" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.AIInsights)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
 
         {/* Admin routes - same layout as app, permission-based content */}
         <Route path="/admin" element={
