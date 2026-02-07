@@ -416,7 +416,7 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Washes</p>
+                <p className="text-sm text-primary font-semibold">Total Washes</p>
                 {reportsDateRangeStr && (
                   <p className="text-xs text-muted-foreground/90 mt-0.5">{reportsDateRangeStr}</p>
                 )}

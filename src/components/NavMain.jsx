@@ -36,7 +36,7 @@ const ALL_TABS = [
 ];
 
 const INTELLIGENCE_TABS = [
-  { value: 'ai-insights', label: 'AI Insights', icon: Sparkles, path: '/ai-insights', showNewBadge: false },
+  { value: 'ai-insights', label: 'Elora AI', icon: Sparkles, path: '/ai-insights', showNewBadge: false },
 ];
 
 /**

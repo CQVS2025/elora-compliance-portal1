@@ -175,12 +175,12 @@ export const queryKeys = {
   },
   // AI Insights (tenant-scoped)
   ai: {
-    predictions: (companyId, date) => ['tenant', companyId, 'aiPredictions', date],
-    recommendations: (companyId) => ['tenant', companyId, 'aiRecommendations'],
-    washWindows: (companyId) => ['tenant', companyId, 'aiWashWindows'],
-    driverPatterns: (companyId) => ['tenant', companyId, 'aiDriverPatterns'],
-    siteInsights: (companyId) => ['tenant', companyId, 'aiSiteInsights'],
-    patternSummary: (companyId) => ['tenant', companyId, 'aiPatternSummary'],
+    predictions: (companyId, date, customerRef, siteRef) => ['tenant', companyId, 'aiPredictions', date, customerRef, siteRef],
+    recommendations: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiRecommendations', customerRef, siteRef],
+    washWindows: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiWashWindows', customerRef, siteRef],
+    driverPatterns: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiDriverPatterns', customerRef, siteRef],
+    siteInsights: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiSiteInsights', customerRef, siteRef],
+    patternSummary: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiPatternSummary', customerRef, siteRef],
   },
 };
 

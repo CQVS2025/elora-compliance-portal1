@@ -23,6 +23,7 @@ Deno.serve(async (req) => {
       site_ref,
       site_name,
       driver_name,
+      customer_ref,
       company_id,
       current_week_washes = 0,
       target_washes = 6,
@@ -90,6 +91,7 @@ Respond in JSON only:
     for (const r of recommendations) {
       await supabase.from('ai_recommendations').insert({
         company_id: company_id || null,
+        customer_ref: customer_ref || null,
         vehicle_ref,
         vehicle_name: vehicle_name || null,
         driver_name: driver_name || null,

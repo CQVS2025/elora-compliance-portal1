@@ -13,7 +13,7 @@ import UserManagement from './pages/admin/UserManagement';
 import CompanyManagement from './pages/admin/CompanyManagement';
 import RoleManagementInfo from './pages/admin/RoleManagementInfo';
 import RoleTabSettings from './pages/admin/RoleTabSettings';
-import AIInsights from './pages/AIInsights';
+import EloraAI from './pages/EloraAI';
 import __Layout from './Layout.jsx';
 
 
@@ -33,7 +33,7 @@ export const PAGES = {
     "admin/companies": CompanyManagement,
     "admin/role-management": RoleManagementInfo,
     "admin/tab-visibility": RoleTabSettings,
-    "AIInsights": AIInsights,
+    "EloraAI": EloraAI,
 }
 
 export const pagesConfig = {

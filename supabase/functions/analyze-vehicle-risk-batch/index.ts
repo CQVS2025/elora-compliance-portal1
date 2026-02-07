@@ -10,6 +10,7 @@ interface VehicleInput {
   site_ref?: string | null;
   site_name?: string | null;
   driver_name?: string | null;
+  customer_ref?: string | null;
   current_week_washes?: number;
   target_washes?: number;
   days_remaining?: number;
@@ -39,7 +40,12 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { company_id = null, vehicles = [] } = body as { company_id?: string | null; vehicles?: VehicleInput[] };
+    const { company_id = null, customer_ref = null, site_ref = null, vehicles = [] } = body as { 
+      company_id?: string | null; 
+      customer_ref?: string | null;
+      site_ref?: string | null;
+      vehicles?: VehicleInput[] 
+    };
 
     if (!Array.isArray(vehicles) || vehicles.length === 0) {
       return new Response(
@@ -118,9 +124,10 @@ Respond with a single JSON object only, no markdown:
 
       const { error: insertError } = await supabase.from('ai_predictions').insert({
         company_id: company_id || null,
+        customer_ref: input.customer_ref || customer_ref || null,
         vehicle_ref: vehicleRef,
         vehicle_name: input.vehicle_name ?? null,
-        site_ref: input.site_ref ?? null,
+        site_ref: input.site_ref ?? site_ref ?? null,
         site_name: input.site_name ?? null,
         driver_name: input.driver_name ?? null,
         prediction_date: predictionDate,

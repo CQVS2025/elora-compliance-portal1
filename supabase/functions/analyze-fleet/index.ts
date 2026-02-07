@@ -61,51 +61,46 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    let company_id = body.company_id ?? null;
-    if (isAdmin) {
-      company_id = profile?.company_id ?? null;
-      if (body.company_id != null && body.company_id !== company_id) {
+    
+    // NEW: Accept customer_ref directly from frontend (ASI API customer parameter)
+    const customerRef = body.customer_ref ?? null;
+    const siteRef = body.site_ref ?? null;
+    const fromDate = body.from_date ?? null;
+    const toDate = body.to_date ?? null;
+    
+    if (!customerRef) {
+      return new Response(
+        JSON.stringify({ error: 'customer_ref is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Get company_id from user's profile (for storing results)
+    const company_id = profile?.company_id ?? null;
+    
+    // For non-super admins, verify they have access to this customer
+    if (!isSuperAdmin) {
+      // Verify the customer belongs to their company
+      const { data: company } = await supabase
+        .from('companies')
+        .select('elora_customer_ref')
+        .eq('id', company_id)
+        .single();
+      
+      if (company?.elora_customer_ref !== customerRef) {
         return new Response(
-          JSON.stringify({ error: 'Forbidden: Admin can only run analysis for their own company' }),
+          JSON.stringify({ error: 'Forbidden: You do not have access to this customer' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
+    
     const limit = Math.min(Math.max(1, Number(body.limit) || BATCH_SIZE), 20);
     const offset = Math.max(0, Number(body.offset) || 0);
 
-    let customerRef: string | null = null;
-    if (company_id) {
-      const { data: company, error: companyError } = await supabase
-        .from('companies')
-        .select('id, name, elora_customer_ref')
-        .eq('id', company_id)
-        .single();
-
-      if (companyError || !company) {
-        return new Response(
-          JSON.stringify({
-            error: 'The selected company does not exist. Please check the company ID or choose a valid company.',
-          }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const ref = company.elora_customer_ref?.trim() || null;
-      if (!ref) {
-        return new Response(
-          JSON.stringify({
-            error:
-              'This company has no customer reference (Elora customer ID) configured. Please set the correct customer ID in Company settings before running analysis.',
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      customerRef = ref;
-    }
-
     const params: Record<string, string> = { status: '1' };
-    if (customerRef) params.customer = customerRef;
+    params.customer = customerRef;
+    if (siteRef) params.site = siteRef;
 
     let vehiclesData: unknown;
     try {
@@ -136,14 +131,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
-    const endDate = new Date();
+    const startDate = fromDate ? new Date(fromDate) : new Date();
+    if (!fromDate) startDate.setDate(startDate.getDate() - 30);
+    const endDate = toDate ? new Date(toDate) : new Date();
     const dashboardParams: Record<string, string> = {
       fromDate: startDate.toISOString().split('T')[0],
       toDate: endDate.toISOString().split('T')[0],
     };
-    if (customerRef) dashboardParams.customer = customerRef;
+    dashboardParams.customer = customerRef;
+    if (siteRef) dashboardParams.site = siteRef;
     const dashboardData = await callEloraAPI('/dashboard', dashboardParams);
     const rows = Array.isArray(dashboardData?.rows) ? dashboardData.rows : (dashboardData?.data?.rows ?? []);
     const byVehicleRef: Record<string, { totalScans: number; lastScan?: string; washesPerWeek?: number; vehicleName?: string; siteName?: string }> = {};
@@ -178,6 +174,7 @@ Deno.serve(async (req) => {
         site_ref: v.siteId ?? v.siteRef,
         site_name: v.siteName ?? v.site_name,
         driver_name: v.driverName ?? v.driver_name,
+        customer_ref: customerRef,
         company_id,
         current_week_washes: currentWeekWashes,
         target_washes: targetWashes,
@@ -187,13 +184,36 @@ Deno.serve(async (req) => {
     });
 
     try {
+      console.log('[analyze-fleet] Calling analyze-vehicle-risk-batch with payload:', {
+        customer_ref: customerRef,
+        site_ref: siteRef,
+        company_id,
+        vehicleCount: batchPayload.length,
+        sampleVehicle: batchPayload[0],
+      });
+      
       const batchResult = await invokeFunction('analyze-vehicle-risk-batch', {
+        customer_ref: customerRef,
+        site_ref: siteRef,
         company_id,
         vehicles: batchPayload,
       });
+      
+      console.log('[analyze-fleet] analyze-vehicle-risk-batch result:', batchResult);
       analyzed = typeof batchResult?.count === 'number' ? batchResult.count : vehiclesToProcess.length;
     } catch (e) {
-      console.warn('analyze-vehicle-risk-batch failed:', e?.message);
+      console.error('[analyze-fleet] analyze-vehicle-risk-batch FAILED:', e);
+      console.error('[analyze-fleet] Error details:', e?.message, e?.stack);
+      // Return error to frontend instead of silently failing
+      return new Response(
+        JSON.stringify({
+          error: 'AI analysis failed',
+          details: e?.message || 'Could not analyze vehicles',
+          analyzed: 0,
+          total: vehicles.length,
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Recommendations for first N vehicles of first batch only (separate Claude calls)
@@ -211,6 +231,7 @@ Deno.serve(async (req) => {
             site_ref: v.siteId ?? v.siteRef,
             site_name: v.siteName ?? v.site_name,
             driver_name: v.driverName ?? v.driver_name,
+            customer_ref: customerRef,
             company_id,
             current_week_washes: currentWeekWashes,
             target_washes: targetWashes,
@@ -249,9 +270,18 @@ Deno.serve(async (req) => {
     const sites = Array.from(siteMap.values());
 
     if (company_id) {
-      await supabase.from('ai_wash_windows').delete().eq('company_id', company_id);
-      await supabase.from('ai_driver_patterns').delete().eq('company_id', company_id);
-      await supabase.from('ai_site_insights').delete().eq('company_id', company_id);
+      // Delete existing entries for this customer/site combination
+      let deleteQuery = supabase.from('ai_wash_windows').delete().eq('company_id', company_id).eq('customer_ref', customerRef);
+      if (siteRef) deleteQuery = deleteQuery.eq('site_ref', siteRef);
+      await deleteQuery;
+
+      deleteQuery = supabase.from('ai_driver_patterns').delete().eq('company_id', company_id).eq('customer_ref', customerRef);
+      if (siteRef) deleteQuery = deleteQuery.eq('site_ref', siteRef);
+      await deleteQuery;
+
+      deleteQuery = supabase.from('ai_site_insights').delete().eq('company_id', company_id).eq('customer_ref', customerRef);
+      if (siteRef) deleteQuery = deleteQuery.eq('site_ref', siteRef);
+      await deleteQuery;
     }
 
     const washWindowRows = [
@@ -262,6 +292,8 @@ Deno.serve(async (req) => {
     for (const w of washWindowRows) {
       await supabase.from('ai_wash_windows').insert({
         company_id: company_id || undefined,
+        customer_ref: customerRef,
+        site_ref: siteRef || undefined,
         window_start: w.window_start,
         window_end: w.window_end,
         window_label: w.window_label,
@@ -281,6 +313,8 @@ Deno.serve(async (req) => {
       const t = driverPatternTemplates[i % driverPatternTemplates.length];
       await supabase.from('ai_driver_patterns').insert({
         company_id: company_id || undefined,
+        customer_ref: customerRef,
+        site_ref: siteRef || undefined,
         driver_name: driverName,
         pattern_type: t.pattern_type,
         pattern_description: t.pattern_description,
@@ -300,7 +334,8 @@ Deno.serve(async (req) => {
       const t = siteTemplates[i % siteTemplates.length];
       await supabase.from('ai_site_insights').insert({
         company_id: company_id || undefined,
-        site_ref: site.ref ?? null,
+        customer_ref: customerRef,
+        site_ref: site.ref ?? siteRef ?? null,
         site_name: site.name,
         insight_date: today,
         compliance_rate: t.compliance_rate,
@@ -372,6 +407,8 @@ Deno.serve(async (req) => {
     await supabase.from('ai_pattern_summary').upsert(
       {
         company_id: company_id || null,
+        customer_ref: customerRef,
+        site_ref: siteRef || null,
         heatmap_json: heatmap,
         peak_hour: peakHour,
         peak_hour_count: peakHourCount,
@@ -384,7 +421,7 @@ Deno.serve(async (req) => {
         concern_patterns: concernPatterns,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'company_id' }
+      { onConflict: 'company_id,customer_ref,site_ref' }
     );
     }
 

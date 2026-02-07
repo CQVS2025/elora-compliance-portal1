@@ -72,7 +72,7 @@ export default function SectionCards({ stats = {}, dateRange = null, className }
           <CardContent className="p-6">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-muted-foreground">{label}</p>
+                <p className="text-sm font-semibold text-primary">{label}</p>
                 {dateRangeStr && (
                   <p className="mt-0.5 text-xs text-muted-foreground/90">{dateRangeStr}</p>
                 )}

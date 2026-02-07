@@ -142,10 +142,11 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        {/* Elora AI route */}
         <Route path="/ai-insights" element={
           <AuthenticatedRoute>
             <DashboardLayout>
-              {React.createElement(Pages.AIInsights)}
+              {React.createElement(Pages.EloraAI)}
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
