@@ -149,7 +149,7 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Deliveries</p>
+                <p className="text-sm text-primary font-semibold">Total Deliveries</p>
                 <p className="text-3xl font-bold text-foreground mt-1">{stats.totalDeliveries}</p>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge variant="secondary" className="bg-primary/10 text-primary">{stats.deliveredCount} delivered</Badge>
@@ -167,7 +167,7 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Volume</p>
+                <p className="text-sm text-primary font-semibold">Total Volume</p>
                 <p className="text-3xl font-bold text-foreground mt-1">{stats.totalVolume.toLocaleString()}L</p>
                 <p className="text-xs text-muted-foreground mt-2">Avg: {Math.round(stats.avgDeliverySize)}L per delivery</p>
               </div>
@@ -182,7 +182,7 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Cost</p>
+                <p className="text-sm text-primary font-semibold">Total Cost</p>
                 <p className="text-3xl font-bold text-foreground mt-1">${stats.totalCost.toLocaleString()}</p>
                 <p className="text-xs text-muted-foreground mt-2">Ex GST</p>
               </div>
@@ -197,7 +197,7 @@ export default function RefillsManagement({ selectedCustomer, selectedSite, date
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Pending Actions</p>
+                <p className="text-sm text-primary font-semibold">Pending Actions</p>
                 <p className="text-3xl font-bold text-foreground mt-1">{stats.pendingCount}</p>
                 <p className="text-xs text-muted-foreground mt-2">Confirmed/In Transit</p>
               </div>

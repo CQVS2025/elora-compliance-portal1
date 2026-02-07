@@ -195,27 +195,27 @@ export function getAccessibleTabs(userProfile) {
 
   // Super admin sees all tabs (Users tab moved to Admin console)
   if (role === 'super_admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'elora-ai'];
   }
 
   // Admin sees all tabs except users, but includes branding
   if (role === 'admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'elora-ai'];
   }
 
   // Manager sees most tabs (limited to assigned sites)
   if (role === 'manager') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'elora-ai'];
   }
 
   // User (demo) sees same as admin but limited to assigned company/companies
   if (role === 'user') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'elora-ai'];
   }
 
   // Batcher sees same as admin but locked to a single assigned site
   if (role === 'batcher') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'elora-ai'];
   }
 
   // Driver sees only compliance and leaderboard (assigned vehicles only)
@@ -225,7 +225,7 @@ export function getAccessibleTabs(userProfile) {
 
   // Viewer sees read-only tabs
   if (role === 'viewer') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'elora-ai'];
   }
 
   return ['compliance', 'leaderboard'];

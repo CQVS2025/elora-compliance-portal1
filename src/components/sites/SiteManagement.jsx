@@ -273,7 +273,7 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
               </div>
               <div>
                 <p className="text-2xl font-bold text-foreground">{sites?.length || 0}</p>
-                <p className="text-sm text-muted-foreground">Total Sites</p>
+                <p className="text-sm text-primary font-semibold">Total Sites</p>
               </div>
             </div>
           </CardContent>
@@ -289,7 +289,7 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
                 <p className="text-2xl font-bold text-foreground">
                   {(sites || []).filter(s => s.status === 'active').length}
                 </p>
-                <p className="text-sm text-muted-foreground">Active Sites</p>
+                <p className="text-sm text-primary font-semibold">Active Sites</p>
               </div>
             </div>
           </CardContent>
@@ -305,7 +305,7 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
                 <p className="text-2xl font-bold text-foreground">
                   {(sites || []).filter(s => s.status === 'maintenance').length}
                 </p>
-                <p className="text-sm text-muted-foreground">In Maintenance</p>
+                <p className="text-sm text-primary font-semibold">In Maintenance</p>
               </div>
             </div>
           </CardContent>

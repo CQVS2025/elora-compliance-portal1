@@ -1,0 +1,321 @@
+===============================================================
+  AI CRON JOB - DEPLOYMENT CHECKLIST
+===============================================================
+
+Use this checklist when deploying the AI cron job to production.
+
+Date: _____________
+Deployed by: _____________
+
+===============================================================
+PRE-DEPLOYMENT CHECKS
+===============================================================
+
+[ ] 1. Code is committed to git
+      Branch: _____________
+      Commit: _____________
+
+[ ] 2. All team members notified of deployment
+
+[ ] 3. Maintenance window scheduled (if needed)
+      Time: _____________
+
+[ ] 4. Backup of current functions taken (if applicable)
+
+===============================================================
+STEP 1: SET SECRETS
+===============================================================
+
+[ ] 1.1 Generate CRON_SECRET (random string)
+        Value: _____________________________
+        Stored securely in password manager: Yes / No
+
+[ ] 1.2 Set CRON_SECRET in Supabase
+        Command:
+        npx supabase secrets set CRON_SECRET=your-secret --project-ref mtjfypwrtvzhnzgatoim
+        
+        Result: Success / Failed
+        Error (if any): _____________________________
+
+[ ] 1.3 Verify ANTHROPIC_API_KEY exists
+        Command:
+        npx supabase secrets list --project-ref mtjfypwrtvzhnzgatoim
+        
+        Result: Found / Not Found
+        If not found, set it:
+        npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-... --project-ref mtjfypwrtvzhnzgatoim
+
+[ ] 1.4 Verify ELORA_API_KEY exists
+        Result: Found / Not Found
+
+[ ] 1.5 All required secrets confirmed:
+        - CRON_SECRET
+        - ANTHROPIC_API_KEY
+        - ELORA_API_KEY
+        - SUPABASE_SERVICE_ROLE_KEY (auto-set)
+        - SUPABASE_URL (auto-set)
+
+===============================================================
+STEP 2: DEPLOY EDGE FUNCTIONS
+===============================================================
+
+[ ] 2.1 Navigate to project directory
+        cd elora-compliance-portal1
+
+[ ] 2.2 Deploy all functions
+        ./scripts/deploy-functions.sh
+        
+        Result: Success / Failed
+        Errors (if any): _____________________________
+
+[ ] 2.3 Verify functions deployed in Dashboard
+        URL: https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim/functions
+        
+        Deployed functions:
+        [ ] run-ai-cron
+        [ ] analyze-fleet
+        [ ] analyze-vehicle-risk-batch
+        [ ] generate-wash-recommendations
+
+[ ] 2.4 Check for deployment warnings/errors
+        Any issues: Yes / No
+        Details: _____________________________
+
+===============================================================
+STEP 3: TEST MANUALLY
+===============================================================
+
+[ ] 3.1 Run test script
+        CRON_SECRET=your-secret ./scripts/test-ai-cron.sh
+        
+        HTTP Status: _____
+        Duration: _____ seconds
+        Companies Processed: _____
+        Total Vehicles: _____
+
+[ ] 3.2 Verify test response
+        [ ] success: true
+        [ ] companiesProcessed > 0
+        [ ] No errors in results array
+
+[ ] 3.3 Check Edge Function logs
+        URL: Dashboard > Edge Functions > run-ai-cron > Logs
+        
+        Any errors: Yes / No
+        Details: _____________________________
+
+[ ] 3.4 Verify data populated
+        Query: select count(*) from ai_predictions;
+        Result: _____ rows
+        
+        Query: select count(*) from ai_recommendations;
+        Result: _____ rows
+
+===============================================================
+STEP 4: SET UP CRON JOB (DASHBOARD METHOD)
+===============================================================
+
+[ ] 4.1 Open Supabase Dashboard
+        URL: https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim/integrations/cron
+
+[ ] 4.2 Click "Create cron job"
+
+[ ] 4.3 Configure job settings:
+        Name: run-ai-insights-daily
+        Schedule: 30 19 * * *
+        Type: Supabase Edge Function
+        Edge Function: run-ai-cron
+        Method: POST
+        Timeout: 1000 ms
+
+[ ] 4.4 Add header:
+        Key: x-cron-secret
+        Value: [same as CRON_SECRET]
+
+[ ] 4.5 Set body:
+        {}
+
+[ ] 4.6 Click "Create cron job"
+        Result: Success / Failed
+        Error (if any): _____________________________
+
+[ ] 4.7 Verify job appears in list
+        Status: Active / Inactive
+
+===============================================================
+STEP 5: TEST CRON JOB
+===============================================================
+
+[ ] 5.1 Click "Run now" button in Dashboard
+        Result: Running / Failed
+
+[ ] 5.2 Wait for completion (may take 1-2 minutes)
+
+[ ] 5.3 Check Edge Function logs
+        URL: Dashboard > Edge Functions > run-ai-cron > Logs
+        
+        Latest run status: Success / Failed
+        Companies processed: _____
+        Vehicles analyzed: _____
+
+[ ] 5.4 Verify AI data updated
+        Query: 
+        select max(analyzed_at) from ai_predictions;
+        
+        Result: Should be recent timestamp
+        Time: _____________________________
+
+[ ] 5.5 Check for errors
+        Query:
+        select * from ai_predictions 
+        where analyzed_at > now() - interval '5 minutes'
+        limit 5;
+        
+        Rows returned: _____
+        Any risk_level values: _____________________________
+
+===============================================================
+STEP 6: VERIFY FRONTEND
+===============================================================
+
+[ ] 6.1 Open AI Insights page
+        URL: https://elora-compliance-portal.vercel.app/ai-insights
+        (or your production URL)
+
+[ ] 6.2 Login as super_admin
+        User: _____________________________
+
+[ ] 6.3 Verify data displays
+        [ ] Risk Overview shows data
+        [ ] Patterns tab shows heatmap
+        [ ] Wash Windows tab shows windows
+        [ ] Driver Insights tab shows patterns
+        [ ] Site Intelligence tab shows insights
+
+[ ] 6.4 Test "Process All Vehicles" button
+        Result: Success / Failed
+        Vehicles processed: _____
+
+[ ] 6.5 Login as regular admin (non-super_admin)
+        User: _____________________________
+        Company: _____________________________
+
+[ ] 6.6 Verify tenant isolation
+        [ ] Only sees own company data
+        [ ] Cannot see other companies' data
+
+===============================================================
+STEP 7: MONITORING SETUP
+===============================================================
+
+[ ] 7.1 Set up alerts for cron failures (optional)
+        Method: _____________________________
+
+[ ] 7.2 Document monitoring queries
+        Location: AI_CRON_QUICK_REFERENCE.txt
+
+[ ] 7.3 Add to ops runbook (if applicable)
+        Location: _____________________________
+
+[ ] 7.4 Schedule first review
+        Date: _____________________________
+
+===============================================================
+POST-DEPLOYMENT VERIFICATION (24 HOURS)
+===============================================================
+
+[ ] 8.1 Check cron ran at scheduled time
+        Date: _____________
+        Expected: 6:00 AM Adelaide
+        Actual: _____________
+
+[ ] 8.2 Verify Edge Function logs
+        Runs in last 24h: _____
+        All successful: Yes / No
+
+[ ] 8.3 Check AI data freshness
+        Query:
+        select 
+          count(*) as total,
+          max(analyzed_at) as latest
+        from ai_predictions;
+        
+        Total: _____
+        Latest: _____________________________
+
+[ ] 8.4 Verify Claude API costs
+        Dashboard: https://console.anthropic.com
+        Last 24h cost: $_____
+        Within budget: Yes / No
+
+[ ] 8.5 Check for any errors
+        Query:
+        select * from cron.job_run_details 
+        where status != 'succeeded'
+        and start_time > now() - interval '24 hours';
+        
+        Error count: _____
+        Details: _____________________________
+
+===============================================================
+ROLLBACK PROCEDURE (IF NEEDED)
+===============================================================
+
+If deployment fails:
+
+[ ] 1. Disable cron job
+      Method: Dashboard > Integrations > Cron > Delete job
+
+[ ] 2. Note the issue
+      Description: _____________________________
+      
+[ ] 3. Review logs
+      What went wrong: _____________________________
+
+[ ] 4. Restore previous function versions (if applicable)
+      Commands:
+      - Document previous deployment if available
+
+[ ] 5. Notify team
+      Time: _____________
+      Method: _____________________________
+
+[ ] 6. Schedule re-deployment
+      Date: _____________
+
+===============================================================
+SIGN-OFF
+===============================================================
+
+Deployment completed by: _____________________________
+
+Date: _____________  Time: _____________
+
+Verified by: _____________________________
+
+Date: _____________  Time: _____________
+
+Status: Success / Failed / Rolled Back
+
+Notes:
+_____________________________________________________________
+_____________________________________________________________
+_____________________________________________________________
+_____________________________________________________________
+
+===============================================================
+NEXT STEPS
+===============================================================
+
+After successful deployment:
+
+[ ] Document in team wiki/docs
+[ ] Update README.md if needed
+[ ] Schedule follow-up review (1 week)
+[ ] Monitor costs daily for first week
+[ ] Gather feedback from users
+[ ] Plan any optimizations needed
+
+===============================================================
+END OF DEPLOYMENT CHECKLIST
+===============================================================

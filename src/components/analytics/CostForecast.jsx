@@ -134,7 +134,7 @@ export default function CostForecast({ scans, selectedCustomer, selectedSite }) 
 
             <div className={`grid gap-4 ${costData.hasFullForecast ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
               <div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-primary font-semibold">
                   {costData.hasFullForecast ? 'Current Month' : `Cost (${costData.currentMonthLabel})`}
                 </p>
                 <p className="text-2xl font-bold text-foreground">
@@ -145,7 +145,7 @@ export default function CostForecast({ scans, selectedCustomer, selectedSite }) 
               {costData.hasFullForecast ? (
                 <>
                   <div>
-                    <p className="text-sm text-muted-foreground">Projected {costData.nextMonthDate}</p>
+                    <p className="text-sm text-primary font-semibold">Projected {costData.nextMonthDate}</p>
                     <p className="text-2xl font-bold text-[#7CB342]">
                       ${costData.nextMonth.toFixed(2)}
                     </p>
@@ -156,7 +156,7 @@ export default function CostForecast({ scans, selectedCustomer, selectedSite }) 
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground">3-Month Average</p>
+                    <p className="text-sm text-primary font-semibold">3-Month Average</p>
                     <p className="text-2xl font-bold text-foreground">
                       ${costData.avgMonthly.toFixed(2)}
                     </p>
@@ -165,21 +165,21 @@ export default function CostForecast({ scans, selectedCustomer, selectedSite }) 
               ) : (
                 <>
                   <div>
-                    <p className="text-sm text-muted-foreground">Total Cost (this page)</p>
+                    <p className="text-sm text-primary font-semibold">Total Cost (this page)</p>
                     <p className="text-2xl font-bold text-[#7CB342]">
                       ${costData.totalCost.toFixed(2)}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground">Scans</p>
+                    <p className="text-sm text-primary font-semibold">Scans</p>
                     <p className="text-2xl font-bold text-foreground">
                       {costData.totalScans}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-muted-foreground">Avg Cost/Scan</p>
+                    <p className="text-sm text-primary font-semibold">Avg Cost/Scan</p>
                     <p className="text-2xl font-bold text-foreground">
                       ${costData.avgCostPerScan.toFixed(2)}
                     </p>

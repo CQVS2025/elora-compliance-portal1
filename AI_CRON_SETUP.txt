@@ -1,0 +1,399 @@
+=================================================================
+  AI INSIGHTS AUTOMATED CRON JOB - SETUP GUIDE (Phase 2)
+=================================================================
+
+This guide walks you through setting up the automated daily AI analysis
+that runs at 6:00 AM Australia Adelaide time (19:30 UTC).
+
+=================================================================
+OVERVIEW
+=================================================================
+
+The cron job automatically:
+1. Runs daily at 6:00 AM Adelaide time
+2. Fetches all companies with elora_customer_ref from the database
+3. For each company, analyzes their fleet using AI
+4. Populates AI insights tables:
+   - ai_predictions (risk predictions)
+   - ai_recommendations (wash recommendations)
+   - ai_wash_windows (optimal wash times)
+   - ai_driver_patterns (driver behavior insights)
+   - ai_site_insights (site-level intelligence)
+   - ai_pattern_summary (patterns tab data)
+
+=================================================================
+PREREQUISITES
+=================================================================
+
+1. Supabase CLI installed and authenticated
+2. Access to Supabase Dashboard (https://supabase.com/dashboard)
+3. Project reference: mtjfypwrtvzhnzgatoim
+4. Anthropic API key (for Claude AI)
+
+=================================================================
+STEP-BY-STEP SETUP
+=================================================================
+
+-------------------------------------------------------------------
+STEP 1: Set Required Secrets
+-------------------------------------------------------------------
+
+Set the following secrets in Supabase Edge Functions:
+
+1. CRON_SECRET (authentication for cron job):
+   
+   npx supabase secrets set CRON_SECRET=elora-cron-a8f2k9m3x7q1n5p --project-ref mtjfypwrtvzhnzgatoim
+
+   (You can use any random secret string - keep it secure!)
+
+2. ANTHROPIC_API_KEY (if not already set):
+   
+   npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-api03-xxxxx --project-ref mtjfypwrtvzhnzgatoim
+
+3. Verify secrets are set:
+   
+   npx supabase secrets list --project-ref mtjfypwrtvzhnzgatoim
+
+   You should see:
+   - CRON_SECRET
+   - ANTHROPIC_API_KEY
+   - ELORA_API_KEY
+   - SUPABASE_SERVICE_ROLE_KEY (auto-set by Supabase)
+   - SUPABASE_URL (auto-set by Supabase)
+
+-------------------------------------------------------------------
+STEP 2: Deploy Edge Functions
+-------------------------------------------------------------------
+
+Deploy all AI-related Edge Functions:
+
+cd elora-compliance-portal1
+./scripts/deploy-functions.sh
+
+This will deploy:
+- run-ai-cron (main cron entry point)
+- analyze-fleet (fleet analysis logic)
+- analyze-vehicle-risk-batch (batch risk analysis)
+- generate-wash-recommendations (wash recommendations)
+
+Verify deployment:
+- Check Supabase Dashboard > Edge Functions
+- All 4 AI functions should show "Deployed" status
+
+-------------------------------------------------------------------
+STEP 3: Test Manually (Before Setting Up Cron)
+-------------------------------------------------------------------
+
+Test the cron endpoint manually to ensure everything works:
+
+CRON_SECRET=elora-cron-a8f2k9m3x7q1n5p ./scripts/test-ai-cron.sh
+
+Expected output:
+- HTTP Status: 200
+- Response shows:
+  {
+    "success": true,
+    "message": "Processed X companies, Y total vehicles",
+    "companiesProcessed": X,
+    "totalVehicles": Y,
+    "results": [...]
+  }
+
+If you get errors:
+- 401 Unauthorized: Check CRON_SECRET matches what you set
+- 500 Error: Check Edge Function logs in Supabase Dashboard
+
+-------------------------------------------------------------------
+STEP 4: Option A - Set Up Cron via Dashboard (RECOMMENDED)
+-------------------------------------------------------------------
+
+This is the easiest method and doesn't require database migrations.
+
+1. Go to Supabase Dashboard:
+   https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim
+
+2. Navigate to: Integrations > Cron
+
+3. Click "Create cron job"
+
+4. Fill in the form:
+   Name: run-ai-insights-daily
+   Schedule: 30 19 * * *
+   Type: Supabase Edge Function
+   Edge Function: run-ai-cron
+   Method: POST
+   Timeout: 1000 ms (or higher if needed)
+
+5. Add HTTP Headers:
+   Click "Add a new header"
+   Key: x-cron-secret
+   Value: elora-cron-a8f2k9m3x7q1n5p
+   
+   (Use the same secret you set in Step 1)
+
+6. HTTP Request Body:
+   {}
+
+7. Click "Create cron job"
+
+8. Verify the job is created:
+   - You should see it listed in the Cron Jobs table
+   - Schedule shows "30 19 * * *" (6:00 AM Adelaide)
+
+9. Test the cron job:
+   - Click the "Run now" button next to the job
+   - Check the logs to verify it runs successfully
+
+-------------------------------------------------------------------
+STEP 4: Option B - Set Up Cron via Migration (ADVANCED)
+-------------------------------------------------------------------
+
+This method uses pg_cron and requires Vault secrets.
+
+1. Create Vault secrets:
+
+   -- Connect to your database using psql or Supabase SQL Editor
+
+   -- Create project URL secret
+   select vault.create_secret(
+     'https://mtjfypwrtvzhnzgatoim.supabase.co',
+     'ai_cron_project_url'
+   );
+
+   -- Create service key secret (use your actual service role key)
+   select vault.create_secret(
+     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10amZ5cHdydHZ6aG56Z2F0b2ltIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODE0ODg2OSwiZXhwIjoyMDgzNzI0ODY5fQ.-fTX0HTe0xYdDC9JjW6jab6_Gh8wTWXGkAh2NdQR0TU',
+     'ai_cron_service_key'
+   );
+
+   -- Create cron secret
+   select vault.create_secret(
+     'elora-cron-a8f2k9m3x7q1n5p',
+     'ai_cron_secret'
+   );
+
+2. Run the migration:
+
+   npx supabase db push --project-ref mtjfypwrtvzhnzgatoim
+
+   Or manually run the SQL from:
+   supabase/migrations/20260208000001_ai_cron_schedule.sql
+
+3. Verify the cron job is scheduled:
+
+   select * from cron.job where jobname = 'run-ai-insights-daily';
+
+   You should see:
+   - jobname: run-ai-insights-daily
+   - schedule: 30 19 * * *
+   - active: true
+
+-------------------------------------------------------------------
+STEP 5: Monitor Cron Job Execution
+-------------------------------------------------------------------
+
+1. Check pg_cron logs (if using Option B):
+
+   select * from cron.job_run_details 
+   where jobid = (select jobid from cron.job where jobname = 'run-ai-insights-daily')
+   order by start_time desc 
+   limit 10;
+
+2. Check Edge Function logs:
+   - Supabase Dashboard > Edge Functions > run-ai-cron > Logs
+   - Look for successful runs showing companies processed
+
+3. Check pg_net logs (if using Option B):
+
+   select * from net.http_request_queue 
+   order by created desc 
+   limit 10;
+
+4. Verify AI insights are populated:
+
+   -- Check recent predictions
+   select * from ai_predictions 
+   order by analyzed_at desc 
+   limit 10;
+
+   -- Check recent recommendations
+   select * from ai_recommendations 
+   order by created_at desc 
+   limit 10;
+
+-------------------------------------------------------------------
+STEP 6: Troubleshooting
+-------------------------------------------------------------------
+
+ISSUE: Cron job returns 401 Unauthorized
+
+Solution:
+- Verify CRON_SECRET is set correctly in Edge Function secrets
+- If using Dashboard cron, ensure x-cron-secret header matches
+- If using pg_net migration, check vault secret ai_cron_secret
+
+ISSUE: analyze-fleet returns Unauthorized when called by cron
+
+Solution:
+- Redeploy analyze-fleet function: 
+  npx supabase functions deploy analyze-fleet --project-ref mtjfypwrtvzhnzgatoim
+- Check that both functions have access to same CRON_SECRET
+
+ISSUE: No vehicles analyzed (totalVehicles: 0)
+
+Solution:
+- Check companies have valid elora_customer_ref set
+- Verify ELORA_API_KEY is correct
+- Check Edge Function logs for detailed error messages
+- Test manually with: CRON_SECRET=xxx ./scripts/test-ai-cron.sh
+
+ISSUE: AI analysis fails
+
+Solution:
+- Verify ANTHROPIC_API_KEY is set and valid
+- Check Claude API quota/limits
+- Review Edge Function logs for specific AI errors
+
+ISSUE: Cron job doesn't run at scheduled time
+
+Dashboard cron:
+- Check the job is enabled in Integrations > Cron
+- Verify schedule is correct: 30 19 * * *
+
+pg_cron:
+- Check cron.job table: select * from cron.job;
+- Verify active = true
+- Check for errors in cron.job_run_details
+
+ISSUE: Test script shows no output
+
+Solution:
+- Increase --max-time in test-ai-cron.sh (default: 120)
+- Function might be taking longer than expected
+- Check Edge Function logs for progress
+
+=================================================================
+VERIFICATION CHECKLIST
+=================================================================
+
+After setup, verify everything works:
+
+[ ] Secrets are set (npx supabase secrets list)
+[ ] Edge Functions are deployed (check Dashboard)
+[ ] Manual test succeeds (./scripts/test-ai-cron.sh)
+[ ] Cron job is created (Dashboard > Integrations > Cron)
+[ ] Cron job headers include x-cron-secret
+[ ] Test run from Dashboard succeeds
+[ ] AI insights tables are populated:
+    - ai_predictions
+    - ai_recommendations
+    - ai_wash_windows
+    - ai_driver_patterns
+    - ai_site_insights
+[ ] Frontend AI Insights page shows data
+
+=================================================================
+SCHEDULE DETAILS
+=================================================================
+
+Cron Expression: 30 19 * * *
+
+Breakdown:
+- 30     = minute (30)
+- 19     = hour (7:30 PM UTC = 6:00 AM Adelaide ACST)
+- *      = day of month (every day)
+- *      = month (every month)
+- *      = day of week (every day)
+
+Adelaide Time Zones:
+- ACST (Australian Central Standard Time): UTC+9:30
+- ACDT (Australian Central Daylight Time): UTC+10:30
+
+Note: During daylight saving (ACDT), the job runs at 6:00 AM.
+      During standard time (ACST), the job runs at 6:00 AM.
+      The UTC time remains 19:30 year-round.
+
+=================================================================
+MAINTENANCE
+=================================================================
+
+To update the cron schedule:
+
+Dashboard method:
+1. Go to Integrations > Cron
+2. Delete the existing job
+3. Create a new one with the new schedule
+
+pg_cron method:
+1. Update the schedule:
+   select cron.alter_job(
+     job_id := (select jobid from cron.job where jobname = 'run-ai-insights-daily'),
+     schedule := '0 20 * * *'  -- New schedule
+   );
+
+To disable the cron job:
+
+Dashboard method:
+- Delete the job from Integrations > Cron
+
+pg_cron method:
+select cron.unschedule('run-ai-insights-daily');
+
+To re-enable:
+- Recreate using the setup steps above
+
+=================================================================
+COST CONSIDERATIONS
+=================================================================
+
+AI Analysis Costs:
+- Each vehicle analysis = 1 Claude API call (batch mode)
+- Recommendations = 1 call per vehicle (first 2 only)
+- Daily cost depends on fleet size across all customers
+
+Example:
+- 100 vehicles total across all companies
+- ~1 batch call per 18 vehicles = ~6 calls/day
+- + 2 recommendation calls = 8 total Claude calls/day
+- At ~$0.01-0.05 per call = $0.08-0.40/day
+
+Optimization:
+- Batch processing reduces API calls significantly
+- Only first 2 vehicles get recommendations per run
+- Caching prevents duplicate analysis (24h window)
+
+=================================================================
+SECURITY NOTES
+=================================================================
+
+1. CRON_SECRET should be:
+   - Random and hard to guess
+   - Stored securely in Supabase secrets
+   - Never committed to git
+   - Changed periodically
+
+2. Edge Functions are protected by:
+   - CRON_SECRET validation (x-cron-secret header)
+   - Service role authentication (Authorization header)
+   - CORS headers (only specific origins)
+
+3. run-ai-cron is NOT a public API:
+   - Only accessible via cron job or admin testing
+   - Requires either CRON_SECRET or service role key
+   - No user-facing endpoints expose this function
+
+=================================================================
+SUPPORT
+=================================================================
+
+If you encounter issues:
+
+1. Check Edge Function logs in Supabase Dashboard
+2. Review this guide's troubleshooting section
+3. Test manually with: ./scripts/test-ai-cron.sh
+4. Check Supabase status: https://status.supabase.com
+5. Review Claude API status if AI analysis fails
+
+=================================================================
+END OF SETUP GUIDE
+=================================================================

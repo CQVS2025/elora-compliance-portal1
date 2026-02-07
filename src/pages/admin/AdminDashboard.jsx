@@ -144,7 +144,7 @@ export default function AdminDashboard() {
           return (
             <Card key={stat.title} className="border-border">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                <CardTitle className="text-sm font-semibold text-primary">{stat.title}</CardTitle>
                 <div className={`p-2 rounded-lg ${stat.iconBg}`}>
                   <Icon className={`h-4 w-4 ${stat.iconColor}`} />
                 </div>

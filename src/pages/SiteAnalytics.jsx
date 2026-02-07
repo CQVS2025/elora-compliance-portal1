@@ -279,7 +279,7 @@ export default function SiteAnalytics() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-slate-800">{totalWashes.toLocaleString()}</p>
-                  <p className="text-sm text-slate-600">Total Washes</p>
+                  <p className="text-sm text-primary font-semibold">Total Washes</p>
                 </div>
               </div>
             </CardContent>
@@ -293,7 +293,7 @@ export default function SiteAnalytics() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-slate-800">{overallCompliance}%</p>
-                  <p className="text-sm text-slate-600">Overall Compliance</p>
+                  <p className="text-sm text-primary font-semibold">Overall Compliance</p>
                 </div>
               </div>
             </CardContent>
@@ -307,7 +307,7 @@ export default function SiteAnalytics() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-slate-800">{filteredSites.length}</p>
-                  <p className="text-sm text-slate-600">Active Sites</p>
+                  <p className="text-sm text-primary font-semibold">Active Sites</p>
                 </div>
               </div>
             </CardContent>
@@ -321,7 +321,7 @@ export default function SiteAnalytics() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-slate-800">{totalIssues}</p>
-                  <p className="text-sm text-slate-600">Total Issues</p>
+                  <p className="text-sm text-primary font-semibold">Total Issues</p>
                 </div>
               </div>
             </CardContent>

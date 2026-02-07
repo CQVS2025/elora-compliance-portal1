@@ -238,7 +238,7 @@ export default function MultiTenantConfig() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-foreground">{mockUserConfigs.length}</p>
-                <p className="text-sm text-muted-foreground">Total Configs</p>
+                <p className="text-sm text-primary font-semibold">Total Configs</p>
               </div>
             </div>
           </CardContent>

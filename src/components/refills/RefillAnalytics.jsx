@@ -715,7 +715,7 @@ export default function RefillAnalytics({ refills, scans, sites, selectedCustome
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Monitored</p>
+                <p className="text-sm text-primary font-semibold">Total Monitored</p>
                 <p className="text-3xl font-bold text-primary">{analysis.totalSites}</p>
                 <p className="text-xs text-muted-foreground mt-1">Active sites</p>
               </div>

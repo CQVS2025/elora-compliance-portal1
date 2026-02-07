@@ -1,0 +1,242 @@
+===============================================
+  AI CRON JOB - QUICK REFERENCE CARD
+===============================================
+
+PROJECT: Elora Compliance Portal
+PROJECT REF: mtjfypwrtvzhnzgatoim
+SCHEDULE: Daily at 6:00 AM Adelaide (19:30 UTC)
+
+===============================================
+QUICK COMMANDS
+===============================================
+
+# Set CRON_SECRET
+npx supabase secrets set CRON_SECRET=elora-cron-a8f2k9m3x7q1n5p --project-ref mtjfypwrtvzhnzgatoim
+
+# List all secrets
+npx supabase secrets list --project-ref mtjfypwrtvzhnzgatoim
+
+# Deploy AI functions
+cd elora-compliance-portal1
+./scripts/deploy-functions.sh
+
+# Test cron manually
+CRON_SECRET=elora-cron-a8f2k9m3x7q1n5p ./scripts/test-ai-cron.sh
+
+# Deploy single function
+npx supabase functions deploy run-ai-cron --project-ref mtjfypwrtvzhnzgatoim
+npx supabase functions deploy analyze-fleet --project-ref mtjfypwrtvzhnzgatoim
+
+===============================================
+DASHBOARD CRON SETUP (RECOMMENDED)
+===============================================
+
+URL: https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim
+
+Path: Integrations > Cron > Create cron job
+
+Settings:
+  Name: run-ai-insights-daily
+  Schedule: 30 19 * * *
+  Type: Supabase Edge Function
+  Edge Function: run-ai-cron
+  Method: POST
+  Timeout: 1000 ms
+
+Headers:
+  x-cron-secret: elora-cron-a8f2k9m3x7q1n5p
+
+Body:
+  {}
+
+===============================================
+MONITORING QUERIES
+===============================================
+
+-- Check recent AI predictions
+select 
+  company_id,
+  vehicle_ref,
+  risk_level,
+  analyzed_at 
+from ai_predictions 
+order by analyzed_at desc 
+limit 20;
+
+-- Check cron job status (if using pg_cron)
+select * from cron.job 
+where jobname = 'run-ai-insights-daily';
+
+-- Check recent cron runs (if using pg_cron)
+select 
+  start_time,
+  end_time,
+  status,
+  return_message 
+from cron.job_run_details 
+where jobid = (
+  select jobid from cron.job 
+  where jobname = 'run-ai-insights-daily'
+)
+order by start_time desc 
+limit 10;
+
+-- Check companies being processed
+select 
+  id,
+  name,
+  elora_customer_ref,
+  is_active 
+from companies 
+where elora_customer_ref is not null;
+
+===============================================
+TROUBLESHOOTING
+===============================================
+
+Problem: 401 Unauthorized
+Fix: Check CRON_SECRET matches in secrets and header
+
+Problem: No vehicles analyzed
+Fix: Verify companies have elora_customer_ref set
+
+Problem: AI analysis fails
+Fix: Check ANTHROPIC_API_KEY is set and valid
+
+Problem: Cron doesn't run
+Fix: Verify job is enabled in Dashboard > Cron
+
+===============================================
+EDGE FUNCTION URLS
+===============================================
+
+run-ai-cron:
+https://mtjfypwrtvzhnzgatoim.supabase.co/functions/v1/run-ai-cron
+
+analyze-fleet:
+https://mtjfypwrtvzhnzgatoim.supabase.co/functions/v1/analyze-fleet
+
+Logs:
+https://supabase.com/dashboard/project/mtjfypwrtvzhnzgatoim/functions
+
+===============================================
+AUTH FLOW
+===============================================
+
+1. pg_cron/Dashboard triggers run-ai-cron
+   Headers: x-cron-secret OR Authorization: Bearer
+
+2. run-ai-cron validates request
+   Accepts: x-cron-secret match OR Bearer token
+
+3. run-ai-cron calls analyze-fleet for each company
+   Headers: x-cron-secret + Authorization: Bearer
+
+4. analyze-fleet validates cron request
+   Accepts: x-cron-secret match OR Bearer token (including JWT)
+
+5. analyze-fleet processes vehicles and populates AI tables
+
+===============================================
+FILES REFERENCE
+===============================================
+
+Edge Functions:
+  supabase/functions/run-ai-cron/index.ts
+  supabase/functions/analyze-fleet/index.ts
+  supabase/functions/analyze-vehicle-risk-batch/index.ts
+  supabase/functions/generate-wash-recommendations/index.ts
+
+Scripts:
+  scripts/test-ai-cron.sh
+  scripts/deploy-functions.sh
+
+Migration:
+  supabase/migrations/20260208000001_ai_cron_schedule.sql
+
+Config:
+  .env.example (documents CRON_SECRET)
+
+Documentation:
+  AI_CRON_SETUP.txt (full setup guide)
+
+===============================================
+SCHEDULE REFERENCE
+===============================================
+
+Cron: 30 19 * * *
+
+Time Conversions:
+  19:30 UTC = 6:00 AM Adelaide (ACST, UTC+9:30)
+  19:30 UTC = 6:00 AM Adelaide (ACDT, UTC+10:30)
+
+Common Schedules:
+  0 0 * * *     = Midnight UTC
+  30 19 * * *   = 6:00 AM Adelaide
+  0 12 * * *    = Noon UTC
+  0 0 * * 1     = Every Monday at midnight UTC
+
+===============================================
+COST TRACKING
+===============================================
+
+Per Day (estimated):
+  - Batch risk analysis: ~1 call per 18 vehicles
+  - Recommendations: 2 calls (first batch only)
+  - Total: Depends on fleet size
+
+Example for 100 vehicles:
+  - ~6 batch calls + 2 recommendation calls = 8 calls/day
+  - At $0.01-0.05/call = $0.08-0.40/day
+
+===============================================
+QUICK HEALTH CHECK
+===============================================
+
+1. Secrets set?
+   npx supabase secrets list --project-ref mtjfypwrtvzhnzgatoim
+
+2. Functions deployed?
+   Check: Dashboard > Edge Functions
+
+3. Cron job active?
+   Check: Dashboard > Integrations > Cron
+
+4. Manual test works?
+   CRON_SECRET=xxx ./scripts/test-ai-cron.sh
+
+5. Data populated?
+   select count(*) from ai_predictions;
+
+===============================================
+EMERGENCY COMMANDS
+===============================================
+
+# Disable cron (Dashboard method)
+Delete job from: Dashboard > Integrations > Cron
+
+# Disable cron (pg_cron method)
+select cron.unschedule('run-ai-insights-daily');
+
+# Clear old AI data (if needed)
+delete from ai_predictions where analyzed_at < now() - interval '30 days';
+delete from ai_recommendations where created_at < now() - interval '30 days';
+
+# Check Edge Function logs
+Dashboard > Edge Functions > run-ai-cron > Logs
+
+===============================================
+SUPPORT CHECKLIST
+===============================================
+
+When reporting issues, provide:
+  [ ] Error message/HTTP status
+  [ ] Edge Function logs
+  [ ] Test script output
+  [ ] Time of failure
+  [ ] Number of companies/vehicles
+  [ ] Recent changes to secrets/functions
+
+===============================================
+END OF QUICK REFERENCE
+===============================================

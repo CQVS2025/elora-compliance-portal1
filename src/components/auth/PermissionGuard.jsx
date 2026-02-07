@@ -116,7 +116,7 @@ function getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides) {
     return perms.visible_tabs;
   }
   if (perms.hidden_tabs && perms.hidden_tabs.length > 0) {
-    const allTabValues = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard'];
+    const allTabValues = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
     return allTabValues.filter((v) => !perms.hidden_tabs.includes(v));
   }
   const role = userProfile?.role;

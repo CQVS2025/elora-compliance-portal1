@@ -441,7 +441,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Fleet Health</p>
+                <p className="text-sm text-primary font-semibold">Fleet Health</p>
                 <p className="text-3xl font-bold text-foreground mt-1">{stats.healthScore}%</p>
                 <Progress value={stats.healthScore} className="mt-2 h-2" />
               </div>
@@ -456,7 +456,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Devices</p>
+                <p className="text-sm text-primary font-semibold">Total Devices</p>
                 <p className="text-3xl font-bold text-foreground mt-1">{stats.total}</p>
                 <p className="text-xs text-muted-foreground mt-2">Active controllers</p>
               </div>
@@ -471,7 +471,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Online</p>
+                <p className="text-sm text-primary font-semibold">Online</p>
                 <p className="text-3xl font-bold text-primary mt-1">{stats.online}</p>
                 <p className="text-xs text-muted-foreground mt-2">Last 24 hours</p>
               </div>
@@ -486,7 +486,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Offline</p>
+                <p className="text-sm text-primary font-semibold">Offline</p>
                 <p className="text-3xl font-bold text-destructive mt-1">{stats.offline}</p>
                 <p className="text-xs text-muted-foreground mt-2">Needs attention</p>
               </div>

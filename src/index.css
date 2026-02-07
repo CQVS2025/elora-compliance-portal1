@@ -32,6 +32,11 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+    /* Semantic chart colors: match risk/priority badges (critical=red, high=amber, medium=yellow, low=primary) */
+    --chart-critical: 0 84% 60%;
+    --chart-high: 38 92% 50%;
+    --chart-medium: 48 96% 53%;
+    --chart-low: 217 91% 60%;
     --radius: 0.5rem;
     /* medium radius */
     --sidebar-background: 0 0% 98%;
@@ -72,6 +77,10 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+    --chart-critical: 0 62% 50%;
+    --chart-high: 38 92% 50%;
+    --chart-medium: 48 96% 53%;
+    --chart-low: 217 91% 60%;
     --sidebar-background: 0 0% 7%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 217 91% 60%;

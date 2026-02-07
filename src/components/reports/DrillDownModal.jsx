@@ -130,7 +130,7 @@ function DrillDownModal({ open, onClose, type, data }) {
     return (
       <div className="space-y-4">
         <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
-          <p className="text-sm text-muted-foreground">Total Washes Across All Sites</p>
+          <p className="text-sm text-primary font-semibold">Total Washes Across All Sites</p>
           <p className="text-3xl font-bold text-foreground">{totalWashes.toLocaleString()}</p>
         </div>
         

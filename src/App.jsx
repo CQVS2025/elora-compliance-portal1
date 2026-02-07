@@ -142,6 +142,14 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        {/* Elora AI route */}
+        <Route path="/ai-insights" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.EloraAI)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
 
         {/* Admin routes - same layout as app, permission-based content */}
         <Route path="/admin" element={

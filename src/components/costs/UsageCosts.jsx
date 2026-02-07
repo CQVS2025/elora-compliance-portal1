@@ -491,7 +491,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Usage Cost</CardTitle>
+              <CardTitle className="text-sm font-semibold text-primary">Total Usage Cost</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <DollarSign className="w-5 h-5 text-primary" />
               </div>
@@ -508,7 +508,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Average Cost Per Scan</CardTitle>
+              <CardTitle className="text-sm font-semibold text-primary">Average Cost Per Scan</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                 <Calculator className="w-5 h-5 text-blue-600" />
               </div>
@@ -523,7 +523,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Scans</CardTitle>
+              <CardTitle className="text-sm font-semibold text-primary">Total Scans</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-cyan-100 flex items-center justify-center">
                 <Droplet className="w-5 h-5 text-cyan-600" />
               </div>
@@ -544,7 +544,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Most Expensive Site</CardTitle>
+              <CardTitle className="text-sm font-semibold text-primary">Most Expensive Site</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
                 <MapPin className="w-5 h-5 text-purple-600" />
               </div>
