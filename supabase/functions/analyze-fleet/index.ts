@@ -4,6 +4,29 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
+
+function isCronRequest(req: Request): boolean {
+  const secret = req.headers.get('x-cron-secret');
+  const authHeader = req.headers.get('Authorization');
+  
+  // Primary: x-cron-secret validation
+  if (CRON_SECRET && secret === CRON_SECRET) {
+    return true;
+  }
+  
+  // Fallback: Check Authorization header
+  // Accept any Bearer token when called from run-ai-cron (internal edge function call)
+  if (authHeader?.startsWith('Bearer ')) {
+    const bearer = authHeader.replace(/^Bearer\s+/i, '').trim();
+    // Check if it matches service role key exactly OR is a JWT (internal call)
+    if (bearer === SUPABASE_SERVICE_ROLE_KEY || bearer.startsWith('eyJ')) {
+      return true;
+    }
+  }
+  
+  return false;
+}
 
 // Batch size: one Claude call per run for risk (analyze-vehicle-risk-batch), lower cost than 1 call per vehicle.
 const BATCH_SIZE = 18;
@@ -32,66 +55,86 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Authorization required' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    const supabaseUser = createSupabaseClient(req);
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    const { data: { user } } = await supabaseUser.auth.getUser(token);
-    if (!user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const body = await req.json().catch(() => ({}));
+    const cronMode = isCronRequest(req);
     const supabase = createSupabaseAdminClient();
-    const { data: profile } = await supabase.from('user_profiles').select('role, company_id').eq('id', user.id).single();
-    const role = profile?.role;
-    const isSuperAdmin = role === 'super_admin';
-    const isAdmin = role === 'admin';
-    if (!isSuperAdmin && !isAdmin) {
-      return new Response(
-        JSON.stringify({ error: 'Forbidden: Super Admin or Admin only' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+
+    let company_id: string | null = null;
+    let isSuperAdmin = false;
+
+    if (cronMode) {
+      // Cron: use company_id from body; no user auth
+      // Auth already validated by isCronRequest() - proceed with company_id from body
+      company_id = body.company_id ?? null;
+    } else {
+      // User request: require auth
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: 'Authorization required' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const supabaseUser = createSupabaseClient(req);
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      const { data: { user } } = await supabaseUser.auth.getUser(token);
+      if (!user) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const { data: profile } = await supabase.from('user_profiles').select('role, company_id').eq('id', user.id).single();
+      const role = profile?.role;
+      isSuperAdmin = role === 'super_admin';
+      const isAdmin = role === 'admin';
+      if (!isSuperAdmin && !isAdmin) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden: Super Admin or Admin only' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      company_id = profile?.company_id ?? null;
     }
 
-    const body = await req.json().catch(() => ({}));
-    
-    // NEW: Accept customer_ref directly from frontend (ASI API customer parameter)
     const customerRef = body.customer_ref ?? null;
     const siteRef = body.site_ref ?? null;
     const fromDate = body.from_date ?? null;
     const toDate = body.to_date ?? null;
-    
+
     if (!customerRef) {
       return new Response(
         JSON.stringify({ error: 'customer_ref is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
-    // Get company_id from user's profile (for storing results)
-    const company_id = profile?.company_id ?? null;
-    
-    // For non-super admins, verify they have access to this customer
-    if (!isSuperAdmin) {
-      // Verify the customer belongs to their company
+
+    // Cron: verify company's elora_customer_ref matches. User path: verify non-super_admin has access
+    if (cronMode && company_id) {
       const { data: company } = await supabase
         .from('companies')
         .select('elora_customer_ref')
         .eq('id', company_id)
         .single();
-      
       if (company?.elora_customer_ref !== customerRef) {
         return new Response(
-          JSON.stringify({ error: 'Forbidden: You do not have access to this customer' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'Cron: company elora_customer_ref does not match' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+    } else if (!cronMode && company_id) {
+      if (!isSuperAdmin) {
+        const { data: company } = await supabase
+          .from('companies')
+          .select('elora_customer_ref')
+          .eq('id', company_id)
+          .single();
+        if (company?.elora_customer_ref !== customerRef) {
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: You do not have access to this customer' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
     }
     

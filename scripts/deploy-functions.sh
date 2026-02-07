@@ -21,6 +21,14 @@ FUNCTIONS=(
   "elora_vehicles"
 )
 
+# AI Insights functions
+AI_FUNCTIONS=(
+  "analyze-fleet"
+  "analyze-vehicle-risk-batch"
+  "generate-wash-recommendations"
+  "run-ai-cron"
+)
+
 # Additional utility functions
 UTIL_FUNCTIONS=(
   "elora_recent_activity"
@@ -41,6 +49,19 @@ UTIL_FUNCTIONS=(
 # Deploy all Elora API functions
 echo "📦 Deploying core Elora API functions..."
 for func in "${FUNCTIONS[@]}"; do
+  echo "  → Deploying $func..."
+  supabase functions deploy "$func" --project-ref "$PROJECT_REF" --no-verify-jwt
+  if [ $? -eq 0 ]; then
+    echo "    ✅ $func deployed successfully"
+  else
+    echo "    ❌ Failed to deploy $func"
+    exit 1
+  fi
+done
+
+echo ""
+echo "📦 Deploying AI Insights functions..."
+for func in "${AI_FUNCTIONS[@]}"; do
   echo "  → Deploying $func..."
   supabase functions deploy "$func" --project-ref "$PROJECT_REF" --no-verify-jwt
   if [ $? -eq 0 ]; then
