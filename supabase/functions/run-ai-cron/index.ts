@@ -107,50 +107,51 @@ Deno.serve(async (req) => {
     const fromDate = startDate.toISOString().split('T')[0];
     const toDate = endDate.toISOString().split('T')[0];
 
-    const results: Array<{ company_id: string; customer_ref: string; vehiclesProcessed: number; error?: string }> = [];
-    let totalVehicles = 0;
+    // Process companies in parallel for much faster execution
+    const results = await Promise.all(
+      activeCompanies.map(async (company) => {
+        const companyId = company.id;
+        const customerRef = String(company.elora_customer_ref).trim();
 
-    for (const company of activeCompanies) {
-      const companyId = company.id;
-      const customerRef = String(company.elora_customer_ref).trim();
+        try {
+          let offset = 0;
+          let companyVehicles = 0;
 
-      try {
-        let offset = 0;
-        let companyVehicles = 0;
+          while (true) {
+            const data = await invokeAnalyzeFleet({
+              customer_ref: customerRef,
+              company_id: companyId,
+              from_date: fromDate,
+              to_date: toDate,
+              offset,
+            });
 
-        while (true) {
-          const data = await invokeAnalyzeFleet({
-            customer_ref: customerRef,
+            const analyzed = data?.analyzed ?? 0;
+            const hasMore = data?.has_more ?? false;
+            const nextOffset = data?.next_offset ?? offset + analyzed;
+
+            companyVehicles += analyzed;
+
+            if (!hasMore || analyzed === 0) break;
+            offset = nextOffset;
+          }
+
+          console.log(`[run-ai-cron] Company ${companyId} (${customerRef}): ${companyVehicles} vehicles`);
+          return { company_id: companyId, customer_ref: customerRef, vehiclesProcessed: companyVehicles };
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.error(`[run-ai-cron] Company ${companyId} (${customerRef}) failed:`, errMsg);
+          return {
             company_id: companyId,
-            from_date: fromDate,
-            to_date: toDate,
-            offset,
-          });
-
-          const analyzed = data?.analyzed ?? 0;
-          const hasMore = data?.has_more ?? false;
-          const nextOffset = data?.next_offset ?? offset + analyzed;
-
-          companyVehicles += analyzed;
-
-          if (!hasMore || analyzed === 0) break;
-          offset = nextOffset;
+            customer_ref: customerRef,
+            vehiclesProcessed: 0,
+            error: errMsg,
+          };
         }
+      })
+    );
 
-        totalVehicles += companyVehicles;
-        results.push({ company_id: companyId, customer_ref: customerRef, vehiclesProcessed: companyVehicles });
-        console.log(`[run-ai-cron] Company ${companyId} (${customerRef}): ${companyVehicles} vehicles`);
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : String(e);
-        console.error(`[run-ai-cron] Company ${companyId} (${customerRef}) failed:`, errMsg);
-        results.push({
-          company_id: companyId,
-          customer_ref: customerRef,
-          vehiclesProcessed: 0,
-          error: errMsg,
-        });
-      }
-    }
+    const totalVehicles = results.reduce((sum, r) => sum + r.vehiclesProcessed, 0);
 
     return new Response(
       JSON.stringify({

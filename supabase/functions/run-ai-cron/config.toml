@@ -1,1 +1,5 @@
 verify_jwt = false
+
+# Increase timeout to 10 minutes (600 seconds) for processing multiple companies
+# Supabase allows up to 1000 seconds on paid plans
+import_map = "../../import_map.json"
