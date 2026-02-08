@@ -44,40 +44,54 @@ function log(message) {
 }
 
 /**
- * Fetch data from Elora API
+ * Fetch vehicles via Supabase Edge Function proxy
+ * (GitHub Actions cannot access Elora API directly due to DNS/network restrictions)
  */
-async function callEloraAPI(endpoint, params = {}) {
-  const url = new URL(`${ELORA_API_BASE}${endpoint}`);
-  Object.entries(params).forEach(([key, value]) => {
-    url.searchParams.append(key, value);
+async function fetchVehicles(customerRef) {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/elora_vehicles`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      customer_id: customerRef,
+    }),
   });
 
-  log(`  → API Call: ${url.toString()}`);
-  
-  try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        'x-api-key': ELORA_API_KEY,  // Changed from Authorization: Bearer
-        'Content-Type': 'application/json',
-      },
-    });
-
-    log(`  → API Response: ${response.status} ${response.statusText}`);
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'No error body');
-      log(`  → API Error Body: ${errorText}`);
-      throw new Error(`Elora API error: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    log(`  → API Fetch Error: ${error.message}`);
-    if (error.cause) {
-      log(`  → Error Cause: ${JSON.stringify(error.cause)}`);
-    }
-    throw error;
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'No error body');
+    log(`  → Vehicles API Error: ${response.status} - ${errorText}`);
+    throw new Error(`Failed to fetch vehicles: ${response.status}`);
   }
+
+  return await response.json();
+}
+
+/**
+ * Fetch dashboard data via Supabase Edge Function proxy
+ */
+async function fetchDashboard(customerRef, fromDate, toDate) {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/elora_dashboard`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({
+      customer_id: customerRef,
+      from_date: fromDate,
+      to_date: toDate,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'No error body');
+    log(`  → Dashboard API Error: ${response.status} - ${errorText}`);
+    throw new Error(`Failed to fetch dashboard: ${response.status}`);
+  }
+
+  return await response.json();
 }
 
 /**
@@ -126,13 +140,9 @@ async function processCompany(company, fromDate, toDate) {
 
     log(`  ✓ Found ${vehicles.length} vehicles`);
 
-    // 2. Fetch dashboard data for TODAY only
+    // 2. Fetch dashboard data for TODAY only via Edge Function proxy
     log(`  → Fetching dashboard data for ${fromDate}...`);
-    const dashboardData = await callEloraAPI('/dashboard', {
-      customer: customerRef,
-      fromDate,
-      toDate,
-    });
+    const dashboardData = await fetchDashboard(customerRef, fromDate, toDate);
 
     const rows = Array.isArray(dashboardData?.rows) ? dashboardData.rows : (dashboardData?.data?.rows ?? []);
     log(`  ✓ Found ${rows.length} wash records`);
