@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, LayoutDashboard, AlertTriangle, Lightbulb, BarChart3, Loader2, Play, Calendar as CalendarIcon, ChevronsUpDown, Check, RotateCcw, Zap } from 'lucide-react';
+import { Sparkles, LayoutDashboard, AlertTriangle, Lightbulb, BarChart3, Loader2, Play, Calendar as CalendarIcon, ChevronsUpDown, Check, RotateCcw } from 'lucide-react';
 import moment from 'moment';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -98,13 +98,34 @@ export default function EloraAI() {
   const { data: rawCustomers = [], isLoading: customersLoading } = useQuery(customersOptions(companyId));
   const { data: rawSites = [], isLoading: sitesLoading } = useQuery(sitesOptions(companyId));
 
-  // Normalize customers: ensure they have 'id' field (FilterSection expects customer.id)
+  // Fetch companies to check which customers are onboarded
+  const { data: companiesData = [] } = useQuery({
+    queryKey: ['companies-onboarded'],
+    queryFn: async () => {
+      const { data, error } = await supabaseClient
+        .from('companies')
+        .select('id, name, elora_customer_ref')
+        .not('elora_customer_ref', 'is', null);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isSuperAdmin, // Only fetch for super admins
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Create a map of onboarded customer refs
+  const onboardedCustomerRefs = useMemo(() => {
+    return new Set((companiesData || []).map(c => c.elora_customer_ref));
+  }, [companiesData]);
+
+  // Normalize customers: ensure they have 'id' field and add 'isOnboarded' flag
   const customers = useMemo(() => {
     return rawCustomers.map(c => ({
       ...c,
       id: c.ref || c.id, // Use 'ref' as 'id' for FilterSection compatibility
+      isOnboarded: onboardedCustomerRefs.has(c.ref || c.id), // Check if customer is onboarded
     }));
-  }, [rawCustomers]);
+  }, [rawCustomers, onboardedCustomerRefs]);
 
   // Debug logging
   console.log('🔍 [EloraAI] Raw Data:', {
@@ -271,7 +292,6 @@ export default function EloraAI() {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [runFleetLoading, setRunFleetLoading] = useState(false);
-  const [runCronLoading, setRunCronLoading] = useState(false);
 
   const atRiskCount = predictions.filter((p) => ['critical', 'high'].includes(p.risk_level)).length;
   const criticalCount = predictions.filter((p) => p.risk_level === 'critical').length;
@@ -288,65 +308,6 @@ export default function EloraAI() {
     queryClient.invalidateQueries({ queryKey: ['tenant', companyId, 'aiPatternSummary'] });
   };
 
-  // Run cron job for all customers (super admin only)
-  const runAICron = async () => {
-    if (!isSuperAdmin) {
-      toast.error('Access denied', { description: 'Only super admins can run the AI cron job for all customers.' });
-      return;
-    }
-
-    setRunCronLoading(true);
-    try {
-      toast.info('Running AI cron job...', { description: 'Processing all customers and their fleets.' });
-      
-      // In production: use Node.js API endpoint
-      // In dev: use Edge Function (since Vercel serverless functions don't work locally)
-      const isDev = import.meta.env.DEV;
-      let result;
-      
-      if (isDev) {
-        // Development: use Edge Function
-        result = await callEdgeFunction('run-ai-cron', {});
-      } else {
-        // Production: use Node.js API
-        const response = await fetch('/api/cron/ai-insights', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${(await supabaseClient.auth.getSession()).data.session?.access_token}`,
-          },
-          body: JSON.stringify({}),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: response.statusText }));
-          throw new Error(errorData.error || errorData.details || 'Cron job failed');
-        }
-
-        result = await response.json();
-      }
-      
-      if (result?.success) {
-        const { companiesProcessed, totalVehicles, results, failedCompanies, duration } = result;
-        const failed = failedCompanies || results?.filter(r => r.error)?.length || 0;
-        const successCompanies = companiesProcessed - failed;
-        
-        toast.success('AI cron job complete', {
-          description: `Processed ${successCompanies} of ${companiesProcessed} companies, ${totalVehicles} total vehicles${duration ? ` in ${duration}` : ''}.${failed > 0 ? ` ${failed} companies failed.` : ''}`,
-        });
-      } else {
-        throw new Error(result?.message || 'Cron job failed');
-      }
-      
-      invalidateAiQueries();
-    } catch (err) {
-      console.error('AI cron failed:', err);
-      toast.error('Cron job failed', { description: err?.message || 'Could not complete AI cron job' });
-    } finally {
-      setRunCronLoading(false);
-    }
-  };
-
   const runFleetAnalysisAll = async () => {
     if (!canRunFleetAnalysis) return;
     if (!selectedCustomerRef) {
@@ -360,6 +321,28 @@ export default function EloraAI() {
     let lastMessage = null;
 
     try {
+      // Validate that this customer exists in our companies table (has been onboarded)
+      const { data: companyData, error: companyError } = await supabaseClient
+        .from('companies')
+        .select('id, name, elora_customer_ref')
+        .eq('elora_customer_ref', selectedCustomerRef)
+        .maybeSingle();
+
+      if (companyError) {
+        throw new Error(`Failed to validate customer: ${companyError.message}`);
+      }
+
+      if (!companyData) {
+        toast.error('Customer not onboarded', {
+          description: `The customer "${selectedCustomerRef}" does not exist in the system. Please onboard this customer in Company Settings before analyzing their data.`,
+          duration: 6000,
+        });
+        setRunFleetLoading(false);
+        return;
+      }
+
+      console.log('✓ Customer validated:', companyData);
+
       // Always use TODAY's date for AI analysis (consistent with cron job)
       const today = moment().format('YYYY-MM-DD');
       
@@ -516,11 +499,17 @@ export default function EloraAI() {
                                 setViewSiteFilter('all');
                                 setCustomerComboboxOpen(false);
                               }}
+                              className={!customer.isOnboarded ? 'opacity-60' : ''}
                             >
                               <Check
                                 className={`mr-2 h-4 w-4 ${selectedCustomer === customer.id ? 'opacity-100' : 'opacity-0'}`}
                               />
-                              {customer.name}
+                              <span className="flex-1">{customer.name}</span>
+                              {isSuperAdmin && !customer.isOnboarded && (
+                                <span className="ml-2 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                                  Not onboarded
+                                </span>
+                              )}
                             </CommandItem>
                           ))}
                         </CommandGroup>
@@ -602,18 +591,6 @@ export default function EloraAI() {
           <p className="text-muted-foreground text-sm mt-0.5">Intelligent wash optimization & predictions</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {isSuperAdmin && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={runAICron}
-              disabled={runCronLoading}
-              className="gap-2"
-            >
-              {runCronLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-              <span>Run AI Cron (All Customers)</span>
-            </Button>
-          )}
           {canRunFleetAnalysis && selectedCustomerRef && (
             <Button
               size="sm"
