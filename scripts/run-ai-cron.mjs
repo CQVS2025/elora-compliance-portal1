@@ -124,12 +124,9 @@ async function processCompany(company, fromDate, toDate) {
   log(`📊 Processing company: ${companyId} (${customerRef})`);
 
   try {
-    // 1. Fetch vehicles for this customer
+    // 1. Fetch vehicles via Edge Function proxy
     log(`  → Fetching vehicles for ${customerRef}...`);
-    const vehiclesData = await callEloraAPI('/vehicles', {
-      customer: customerRef,
-      status: '1',
-    });
+    const vehiclesData = await fetchVehicles(customerRef);
 
     const vehicles = Array.isArray(vehiclesData) ? vehiclesData : (vehiclesData?.data ?? []);
     
