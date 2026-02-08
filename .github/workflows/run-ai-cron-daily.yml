@@ -13,6 +13,7 @@ jobs:
     steps:
       - name: Trigger AI Insights Cron via Node.js API
         run: |
+          echo "Calling: ${{ secrets.APP_URL }}/api/cron/ai-insights"
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             "${{ secrets.APP_URL }}/api/cron/ai-insights" \
             -H "Content-Type: application/json" \
