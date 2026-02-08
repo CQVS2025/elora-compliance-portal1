@@ -248,24 +248,32 @@ Deno.serve(async (req) => {
       };
     });
 
+    // Internal batching for Claude AI calls (max 18 vehicles per AI call to avoid token limits)
+    const AI_BATCH_SIZE = 18;
+    let analyzed = 0;
+    
     try {
-      console.log('[analyze-fleet] Calling analyze-vehicle-risk-batch with payload:', {
-        customer_ref: customerRef,
-        site_ref: siteRef,
-        company_id,
-        vehicleCount: batchPayload.length,
-        sampleVehicle: batchPayload[0],
-      });
-      
-      const batchResult = await invokeFunction('analyze-vehicle-risk-batch', {
-        customer_ref: customerRef,
-        site_ref: siteRef,
-        company_id,
-        vehicles: batchPayload,
-      });
-      
-      console.log('[analyze-fleet] analyze-vehicle-risk-batch result:', batchResult);
-      analyzed = typeof batchResult?.count === 'number' ? batchResult.count : vehiclesToProcess.length;
+      // Split vehiclesToProcess into smaller batches for AI
+      for (let aiBatchStart = 0; aiBatchStart < batchPayload.length; aiBatchStart += AI_BATCH_SIZE) {
+        const aiBatch = batchPayload.slice(aiBatchStart, aiBatchStart + AI_BATCH_SIZE);
+        
+        console.log(`[analyze-fleet] AI batch ${Math.floor(aiBatchStart / AI_BATCH_SIZE) + 1}/${Math.ceil(batchPayload.length / AI_BATCH_SIZE)}: ${aiBatch.length} vehicles`);
+        
+        const batchResult = await invokeFunction('analyze-vehicle-risk-batch', {
+          customer_ref: customerRef,
+          site_ref: siteRef,
+          company_id,
+          vehicles: aiBatch,
+        });
+        
+        console.log('[analyze-fleet] analyze-vehicle-risk-batch result:', batchResult);
+        analyzed += typeof batchResult?.count === 'number' ? batchResult.count : aiBatch.length;
+        
+        // Small delay between AI batches
+        if (aiBatchStart + AI_BATCH_SIZE < batchPayload.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
     } catch (e) {
       console.error('[analyze-fleet] analyze-vehicle-risk-batch FAILED:', e);
       console.error('[analyze-fleet] Error details:', e?.message, e?.stack);

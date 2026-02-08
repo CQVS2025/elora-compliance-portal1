@@ -101,7 +101,7 @@ Respond with a single JSON object only, no markdown:
     const anthropic = new Anthropic({ apiKey });
     const message = await anthropic.messages.create({
       model,
-      max_tokens: 4096,
+      max_tokens: 8192, // Increased for larger batches (was 4096)
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     });
