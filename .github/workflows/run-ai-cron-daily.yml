@@ -1,32 +1,41 @@
-name: AI Insights Daily Cron
+name: Daily AI Insights Processing
 
 on:
   schedule:
-    # 6:00 AM Adelaide = 19:30 UTC
+    # Run daily at 6:00 AM Adelaide (19:30 UTC)
     - cron: '30 19 * * *'
-  workflow_dispatch:  # Allow manual run from Actions tab
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
-  run-ai-cron:
+  run-ai-insights:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Increased timeout for Node.js backend
+    timeout-minutes: 180 # 3 hours max
+
     steps:
-      - name: Trigger AI Insights Cron via Node.js API
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
         run: |
-          echo "Calling: ${{ secrets.APP_URL }}/api/cron/ai-insights"
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "${{ secrets.APP_URL }}/api/cron/ai-insights" \
-            -H "Content-Type: application/json" \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            -d '{}' \
-            --max-time 1800)
-          HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
-          echo "HTTP Status: $HTTP_CODE"
-          echo "Response: $HTTP_BODY"
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "✅ Success"
-          else
-            echo "❌ Failed (HTTP $HTTP_CODE)"
-            exit 1
-          fi
+          npm install @supabase/supabase-js
+
+      - name: Run AI Insights Pipeline
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ELORA_API_KEY: ${{ secrets.ELORA_API_KEY }}
+        run: node scripts/run-ai-cron.mjs
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-insights-logs
+          path: |
+            *.log
+          retention-days: 7
