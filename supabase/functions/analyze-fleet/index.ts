@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
       }
     }
     
-    const limit = Math.min(Math.max(1, Number(body.limit) || BATCH_SIZE), 20);
+    const limit = Math.min(Math.max(1, Number(body.limit) || BATCH_SIZE), lightweightCronMode ? 50 : 20);
     const offset = Math.max(0, Number(body.offset) || 0);
 
     const params: Record<string, string> = { status: '1' };

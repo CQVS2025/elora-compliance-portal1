@@ -45,7 +45,7 @@ function log(message) {
 
 /**
  * Process a single company's fleet using the analyze-fleet edge function
- * This handles all AI insights tables properly
+ * Calls analyze-fleet in a loop to process ALL vehicles (pagination)
  */
 async function processCompany(company, fromDate, toDate) {
   const { id: companyId, elora_customer_ref: customerRef } = company;
@@ -53,48 +53,64 @@ async function processCompany(company, fromDate, toDate) {
   log(`📊 Processing company: ${companyId} (${customerRef})`);
 
   try {
-    // Call analyze-fleet edge function which handles:
-    // - ai_predictions (via analyze-vehicle-risk-batch)
-    // - ai_recommendations (via generate-wash-recommendations)
-    // - ai_wash_windows
-    // - ai_driver_patterns
-    // - ai_site_insights
-    // - ai_pattern_summary
+    let offset = 0;
+    let totalProcessed = 0;
+    let totalVehicles = 0;
     
-    log(`  → Calling analyze-fleet for ${customerRef}...`);
-    
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-fleet`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        'x-cron-secret': process.env.CRON_SECRET || '',
-      },
-      body: JSON.stringify({
-        company_id: companyId,
-        customer_ref: customerRef,
-        from_date: fromDate,
-        to_date: toDate,
-        cron_mode: true, // Skip heavy operations in cron mode
-        limit: 1000, // Process all vehicles at once in cron
-      }),
-    });
+    // Loop until all vehicles are processed
+    while (true) {
+      log(`  → Calling analyze-fleet (offset: ${offset})...`);
+      
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-fleet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'x-cron-secret': process.env.CRON_SECRET || '',
+        },
+        body: JSON.stringify({
+          company_id: companyId,
+          customer_ref: customerRef,
+          from_date: fromDate,
+          to_date: toDate,
+          cron_mode: true, // Skip heavy operations in cron mode
+          limit: 50, // Process 50 vehicles per call (higher limit for cron)
+          offset: offset,
+        }),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'No error body');
-      log(`  → analyze-fleet Error: ${response.status} - ${errorText}`);
-      throw new Error(`Failed to analyze fleet: ${response.status} - ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'No error body');
+        log(`  → analyze-fleet Error: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to analyze fleet: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      const analyzed = result.analyzed || 0;
+      const hasMore = result.has_more || false;
+      totalVehicles = result.total || 0;
+      
+      totalProcessed += analyzed;
+      log(`  ✓ Batch complete: ${totalProcessed}/${totalVehicles} vehicles analyzed`);
+
+      // Break if no more vehicles to process
+      if (!hasMore || analyzed === 0) {
+        break;
+      }
+
+      // Move to next batch
+      offset = result.next_offset || (offset + analyzed);
+      
+      // Small delay between batches
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
-    const result = await response.json();
-    log(`  ✓ Analyzed ${result.analyzed || 0}/${result.total || 0} vehicles`);
-    log(`  ✓ All AI insights tables populated`);
-
+    log(`  ✅ Company ${customerRef}: ${totalProcessed}/${totalVehicles} vehicles processed`);
     return { 
       companyId, 
       customerRef, 
-      vehiclesProcessed: result.analyzed || 0,
-      totalVehicles: result.total || 0
+      vehiclesProcessed: totalProcessed,
+      totalVehicles: totalVehicles
     };
     
   } catch (error) {
