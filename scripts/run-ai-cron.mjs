@@ -22,7 +22,7 @@ if (typeof globalThis.fetch === 'undefined') {
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ELORA_API_KEY = process.env.ELORA_API_KEY;
-const ELORA_API_BASE = 'https://api.eloratrack.com.au/api';
+const ELORA_API_BASE = 'https://www.elora.com.au/api';
 
 // Validate environment variables
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !ELORA_API_KEY) {
@@ -57,7 +57,7 @@ async function callEloraAPI(endpoint, params = {}) {
   try {
     const response = await fetch(url.toString(), {
       headers: {
-        'Authorization': `Bearer ${ELORA_API_KEY}`,
+        'x-api-key': ELORA_API_KEY,  // Changed from Authorization: Bearer
         'Content-Type': 'application/json',
       },
     });
