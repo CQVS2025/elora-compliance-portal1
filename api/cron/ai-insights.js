@@ -11,7 +11,7 @@
  * - Better error handling and logging
  */
 
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -164,9 +164,9 @@ async function processCompany(company, fromDate, toDate) {
 }
 
 /**
- * Main handler - Express/Vercel compatible
+ * Main handler - Vercel serverless function
  */
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -271,4 +271,4 @@ export default async function handler(req, res) {
       duration: `${((Date.now() - startTime) / 1000).toFixed(2)}s`,
     });
   }
-}
+};
