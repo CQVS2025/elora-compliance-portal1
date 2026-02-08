@@ -176,7 +176,6 @@ Deno.serve(async (req) => {
     }
 
     const startDate = fromDate ? new Date(fromDate) : new Date();
-    if (!fromDate) startDate.setDate(startDate.getDate() - 30);
     const endDate = toDate ? new Date(toDate) : new Date();
     const dashboardParams: Record<string, string> = {
       fromDate: startDate.toISOString().split('T')[0],
@@ -205,6 +204,14 @@ Deno.serve(async (req) => {
     const now = new Date();
     const dayOfWeek = now.getDay();
     const daysRemaining = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+    
+    // Determine the date range description for the wash history summary
+    const isToday = fromDate === toDate && fromDate === now.toISOString().split('T')[0];
+    const dateRangeDescription = isToday 
+      ? "Today's washes" 
+      : fromDate === toDate 
+        ? `Washes on ${fromDate}` 
+        : `Washes from ${fromDate} to ${toDate}`;
 
     const vehiclesToProcess = vehicles.slice(offset, offset + limit);
     const batchPayload = vehiclesToProcess.map((v) => {
@@ -223,7 +230,7 @@ Deno.serve(async (req) => {
         current_week_washes: currentWeekWashes,
         target_washes: targetWashes,
         days_remaining: daysRemaining,
-        wash_history_summary: `Last 30 days total washes: ${currentWeekWashes}. Target: ${targetWashes}/week.`,
+        wash_history_summary: `${dateRangeDescription}: ${currentWeekWashes}. Target: ${targetWashes}/week.`,
       };
     });
 

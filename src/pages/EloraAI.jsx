@@ -35,10 +35,10 @@ import AIInsightsPatterns from '@/components/ai-insights/AIInsightsPatterns';
 const getDefaultFilters = () => ({
   selectedCustomer: 'all',
   dateRange: {
-    start: moment().startOf('month').format('YYYY-MM-DD'),
+    start: moment().format('YYYY-MM-DD'),
     end: moment().format('YYYY-MM-DD')
   },
-  activePeriod: 'Month'
+  activePeriod: 'Today'
 });
 
 // Date range for period preset
@@ -194,33 +194,52 @@ export default function EloraAI() {
   // Fetch AI data with customer/date filters (no site filter for fetching - we get all sites)
   const today = dateRange.end; // Use end date as "prediction date"
   
+  // For super admins selecting a customer, find the company_id for that customer from database
+  const { data: selectedCompanyData } = useQuery({
+    queryKey: ['company-for-customer', selectedCustomerRef],
+    queryFn: async () => {
+      if (!selectedCustomerRef) return null;
+      const { data } = await supabaseClient
+        .from('companies')
+        .select('id')
+        .eq('elora_customer_ref', selectedCustomerRef)
+        .maybeSingle();
+      return data;
+    },
+    enabled: isSuperAdmin && !!selectedCustomerRef,
+  });
+  
+  const selectedCompanyId = isSuperAdmin 
+    ? (selectedCompanyData?.id || null) 
+    : companyId;
+  
   const { data: allPredictions = [], isLoading: predictionsLoading } = useQuery({
-    ...aiPredictionsOptions(companyId, today, selectedCustomerRef, null), // null = all sites for this customer
+    ...aiPredictionsOptions(selectedCompanyId, today, selectedCustomerRef, null), // Use selected company ID
     enabled: !!selectedCustomerRef,
   });
 
   const { data: allRecommendations = [], isLoading: recsLoading } = useQuery({
-    ...aiRecommendationsOptions(companyId, selectedCustomerRef, null), // null = all sites
+    ...aiRecommendationsOptions(selectedCompanyId, selectedCustomerRef, null), // Use selected company ID
     enabled: !!selectedCustomerRef,
   });
 
   const { data: allWashWindows = [] } = useQuery({
-    ...aiWashWindowsOptions(companyId, selectedCustomerRef, null), // null = all sites
+    ...aiWashWindowsOptions(selectedCompanyId, selectedCustomerRef, null), // Use selected company ID
     enabled: !!selectedCustomerRef,
   });
 
   const { data: allDriverPatterns = [] } = useQuery({
-    ...aiDriverPatternsOptions(companyId, selectedCustomerRef, null), // null = all sites
+    ...aiDriverPatternsOptions(selectedCompanyId, selectedCustomerRef, null), // Use selected company ID
     enabled: !!selectedCustomerRef,
   });
 
   const { data: allSiteInsights = [] } = useQuery({
-    ...aiSiteInsightsOptions(companyId, selectedCustomerRef, null), // null = all sites
+    ...aiSiteInsightsOptions(selectedCompanyId, today, selectedCustomerRef, null), // Use selected company ID and date
     enabled: !!selectedCustomerRef,
   });
 
   const { data: patternSummary = null } = useQuery({
-    ...aiPatternSummaryOptions(companyId, selectedCustomerRef, null), // null = all sites
+    ...aiPatternSummaryOptions(selectedCompanyId, selectedCustomerRef, null), // Use selected company ID
     enabled: !!selectedCustomerRef,
   });
 
@@ -341,12 +360,15 @@ export default function EloraAI() {
     let lastMessage = null;
 
     try {
+      // Always use TODAY's date for AI analysis (consistent with cron job)
+      const today = moment().format('YYYY-MM-DD');
+      
       while (true) {
         const payload = {
           customer_ref: selectedCustomerRef,
           site_ref: null, // Process ALL sites for this customer
-          from_date: dateRange.start,
-          to_date: dateRange.end,
+          from_date: today,
+          to_date: today,
           offset
         };
 

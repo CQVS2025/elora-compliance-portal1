@@ -179,7 +179,7 @@ export const queryKeys = {
     recommendations: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiRecommendations', customerRef, siteRef],
     washWindows: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiWashWindows', customerRef, siteRef],
     driverPatterns: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiDriverPatterns', customerRef, siteRef],
-    siteInsights: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiSiteInsights', customerRef, siteRef],
+    siteInsights: (companyId, date, customerRef, siteRef) => ['tenant', companyId, 'aiSiteInsights', date, customerRef, siteRef],
     patternSummary: (companyId, customerRef, siteRef) => ['tenant', companyId, 'aiPatternSummary', customerRef, siteRef],
   },
 };

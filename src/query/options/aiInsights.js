@@ -119,15 +119,16 @@ export const aiDriverPatternsOptions = (companyId, customerRef = null, siteRef =
 /**
  * AI Site Insights (location-based compliance and recommendations) for a company.
  */
-export const aiSiteInsightsOptions = (companyId, customerRef = null, siteRef = null) =>
+export const aiSiteInsightsOptions = (companyId, insightDate = null, customerRef = null, siteRef = null) =>
   queryOptions({
-    queryKey: queryKeys.ai.siteInsights(companyId, customerRef, siteRef),
+    queryKey: queryKeys.ai.siteInsights(companyId, insightDate, customerRef, siteRef),
     queryFn: async () => {
       let q = supabase
         .from('ai_site_insights')
         .select('*')
         .order('compliance_rate', { ascending: false });
       if (companyId) q = q.eq('company_id', companyId);
+      if (insightDate) q = q.eq('insight_date', insightDate);
       if (customerRef) q = q.eq('customer_ref', customerRef);
       if (siteRef) q = q.eq('site_ref', siteRef);
       const { data, error } = await q;
