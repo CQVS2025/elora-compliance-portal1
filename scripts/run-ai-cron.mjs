@@ -52,18 +52,32 @@ async function callEloraAPI(endpoint, params = {}) {
     url.searchParams.append(key, value);
   });
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Authorization': `Bearer ${ELORA_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  log(`  → API Call: ${url.toString()}`);
+  
+  try {
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${ELORA_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-  if (!response.ok) {
-    throw new Error(`Elora API error: ${response.status} ${response.statusText}`);
+    log(`  → API Response: ${response.status} ${response.statusText}`);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'No error body');
+      log(`  → API Error Body: ${errorText}`);
+      throw new Error(`Elora API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    log(`  → API Fetch Error: ${error.message}`);
+    if (error.cause) {
+      log(`  → Error Cause: ${JSON.stringify(error.cause)}`);
+    }
+    throw error;
   }
-
-  return await response.json();
 }
 
 /**
@@ -193,6 +207,9 @@ async function processCompany(company, fromDate, toDate) {
     
   } catch (error) {
     log(`  ❌ Company ${companyId} failed: ${error.message}`);
+    if (error.stack) {
+      log(`  → Stack: ${error.stack}`);
+    }
     return { companyId, customerRef, vehiclesProcessed: 0, error: error.message };
   }
 }
@@ -204,6 +221,12 @@ async function runPipeline() {
   const startTime = Date.now();
   
   log('🚀 Starting AI Insights Daily Pipeline');
+  log('=====================================');
+  log(`🔧 Environment Check:`);
+  log(`   SUPABASE_URL: ${SUPABASE_URL ? '✓ Set' : '✗ Missing'}`);
+  log(`   SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY ? '✓ Set' : '✗ Missing'}`);
+  log(`   ELORA_API_KEY: ${ELORA_API_KEY ? '✓ Set' : '✗ Missing'}`);
+  log(`   ELORA_API_BASE: ${ELORA_API_BASE}`);
   log('=====================================');
 
   try {
