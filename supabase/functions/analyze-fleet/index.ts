@@ -216,7 +216,6 @@ Deno.serve(async (req) => {
       };
     }
 
-    let analyzed = 0;
     const now = new Date();
     const dayOfWeek = now.getDay();
     const daysRemaining = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
@@ -248,8 +247,8 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Internal batching for Claude AI calls (max 18 vehicles per AI call to avoid token limits)
-    const AI_BATCH_SIZE = 18;
+    // Internal batching for Claude AI calls (max 12 vehicles per AI call to avoid token limits & JSON errors)
+    const AI_BATCH_SIZE = 12;
     let analyzed = 0;
     
     try {
