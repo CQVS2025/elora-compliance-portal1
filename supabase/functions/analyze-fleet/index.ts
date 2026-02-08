@@ -57,6 +57,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const cronMode = isCronRequest(req);
+    const lightweightCronMode = cronMode && body.cron_mode === true; // Skip heavy ops in cron
     const supabase = createSupabaseAdminClient();
 
     let company_id: string | null = null;
@@ -260,7 +261,8 @@ Deno.serve(async (req) => {
     }
 
     // Recommendations for first N vehicles of first batch only (separate Claude calls)
-    if (offset === 0) {
+    // Skip in lightweight cron mode to save resources
+    if (offset === 0 && !lightweightCronMode) {
       for (let i = 0; i < Math.min(MAX_RECOMMENDATIONS_PER_RUN, vehiclesToProcess.length); i++) {
         const v = vehiclesToProcess[i];
         const vehicleRef = v.vehicleRef ?? v.vehicleRfid ?? v.id ?? v.internalVehicleId;
@@ -287,7 +289,8 @@ Deno.serve(async (req) => {
     }
 
     // --- Populate Wash Windows, Driver Patterns, Site Insights (only on first batch, offset === 0) ---
-    if (offset === 0) {
+    // Skip in lightweight cron mode to save resources
+    if (offset === 0 && !lightweightCronMode) {
     const vehicleRefs = vehicles.slice(0, 10).map((v) => v.vehicleRef ?? v.vehicleRfid ?? v.id ?? v.internalVehicleId).filter(Boolean);
     // Driver names from API; if missing, fall back to vehicle name or "Vehicle {ref}" / "Driver at {site}" so Driver Insights still show
     let driverNames = [...new Set(vehicles.map((v) => (v.driverName ?? v.driver_name) || null).filter(Boolean))];

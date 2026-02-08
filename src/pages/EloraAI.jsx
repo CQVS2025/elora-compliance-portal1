@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, LayoutDashboard, AlertTriangle, Lightbulb, BarChart3, Loader2, Play, Calendar as CalendarIcon, ChevronsUpDown, Check, RotateCcw } from 'lucide-react';
+import { Sparkles, LayoutDashboard, AlertTriangle, Lightbulb, BarChart3, Loader2, Play, Calendar as CalendarIcon, ChevronsUpDown, Check, RotateCcw, Zap } from 'lucide-react';
 import moment from 'moment';
 import { format } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,7 +25,7 @@ import {
   aiSiteInsightsOptions,
   aiPatternSummaryOptions,
 } from '@/query/options/aiInsights';
-import { callEdgeFunction } from '@/lib/supabase';
+import { callEdgeFunction, supabase as supabaseClient } from '@/lib/supabase';
 import AIInsightsOverview from '@/components/ai-insights/AIInsightsOverview';
 import AIInsightsRiskPredictions from '@/components/ai-insights/AIInsightsRiskPredictions';
 import AIInsightsRecommendations from '@/components/ai-insights/AIInsightsRecommendations';
@@ -252,6 +252,7 @@ export default function EloraAI() {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [runFleetLoading, setRunFleetLoading] = useState(false);
+  const [runCronLoading, setRunCronLoading] = useState(false);
 
   const atRiskCount = predictions.filter((p) => ['critical', 'high'].includes(p.risk_level)).length;
   const criticalCount = predictions.filter((p) => p.risk_level === 'critical').length;
@@ -266,6 +267,65 @@ export default function EloraAI() {
     queryClient.invalidateQueries({ queryKey: ['tenant', companyId, 'aiDriverPatterns'] });
     queryClient.invalidateQueries({ queryKey: ['tenant', companyId, 'aiSiteInsights'] });
     queryClient.invalidateQueries({ queryKey: ['tenant', companyId, 'aiPatternSummary'] });
+  };
+
+  // Run cron job for all customers (super admin only)
+  const runAICron = async () => {
+    if (!isSuperAdmin) {
+      toast.error('Access denied', { description: 'Only super admins can run the AI cron job for all customers.' });
+      return;
+    }
+
+    setRunCronLoading(true);
+    try {
+      toast.info('Running AI cron job...', { description: 'Processing all customers and their fleets.' });
+      
+      // In production: use Node.js API endpoint
+      // In dev: use Edge Function (since Vercel serverless functions don't work locally)
+      const isDev = import.meta.env.DEV;
+      let result;
+      
+      if (isDev) {
+        // Development: use Edge Function
+        result = await callEdgeFunction('run-ai-cron', {});
+      } else {
+        // Production: use Node.js API
+        const response = await fetch('/api/cron/ai-insights', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${(await supabaseClient.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: response.statusText }));
+          throw new Error(errorData.error || errorData.details || 'Cron job failed');
+        }
+
+        result = await response.json();
+      }
+      
+      if (result?.success) {
+        const { companiesProcessed, totalVehicles, results, failedCompanies, duration } = result;
+        const failed = failedCompanies || results?.filter(r => r.error)?.length || 0;
+        const successCompanies = companiesProcessed - failed;
+        
+        toast.success('AI cron job complete', {
+          description: `Processed ${successCompanies} of ${companiesProcessed} companies, ${totalVehicles} total vehicles${duration ? ` in ${duration}` : ''}.${failed > 0 ? ` ${failed} companies failed.` : ''}`,
+        });
+      } else {
+        throw new Error(result?.message || 'Cron job failed');
+      }
+      
+      invalidateAiQueries();
+    } catch (err) {
+      console.error('AI cron failed:', err);
+      toast.error('Cron job failed', { description: err?.message || 'Could not complete AI cron job' });
+    } finally {
+      setRunCronLoading(false);
+    }
   };
 
   const runFleetAnalysisAll = async () => {
@@ -520,6 +580,18 @@ export default function EloraAI() {
           <p className="text-muted-foreground text-sm mt-0.5">Intelligent wash optimization & predictions</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {isSuperAdmin && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={runAICron}
+              disabled={runCronLoading}
+              className="gap-2"
+            >
+              {runCronLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              <span>Run AI Cron (All Customers)</span>
+            </Button>
+          )}
           {canRunFleetAnalysis && selectedCustomerRef && (
             <Button
               size="sm"

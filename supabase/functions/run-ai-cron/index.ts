@@ -10,29 +10,52 @@
  */
 
 import { corsHeaders } from '../_shared/cors.ts';
-import { createSupabaseAdminClient } from '../_shared/supabase.ts';
+import { createSupabaseAdminClient, createSupabaseClient } from '../_shared/supabase.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
 
-function validateCronRequest(req: Request): boolean {
+async function validateCronRequest(req: Request): Promise<{ valid: boolean; isSuperAdmin?: boolean }> {
   const cronSecret = req.headers.get('x-cron-secret');
   const authHeader = req.headers.get('Authorization');
   
-  // Primary: x-cron-secret validation
+  // Primary: x-cron-secret validation (for cron jobs)
   if (CRON_SECRET && cronSecret === CRON_SECRET) {
-    return true;
+    return { valid: true };
   }
   
-  // Fallback: Check if Authorization header exists (Bearer token from pg_net)
-  // We trust any Bearer token from internal Supabase calls since run-ai-cron
-  // is not exposed publicly and can only be called via cron or admin
+  // Fallback 1: Check if it's a service role token (from pg_net/internal calls)
+  if (authHeader?.startsWith('Bearer ') && !authHeader.includes('.')) {
+    // Non-JWT bearer tokens (raw service key) are trusted for internal calls
+    return { valid: true };
+  }
+  
+  // Fallback 2: Check if it's a JWT from an authenticated super admin user
   if (authHeader?.startsWith('Bearer ')) {
-    return true;
+    try {
+      const supabaseUser = createSupabaseClient(req);
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      const { data: { user }, error } = await supabaseUser.auth.getUser(token);
+      
+      if (user && !error) {
+        const supabaseAdmin = createSupabaseAdminClient();
+        const { data: profile } = await supabaseAdmin
+          .from('user_profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile?.role === 'super_admin') {
+          return { valid: true, isSuperAdmin: true };
+        }
+      }
+    } catch (e) {
+      console.error('[run-ai-cron] JWT validation error:', e);
+    }
   }
   
-  return false;
+  return { valid: false };
 }
 
 async function invokeAnalyzeFleet(payload: {
@@ -41,6 +64,7 @@ async function invokeAnalyzeFleet(payload: {
   from_date: string;
   to_date: string;
   offset?: number;
+  cron_mode?: boolean; // Add flag for cron mode
 }) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/analyze-fleet`, {
     method: 'POST',
@@ -64,9 +88,10 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    if (!validateCronRequest(req)) {
+    const validation = await validateCronRequest(req);
+    if (!validation.valid) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized: Invalid cron credentials' }),
+        JSON.stringify({ error: 'Unauthorized: Invalid cron credentials or insufficient permissions' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -101,23 +126,31 @@ Deno.serve(async (req) => {
       );
     }
 
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
-    const fromDate = startDate.toISOString().split('T')[0];
-    const toDate = endDate.toISOString().split('T')[0];
+    // For daily cron: analyze ONLY TODAY's data
+    // Each day we store insights for that day, building historical data over time
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const fromDate = todayStr;  // Today only
+    const toDate = todayStr;    // Today only
+    
+    console.log(`[run-ai-cron] Analyzing data for: ${todayStr}`);
 
-    const results: Array<{ company_id: string; customer_ref: string; vehiclesProcessed: number; error?: string }> = [];
-    let totalVehicles = 0;
-
+    // Process each company sequentially (one at a time)
+    // For each company, loop through ALL batches until all vehicles are processed
+    // This mimics the "Process All Vehicles" behavior from the UI
+    const results = [];
+    
     for (const company of activeCompanies) {
       const companyId = company.id;
       const customerRef = String(company.elora_customer_ref).trim();
 
       try {
+        console.log(`[run-ai-cron] Processing company ${companyId} (${customerRef})...`);
+        
         let offset = 0;
         let companyVehicles = 0;
-
+        
+        // Loop through all batches for this company (same as "Process All Vehicles" UI button)
         while (true) {
           const data = await invokeAnalyzeFleet({
             customer_ref: customerRef,
@@ -125,6 +158,7 @@ Deno.serve(async (req) => {
             from_date: fromDate,
             to_date: toDate,
             offset,
+            cron_mode: true, // Skip heavy operations in cron mode
           });
 
           const analyzed = data?.analyzed ?? 0;
@@ -132,14 +166,20 @@ Deno.serve(async (req) => {
           const nextOffset = data?.next_offset ?? offset + analyzed;
 
           companyVehicles += analyzed;
+          
+          console.log(`[run-ai-cron] Company ${companyId} batch: ${analyzed} vehicles (total so far: ${companyVehicles})`);
 
+          // Stop if no more vehicles or no vehicles were analyzed
           if (!hasMore || analyzed === 0) break;
           offset = nextOffset;
         }
 
-        totalVehicles += companyVehicles;
-        results.push({ company_id: companyId, customer_ref: customerRef, vehiclesProcessed: companyVehicles });
-        console.log(`[run-ai-cron] Company ${companyId} (${customerRef}): ${companyVehicles} vehicles`);
+        console.log(`[run-ai-cron] Company ${companyId} (${customerRef}): ${companyVehicles} total vehicles processed`);
+        results.push({ 
+          company_id: companyId, 
+          customer_ref: customerRef, 
+          vehiclesProcessed: companyVehicles
+        });
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         console.error(`[run-ai-cron] Company ${companyId} (${customerRef}) failed:`, errMsg);
@@ -151,6 +191,8 @@ Deno.serve(async (req) => {
         });
       }
     }
+
+    const totalVehicles = results.reduce((sum, r) => sum + r.vehiclesProcessed, 0);
 
     return new Response(
       JSON.stringify({
