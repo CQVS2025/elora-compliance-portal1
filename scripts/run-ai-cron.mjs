@@ -10,6 +10,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { writeFileSync } from 'fs';
 
+// Polyfill fetch for Node.js < 18 or if not available
+if (typeof globalThis.fetch === 'undefined') {
+  const nodeFetch = await import('node-fetch');
+  globalThis.fetch = nodeFetch.default;
+  globalThis.Headers = nodeFetch.Headers;
+  globalThis.Request = nodeFetch.Request;
+  globalThis.Response = nodeFetch.Response;
+}
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ELORA_API_KEY = process.env.ELORA_API_KEY;
