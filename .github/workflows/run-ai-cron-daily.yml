@@ -9,16 +9,16 @@ on:
 jobs:
   run-ai-cron:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30  # Increased timeout for Node.js backend
     steps:
-      - name: Trigger run-ai-cron Edge Function
+      - name: Trigger AI Insights Cron via Node.js API
         run: |
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "${{ secrets.SUPABASE_URL }}/functions/v1/run-ai-cron" \
+            "${{ secrets.APP_URL }}/api/cron/ai-insights" \
             -H "Content-Type: application/json" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             -d '{}' \
-            --max-time 600)
+            --max-time 1800)
           HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
           HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
           echo "HTTP Status: $HTTP_CODE"
