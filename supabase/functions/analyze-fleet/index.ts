@@ -183,19 +183,14 @@ Deno.serve(async (req) => {
     }
 
 
-    // For AI analysis, we need the CURRENT WEEK's wash data (or last 7 days)
-    // This gives AI meaningful context even when run early in the day/week
+    // For AI analysis, we analyze only the current day's wash data
+    // This provides fresh daily insights for each cron run
     const today = new Date();
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
-    
-    // Use the last 7 days for analysis context
-    const analysisStartDate = new Date(today);
-    analysisStartDate.setDate(today.getDate() - 7);
+    const todayStr = today.toISOString().split('T')[0];
     
     const dashboardParams: Record<string, string> = {
-      fromDate: analysisStartDate.toISOString().split('T')[0], // Last 7 days
-      toDate: today.toISOString().split('T')[0], // Today
+      fromDate: todayStr, // Today only
+      toDate: todayStr,   // Today only
     };
     dashboardParams.customer = customerRef;
     if (siteRef) dashboardParams.site = siteRef;
@@ -223,14 +218,14 @@ Deno.serve(async (req) => {
     // For predictions, we always store with today's date
     const predictionDate = now.toISOString().split('T')[0];
     
-    // Context message for AI: we're analyzing based on last 7 days of data
-    const dateRangeDescription = "Last 7 days' washes";
+    // Context message for AI: we're analyzing based on today's data only
+    const dateRangeDescription = "Today's washes";
 
     const vehiclesToProcess = vehicles.slice(offset, offset + limit);
     const batchPayload = vehiclesToProcess.map((v) => {
       const vehicleRef = v.vehicleRef ?? v.vehicleRfid ?? v.id ?? v.internalVehicleId;
       const dashboardRow = byVehicleRef[vehicleRef] ?? {};
-      const currentWeekWashes = dashboardRow.totalScans ?? 0;
+      const currentDayWashes = dashboardRow.totalScans ?? 0;
       const targetWashes = dashboardRow.washesPerWeek ?? v.washesPerWeek ?? 6;
       return {
         vehicle_ref: vehicleRef,
@@ -240,10 +235,10 @@ Deno.serve(async (req) => {
         driver_name: v.driverName ?? v.driver_name,
         customer_ref: customerRef,
         company_id,
-        current_week_washes: currentWeekWashes,
+        current_week_washes: currentDayWashes,
         target_washes: targetWashes,
         days_remaining: daysRemaining,
-        wash_history_summary: `${dateRangeDescription}: ${currentWeekWashes}. Target: ${targetWashes}/week.`,
+        wash_history_summary: `${dateRangeDescription}: ${currentDayWashes}. Target: ${targetWashes}/week.`,
       };
     });
 
