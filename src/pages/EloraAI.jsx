@@ -213,7 +213,9 @@ export default function EloraAI() {
   }, [isSuperAdmin, permissions.userProfile?.company_elora_customer_ref, selectedCustomer, setSelectedCustomer]);
 
   // Fetch AI data with customer/date filters (no site filter for fetching - we get all sites)
-  const today = dateRange.end; // Use end date as "prediction date"
+  // Use date range for filtering historical data
+  const predictionDate = dateRange.end; // Use end date as "prediction date"
+  const insightDate = dateRange.end; // Use end date for site insights
   
   // For super admins selecting a customer, find the company_id for that customer from database
   const { data: selectedCompanyData } = useQuery({
@@ -234,8 +236,15 @@ export default function EloraAI() {
     ? (selectedCompanyData?.id || null) 
     : companyId;
   
+  // Fetch predictions: If viewing today, show all non-expired; otherwise filter by date
+  const isViewingToday = predictionDate === moment().format('YYYY-MM-DD');
   const { data: allPredictions = [], isLoading: predictionsLoading } = useQuery({
-    ...aiPredictionsOptions(selectedCompanyId, today, selectedCustomerRef, null), // Use selected company ID
+    ...aiPredictionsOptions(
+      selectedCompanyId, 
+      isViewingToday ? null : predictionDate, // null for today = show non-expired, else filter by date
+      selectedCustomerRef, 
+      null
+    ),
     enabled: !!selectedCustomerRef,
   });
 
@@ -255,7 +264,12 @@ export default function EloraAI() {
   });
 
   const { data: allSiteInsights = [] } = useQuery({
-    ...aiSiteInsightsOptions(selectedCompanyId, today, selectedCustomerRef, null), // Use selected company ID and date
+    ...aiSiteInsightsOptions(
+      selectedCompanyId, 
+      isViewingToday ? null : insightDate, // null for today = show latest, else filter by date
+      selectedCustomerRef, 
+      null
+    ),
     enabled: !!selectedCustomerRef,
   });
 
@@ -348,6 +362,7 @@ export default function EloraAI() {
       
       while (true) {
         const payload = {
+          company_id: companyData.id, // ← FIX: Include company_id for super admin
           customer_ref: selectedCustomerRef,
           site_ref: null, // Process ALL sites for this customer
           from_date: today,

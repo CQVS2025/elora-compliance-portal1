@@ -95,7 +95,14 @@ Deno.serve(async (req) => {
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      company_id = profile?.company_id ?? null;
+      
+      // For super admins, allow company_id to be passed in body (when analyzing other companies)
+      // For regular admins, use their profile's company_id
+      if (isSuperAdmin && body.company_id) {
+        company_id = body.company_id;
+      } else {
+        company_id = profile?.company_id ?? null;
+      }
     }
 
     const customerRef = body.customer_ref ?? null;
@@ -175,11 +182,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    const startDate = fromDate ? new Date(fromDate) : new Date();
-    const endDate = toDate ? new Date(toDate) : new Date();
+
+    // For AI analysis, we need the CURRENT WEEK's wash data (or last 7 days)
+    // This gives AI meaningful context even when run early in the day/week
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
+    
+    // Use the last 7 days for analysis context
+    const analysisStartDate = new Date(today);
+    analysisStartDate.setDate(today.getDate() - 7);
+    
     const dashboardParams: Record<string, string> = {
-      fromDate: startDate.toISOString().split('T')[0],
-      toDate: endDate.toISOString().split('T')[0],
+      fromDate: analysisStartDate.toISOString().split('T')[0], // Last 7 days
+      toDate: today.toISOString().split('T')[0], // Today
     };
     dashboardParams.customer = customerRef;
     if (siteRef) dashboardParams.site = siteRef;
@@ -205,13 +221,11 @@ Deno.serve(async (req) => {
     const dayOfWeek = now.getDay();
     const daysRemaining = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
     
-    // Determine the date range description for the wash history summary
-    const isToday = fromDate === toDate && fromDate === now.toISOString().split('T')[0];
-    const dateRangeDescription = isToday 
-      ? "Today's washes" 
-      : fromDate === toDate 
-        ? `Washes on ${fromDate}` 
-        : `Washes from ${fromDate} to ${toDate}`;
+    // For predictions, we always store with today's date
+    const predictionDate = now.toISOString().split('T')[0];
+    
+    // Context message for AI: we're analyzing based on last 7 days of data
+    const dateRangeDescription = "Last 7 days' washes";
 
     const vehiclesToProcess = vehicles.slice(offset, offset + limit);
     const batchPayload = vehiclesToProcess.map((v) => {
@@ -322,17 +336,37 @@ Deno.serve(async (req) => {
     }
     const sites = Array.from(siteMap.values());
 
+    // Note: We no longer delete historical data. These tables are date-based and should accumulate over time.
+    // For ai_wash_windows and ai_driver_patterns: we'll upsert or let natural expiry handle old data
+    // For ai_site_insights: uses insight_date field to keep historical records
+    // For ai_pattern_summary: uses upsert with onConflict to update existing records
+    
+    // Always delete today's data to refresh current analysis (we always analyze for "today" regardless of input date range)
+    const todayStr = new Date().toISOString().split('T')[0];
+    
     if (company_id) {
-      // Delete existing entries for this customer/site combination
-      let deleteQuery = supabase.from('ai_wash_windows').delete().eq('company_id', company_id).eq('customer_ref', customerRef);
+      // Only delete today's site insights (to refresh them)
+      let deleteQuery = supabase.from('ai_site_insights')
+        .delete()
+        .eq('company_id', company_id)
+        .eq('customer_ref', customerRef)
+        .eq('insight_date', todayStr);
+      if (siteRef) deleteQuery = deleteQuery.eq('site_ref', siteRef);
+      await deleteQuery;
+      
+      // For wash_windows and driver_patterns, we can safely delete and recreate 
+      // since they don't have date fields and represent current state
+      deleteQuery = supabase.from('ai_wash_windows')
+        .delete()
+        .eq('company_id', company_id)
+        .eq('customer_ref', customerRef);
       if (siteRef) deleteQuery = deleteQuery.eq('site_ref', siteRef);
       await deleteQuery;
 
-      deleteQuery = supabase.from('ai_driver_patterns').delete().eq('company_id', company_id).eq('customer_ref', customerRef);
-      if (siteRef) deleteQuery = deleteQuery.eq('site_ref', siteRef);
-      await deleteQuery;
-
-      deleteQuery = supabase.from('ai_site_insights').delete().eq('company_id', company_id).eq('customer_ref', customerRef);
+      deleteQuery = supabase.from('ai_driver_patterns')
+        .delete()
+        .eq('company_id', company_id)
+        .eq('customer_ref', customerRef);
       if (siteRef) deleteQuery = deleteQuery.eq('site_ref', siteRef);
       await deleteQuery;
     }
@@ -381,7 +415,7 @@ Deno.serve(async (req) => {
       { compliance_rate: 67, recommendation: '3pm-5pm wash window underutilized. Incentivize afternoon washes.' },
       { compliance_rate: 82, recommendation: 'Best performing site this month. Share best practices with other sites.' },
     ];
-    const today = new Date().toISOString().split('T')[0];
+    // Reuse 'todayStr' variable declared above
     for (let i = 0; i < Math.min(5, sites.length); i++) {
       const site = sites[i];
       const t = siteTemplates[i % siteTemplates.length];
@@ -390,7 +424,7 @@ Deno.serve(async (req) => {
         customer_ref: customerRef,
         site_ref: site.ref ?? siteRef ?? null,
         site_name: site.name,
-        insight_date: today,
+        insight_date: todayStr,
         compliance_rate: t.compliance_rate,
         trend: i === 0 ? 'declining' : i === 1 ? 'stable' : 'improving',
         recommendation: t.recommendation,
@@ -474,7 +508,7 @@ Deno.serve(async (req) => {
         concern_patterns: concernPatterns,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'company_id,customer_ref,site_ref' }
+      { onConflict: 'company_id' } // Changed from 'company_id,customer_ref,site_ref' to just 'company_id' since that's the unique constraint
     );
     }
 

@@ -25,6 +25,7 @@ export const aiSettingsOptions = () =>
 
 /**
  * AI Predictions for a company (optionally for a given date, customer, site).
+ * For real-time risk monitoring, pass predictionDate=null to get all non-expired predictions.
  */
 export const aiPredictionsOptions = (companyId, predictionDate = null, customerRef = null, siteRef = null) =>
   queryOptions({
@@ -33,9 +34,19 @@ export const aiPredictionsOptions = (companyId, predictionDate = null, customerR
       let q = supabase
         .from('ai_predictions')
         .select('*')
-        .order('risk_score', { ascending: false });
+        .order('risk_score', { ascending: false});
       if (companyId) q = q.eq('company_id', companyId);
-      if (predictionDate) q = q.eq('prediction_date', predictionDate);
+      
+      // If predictionDate is provided, filter by exact date
+      // If null, show all non-expired predictions (for real-time risk monitoring)
+      if (predictionDate) {
+        q = q.eq('prediction_date', predictionDate);
+      } else {
+        // Show predictions that haven't expired yet
+        const now = new Date().toISOString();
+        q = q.or(`expires_at.is.null,expires_at.gte.${now}`);
+      }
+      
       if (customerRef) q = q.eq('customer_ref', customerRef);
       if (siteRef) q = q.eq('site_ref', siteRef);
       const { data, error } = await q;

@@ -44,79 +44,8 @@ function log(message) {
 }
 
 /**
- * Fetch vehicles via Supabase Edge Function proxy
- * (GitHub Actions cannot access Elora API directly due to DNS/network restrictions)
- */
-async function fetchVehicles(customerRef) {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/elora_vehicles`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    },
-    body: JSON.stringify({
-      customer_id: customerRef,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'No error body');
-    log(`  → Vehicles API Error: ${response.status} - ${errorText}`);
-    throw new Error(`Failed to fetch vehicles: ${response.status}`);
-  }
-
-  return await response.json();
-}
-
-/**
- * Fetch dashboard data via Supabase Edge Function proxy
- */
-async function fetchDashboard(customerRef, fromDate, toDate) {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/elora_dashboard`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    },
-    body: JSON.stringify({
-      customer_id: customerRef,
-      from_date: fromDate,
-      to_date: toDate,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'No error body');
-    log(`  → Dashboard API Error: ${response.status} - ${errorText}`);
-    throw new Error(`Failed to fetch dashboard: ${response.status}`);
-  }
-
-  return await response.json();
-}
-
-/**
- * Call Claude AI for risk analysis
- */
-async function analyzeVehicleRisk(vehicleData) {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-vehicle-risk-batch`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    },
-    body: JSON.stringify(vehicleData),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`AI analysis failed: ${response.status} - ${error}`);
-  }
-
-  return await response.json();
-}
-
-/**
- * Process a single company's fleet
+ * Process a single company's fleet using the analyze-fleet edge function
+ * This handles all AI insights tables properly
  */
 async function processCompany(company, fromDate, toDate) {
   const { id: companyId, elora_customer_ref: customerRef } = company;
@@ -124,93 +53,49 @@ async function processCompany(company, fromDate, toDate) {
   log(`📊 Processing company: ${companyId} (${customerRef})`);
 
   try {
-    // 1. Fetch vehicles via Edge Function proxy
-    log(`  → Fetching vehicles for ${customerRef}...`);
-    const vehiclesData = await fetchVehicles(customerRef);
-
-    const vehicles = Array.isArray(vehiclesData) ? vehiclesData : (vehiclesData?.data ?? []);
+    // Call analyze-fleet edge function which handles:
+    // - ai_predictions (via analyze-vehicle-risk-batch)
+    // - ai_recommendations (via generate-wash-recommendations)
+    // - ai_wash_windows
+    // - ai_driver_patterns
+    // - ai_site_insights
+    // - ai_pattern_summary
     
-    if (vehicles.length === 0) {
-      log(`  ⚠️  No vehicles found for ${customerRef}`);
-      return { companyId, customerRef, vehiclesProcessed: 0 };
-    }
-
-    log(`  ✓ Found ${vehicles.length} vehicles`);
-
-    // 2. Fetch dashboard data for TODAY only via Edge Function proxy
-    log(`  → Fetching dashboard data for ${fromDate}...`);
-    const dashboardData = await fetchDashboard(customerRef, fromDate, toDate);
-
-    const rows = Array.isArray(dashboardData?.rows) ? dashboardData.rows : (dashboardData?.data?.rows ?? []);
-    log(`  ✓ Found ${rows.length} wash records`);
+    log(`  → Calling analyze-fleet for ${customerRef}...`);
     
-    // 3. Build vehicle stats map
-    const byVehicleRef = {};
-    for (const row of rows) {
-      const ref = row.vehicleRef || row.vehicle_ref;
-      if (!ref) continue;
-      
-      byVehicleRef[ref] = {
-        totalScans: (row.totalScans || row.total_scans || 0),
-        lastScan: row.lastScan || row.last_scan,
-        washesPerWeek: row.washesPerWeek || row.washes_per_week || 6,
-        vehicleName: row.vehicleName || row.vehicle_name,
-        siteName: row.siteName || row.site_name,
-      };
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze-fleet`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'x-cron-secret': process.env.CRON_SECRET || '',
+      },
+      body: JSON.stringify({
+        company_id: companyId,
+        customer_ref: customerRef,
+        from_date: fromDate,
+        to_date: toDate,
+        cron_mode: true, // Skip heavy operations in cron mode
+        limit: 1000, // Process all vehicles at once in cron
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'No error body');
+      log(`  → analyze-fleet Error: ${response.status} - ${errorText}`);
+      throw new Error(`Failed to analyze fleet: ${response.status} - ${errorText}`);
     }
 
-    // 4. Process vehicles in batches
-    const BATCH_SIZE = 18;
-    let totalProcessed = 0;
-    const numBatches = Math.ceil(vehicles.length / BATCH_SIZE);
+    const result = await response.json();
+    log(`  ✓ Analyzed ${result.analyzed || 0}/${result.total || 0} vehicles`);
+    log(`  ✓ All AI insights tables populated`);
 
-    log(`  → Processing ${vehicles.length} vehicles in ${numBatches} batches...`);
-
-    for (let offset = 0; offset < vehicles.length; offset += BATCH_SIZE) {
-      const batchNum = Math.floor(offset / BATCH_SIZE) + 1;
-      const batch = vehicles.slice(offset, offset + BATCH_SIZE);
-      
-      log(`  → Batch ${batchNum}/${numBatches}: ${batch.length} vehicles`);
-
-      const batchPayload = batch.map(v => {
-        const vehicleRef = v.vehicleRef || v.vehicleRfid || v.id || v.internalVehicleId;
-        const stats = byVehicleRef[vehicleRef] || {};
-        
-        return {
-          vehicle_ref: vehicleRef,
-          vehicle_name: v.vehicleName || v.name,
-          site_ref: v.siteId || v.siteRef,
-          site_name: v.siteName || v.site_name,
-          driver_name: v.driverName || v.driver_name,
-          customer_ref: customerRef,
-          company_id: companyId,
-          current_week_washes: stats.totalScans || 0,
-          target_washes: stats.washesPerWeek || 6,
-          days_remaining: 7 - new Date().getDay(),
-          wash_history_summary: `Today's washes: ${stats.totalScans || 0}. Target: ${stats.washesPerWeek || 6}/week.`,
-        };
-      });
-
-      // 5. Analyze this batch with AI
-      try {
-        await analyzeVehicleRisk({
-          customer_ref: customerRef,
-          company_id: companyId,
-          vehicles: batchPayload,
-        });
-        
-        totalProcessed += batchPayload.length;
-        log(`  ✓ Batch ${batchNum} complete: ${totalProcessed}/${vehicles.length} vehicles analyzed`);
-      } catch (error) {
-        log(`  ❌ Batch ${batchNum} failed: ${error.message}`);
-      }
-
-      // Small delay between batches to avoid overwhelming services
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
-
-    log(`  ✅ Company ${customerRef}: ${totalProcessed}/${vehicles.length} vehicles processed`);
-    return { companyId, customerRef, vehiclesProcessed: totalProcessed };
+    return { 
+      companyId, 
+      customerRef, 
+      vehiclesProcessed: result.analyzed || 0,
+      totalVehicles: result.total || 0
+    };
     
   } catch (error) {
     log(`  ❌ Company ${companyId} failed: ${error.message}`);
