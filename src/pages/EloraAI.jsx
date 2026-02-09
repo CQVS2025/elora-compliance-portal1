@@ -199,6 +199,14 @@ export default function EloraAI() {
   const [viewSiteFilter, setViewSiteFilter] = useState('all');
   // Customer combobox open state (for searchable dropdown)
   const [customerComboboxOpen, setCustomerComboboxOpen] = useState(false);
+  
+  // Analysis date range state (for "Process All Vehicles" button)
+  // Default: today only (same as cron job)
+  const [analysisDateRange, setAnalysisDateRange] = useState({
+    start: moment().format('YYYY-MM-DD'),
+    end: moment().format('YYYY-MM-DD')
+  });
+  const [showAnalysisDatePicker, setShowAnalysisDatePicker] = useState(false);
 
   // Auto-select and lock customer for non-super-admin
   useEffect(() => {
@@ -357,16 +365,19 @@ export default function EloraAI() {
 
       console.log('✓ Customer validated:', companyData);
 
-      // Always use TODAY's date for AI analysis (consistent with cron job)
-      const today = moment().format('YYYY-MM-DD');
+      // Use the analysis date range (defaults to today, but can be changed by super admin)
+      const analysisStart = analysisDateRange.start;
+      const analysisEnd = analysisDateRange.end;
+      
+      console.log(`🗓️ Running analysis for date range: ${analysisStart} to ${analysisEnd}`);
       
       while (true) {
         const payload = {
           company_id: companyData.id, // ← FIX: Include company_id for super admin
           customer_ref: selectedCustomerRef,
           site_ref: null, // Process ALL sites for this customer
-          from_date: today,
-          to_date: today,
+          from_date: analysisStart,
+          to_date: analysisEnd,
           offset
         };
 
@@ -605,18 +616,79 @@ export default function EloraAI() {
           <h1 className="text-2xl font-bold tracking-tight mt-1">Elora AI</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Intelligent wash optimization & predictions</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {canRunFleetAnalysis && selectedCustomerRef && (
-            <Button
-              size="sm"
-              onClick={runFleetAnalysisAll}
-              disabled={runFleetLoading}
-            >
-              {runFleetLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              <span className="ml-2">Process All Vehicles</span>
-            </Button>
-          )}
-        </div>
+        {canRunFleetAnalysis && selectedCustomerRef && (
+          <div className="flex flex-col gap-2 sm:items-end">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Analysis Date Range Picker (for Process All Vehicles) */}
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs text-muted-foreground font-normal">Analysis Date</Label>
+                <Popover open={showAnalysisDatePicker} onOpenChange={setShowAnalysisDatePicker}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="justify-start text-left font-normal">
+                      <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground shrink-0" />
+                      {analysisDateRange.start === analysisDateRange.end
+                        ? format(new Date(analysisDateRange.start), 'dd/MM/yyyy')
+                        : `${format(new Date(analysisDateRange.start), 'dd/MM/yyyy')} – ${format(new Date(analysisDateRange.end), 'dd/MM/yyyy')}`}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <div className="p-3 border-b">
+                      <p className="text-sm font-medium">Analysis Date Range</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Select the date range for wash data to analyze. AI will generate insights based on this period.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 w-full"
+                        onClick={() => {
+                          const today = moment().format('YYYY-MM-DD');
+                          setAnalysisDateRange({ start: today, end: today });
+                        }}
+                      >
+                        <RotateCcw className="h-3 w-3 mr-1" />
+                        Reset to Today
+                      </Button>
+                    </div>
+                    <Calendar
+                      mode="range"
+                      defaultMonth={analysisDateRange?.start ? new Date(analysisDateRange.start) : undefined}
+                      selected={
+                        analysisDateRange?.start && analysisDateRange?.end
+                          ? { from: new Date(analysisDateRange.start), to: new Date(analysisDateRange.end) }
+                          : undefined
+                      }
+                      onSelect={(range) => {
+                        if (!range?.from) return;
+                        const start = format(range.from, 'yyyy-MM-dd');
+                        const end = range.to ? format(range.to, 'yyyy-MM-dd') : start;
+                        setAnalysisDateRange({ start, end });
+                      }}
+                      numberOfMonths={2}
+                      disabled={(date) => date > new Date()}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs text-muted-foreground font-normal">Run Analysis</Label>
+                <Button
+                  size="sm"
+                  onClick={runFleetAnalysisAll}
+                  disabled={runFleetLoading}
+                  className="h-9"
+                >
+                  {runFleetLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                  <span className="ml-2">Process All Vehicles</span>
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground text-right">
+              Generate AI insights for all vehicles in the selected date range
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Empty State: No customer selected */}

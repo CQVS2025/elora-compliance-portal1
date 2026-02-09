@@ -183,14 +183,17 @@ Deno.serve(async (req) => {
     }
 
 
-    // For AI analysis, we analyze only the current day's wash data
-    // This provides fresh daily insights for each cron run
+    // For AI analysis, use the date range provided by the caller
+    // Default to today if not provided (for cron job consistency)
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
     
+    const analysisFromDate = fromDate || todayStr;
+    const analysisToDate = toDate || todayStr;
+    
     const dashboardParams: Record<string, string> = {
-      fromDate: todayStr, // Today only
-      toDate: todayStr,   // Today only
+      fromDate: analysisFromDate,
+      toDate: analysisToDate,
     };
     dashboardParams.customer = customerRef;
     if (siteRef) dashboardParams.site = siteRef;
@@ -218,8 +221,11 @@ Deno.serve(async (req) => {
     // For predictions, we always store with today's date
     const predictionDate = now.toISOString().split('T')[0];
     
-    // Context message for AI: we're analyzing based on today's data only
-    const dateRangeDescription = "Today's washes";
+    // Context message for AI: describe the actual date range being analyzed
+    const dateRangeDescription = 
+      analysisFromDate === analysisToDate 
+        ? `${analysisFromDate} washes` 
+        : `${analysisFromDate} to ${analysisToDate} washes`;
 
     const vehiclesToProcess = vehicles.slice(offset, offset + limit);
     const batchPayload = vehiclesToProcess.map((v) => {
