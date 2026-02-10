@@ -222,8 +222,6 @@ export default function EloraAI() {
 
   // Fetch AI data with customer/date filters (no site filter for fetching - we get all sites)
   // Use date range for filtering historical data
-  const predictionDate = dateRange.end; // Use end date as "prediction date"
-  const insightDate = dateRange.end; // Use end date for site insights
   
   // For super admins selecting a customer, find the company_id for that customer from database
   const { data: selectedCompanyData } = useQuery({
@@ -244,46 +242,77 @@ export default function EloraAI() {
     ? (selectedCompanyData?.id || null) 
     : companyId;
   
-  // Fetch predictions: If viewing today, show all non-expired; otherwise filter by date
-  const isViewingToday = predictionDate === moment().format('YYYY-MM-DD');
+  // Fetch predictions: Use date range instead of single date
+  console.log('🔍 [EloraAI] Query Parameters:', {
+    selectedCompanyId,
+    selectedCustomerRef,
+    dateRange,
+  });
+  
   const { data: allPredictions = [], isLoading: predictionsLoading } = useQuery({
     ...aiPredictionsOptions(
       selectedCompanyId, 
-      isViewingToday ? null : predictionDate, // null for today = show non-expired, else filter by date
+      dateRange.start, // startDate for filtering
+      dateRange.end, // endDate for filtering
       selectedCustomerRef, 
       null
     ),
-    enabled: !!selectedCustomerRef,
+    enabled: !!selectedCustomerRef && !!selectedCompanyId,
   });
 
   const { data: allRecommendations = [], isLoading: recsLoading } = useQuery({
-    ...aiRecommendationsOptions(selectedCompanyId, selectedCustomerRef, null), // Use selected company ID
-    enabled: !!selectedCustomerRef,
+    ...aiRecommendationsOptions(
+      selectedCompanyId, 
+      selectedCustomerRef, 
+      null, // siteRef
+      dateRange.start, // startDate for filtering
+      dateRange.end // endDate for filtering
+    ),
+    enabled: !!selectedCustomerRef && !!selectedCompanyId,
   });
 
   const { data: allWashWindows = [] } = useQuery({
-    ...aiWashWindowsOptions(selectedCompanyId, selectedCustomerRef, null), // Use selected company ID
-    enabled: !!selectedCustomerRef,
+    ...aiWashWindowsOptions(
+      selectedCompanyId, 
+      selectedCustomerRef, 
+      null, // siteRef
+      dateRange.start, // startDate for filtering
+      dateRange.end // endDate for filtering
+    ),
+    enabled: !!selectedCustomerRef && !!selectedCompanyId,
   });
 
   const { data: allDriverPatterns = [] } = useQuery({
-    ...aiDriverPatternsOptions(selectedCompanyId, selectedCustomerRef, null), // Use selected company ID
-    enabled: !!selectedCustomerRef,
+    ...aiDriverPatternsOptions(
+      selectedCompanyId, 
+      selectedCustomerRef, 
+      null, // siteRef
+      dateRange.start, // startDate for filtering
+      dateRange.end // endDate for filtering
+    ),
+    enabled: !!selectedCustomerRef && !!selectedCompanyId,
   });
 
   const { data: allSiteInsights = [] } = useQuery({
     ...aiSiteInsightsOptions(
       selectedCompanyId, 
-      isViewingToday ? null : insightDate, // null for today = show latest, else filter by date
+      dateRange.start, // startDate for filtering
+      dateRange.end, // endDate for filtering
       selectedCustomerRef, 
       null
     ),
-    enabled: !!selectedCustomerRef,
+    enabled: !!selectedCustomerRef && !!selectedCompanyId,
   });
 
   const { data: patternSummary = null } = useQuery({
-    ...aiPatternSummaryOptions(selectedCompanyId, selectedCustomerRef, null), // Use selected company ID
-    enabled: !!selectedCustomerRef,
+    ...aiPatternSummaryOptions(
+      selectedCompanyId, 
+      selectedCustomerRef, 
+      null, // siteRef
+      dateRange.start, // startDate for filtering
+      dateRange.end // endDate for filtering
+    ),
+    enabled: !!selectedCustomerRef && !!selectedCompanyId,
   });
 
   // Filter displayed data by site (client-side filtering)
