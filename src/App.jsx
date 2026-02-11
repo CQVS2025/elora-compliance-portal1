@@ -100,10 +100,17 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        <Route path="/tank-levels" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.TankLevels)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
         <Route path="/refills" element={
           <AuthenticatedRoute>
             <DashboardLayout>
-              <MainPage />
+              {React.createElement(Pages.TankLevels)}
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
@@ -187,6 +194,14 @@ const AuthenticatedApp = () => {
           <SuperAdminRoute>
             <DashboardLayout>
               {React.createElement(Pages['admin/tab-visibility'])}
+            </DashboardLayout>
+          </SuperAdminRoute>
+        } />
+
+        <Route path="/admin/tank-configuration" element={
+          <SuperAdminRoute>
+            <DashboardLayout>
+              {React.createElement(Pages['admin/tank-configuration'])}
             </DashboardLayout>
           </SuperAdminRoute>
         } />

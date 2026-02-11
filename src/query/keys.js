@@ -75,6 +75,19 @@ export const queryKeys = {
       filters,
     ],
     
+    // Tank Levels
+    tankLevels: (companyId, filters = {}) => [
+      'tenant',
+      companyId,
+      'tankLevels',
+      filters,
+    ],
+    sitesWithoutDevices: (companyId) => [
+      'tenant',
+      companyId,
+      'sitesWithoutDevices',
+    ],
+    
     // Dashboard
     dashboard: (companyId, filters = {}) => [
       'tenant',
@@ -172,6 +185,8 @@ export const queryKeys = {
     userPresence: () => ['userPresence'],
     // AI Insights (global settings; predictions/recommendations are tenant-scoped)
     aiSettings: () => ['aiSettings'],
+    // Tank configurations (global, accessible to all authenticated users)
+    tankConfigurations: () => ['tankConfigurations'],
   },
   // AI Insights (tenant-scoped)
   ai: {

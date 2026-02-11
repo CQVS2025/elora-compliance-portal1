@@ -9,7 +9,9 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed:tank-config": "node scripts/seed-tank-config-from-excel.mjs",
+    "seed:tank-config:sql": "node scripts/seed-tank-config-from-excel.mjs --output-sql"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

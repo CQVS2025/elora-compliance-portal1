@@ -12,7 +12,8 @@ const PATH_TO_HEADER = {
   '/Dashboard': { title: 'Compliance', description: 'Fleet compliance overview' },
   '/dashboard': { title: 'Compliance', description: 'Fleet compliance overview' },
   '/usage-costs': { title: 'Usage Costs', description: 'Cost and usage analytics' },
-  '/refills': { title: 'Refills', description: 'Refill management' },
+  '/tank-levels': { title: 'Tank Levels', description: 'Real-time chemical inventory monitoring' },
+  '/refills': { title: 'Tank Levels', description: 'Real-time chemical inventory monitoring' }, // Legacy redirect
   '/device-health': { title: 'Device Health', description: 'Device status' },
   '/sites': { title: 'Sites', description: 'Site management' },
   '/reports': { title: 'Reports', description: 'Reports and exports' },
@@ -30,6 +31,7 @@ const PATH_TO_HEADER = {
   '/admin/companies': { title: 'Company Management', description: 'Manage companies and branding' },
   '/admin/role-management': { title: 'Role Management', description: 'View role definitions and permissions' },
   '/admin/tab-visibility': { title: 'Tab Visibility', description: 'Override which tabs each role can see' },
+  '/admin/tank-configuration': { title: 'Tank Configuration', description: 'Manage tank capacities and calibration settings' },
 };
 
 /** Breadcrumb items for admin section: [ { label, path } ]. path null = current page. */

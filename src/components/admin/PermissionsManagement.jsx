@@ -60,7 +60,7 @@ import { toast } from '@/lib/toast';
 const ALL_TABS = [
   { value: 'compliance', label: 'Compliance', icon: Check },
   { value: 'costs', label: 'Usage Costs', icon: DollarSign },
-  { value: 'refills', label: 'Refills', icon: Truck },
+  { value: 'refills', label: 'Tank Levels', icon: Truck },
   { value: 'devices', label: 'Device Health', icon: Settings },
   { value: 'sites', label: 'Sites', icon: MapPin },
   { value: 'reports', label: 'Reports', icon: FileText },

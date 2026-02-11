@@ -8,7 +8,10 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { DateTime } from 'luxon';
 import { writeFileSync } from 'fs';
+
+const ADELAIDE_ZONE = 'Australia/Adelaide';
 
 // Polyfill fetch for Node.js < 18 or if not available
 if (typeof globalThis.fetch === 'undefined') {
@@ -161,9 +164,18 @@ async function runPipeline() {
 
     log(`✓ Found ${activeCompanies.length} companies to process`);
 
-    // 2. Process TODAY's data only
-    const today = new Date().toISOString().split('T')[0];
-    log(`📅 Processing data for: ${today}`);
+    // 2. Business day = "yesterday" in Australia/Adelaide (end-of-day processing, no DST issues)
+    const processDate = (() => {
+      if (process.env.PROCESS_DATE) {
+        const d = process.env.PROCESS_DATE.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      }
+      const nowAdelaide = DateTime.now().setZone(ADELAIDE_ZONE);
+      const endOfToday = nowAdelaide.startOf('day');
+      const startOfYesterday = endOfToday.minus({ days: 1 });
+      return startOfYesterday.toFormat('yyyy-MM-dd');
+    })();
+    log(`📅 Processing data for: ${processDate} (business day = last completed day in ${ADELAIDE_ZONE})`);
     log('=====================================\n');
 
     // 3. Process each company sequentially
@@ -172,7 +184,7 @@ async function runPipeline() {
       const company = activeCompanies[i];
       log(`\n[${i + 1}/${activeCompanies.length}] ${company.name || company.elora_customer_ref}`);
       
-      const result = await processCompany(company, today, today);
+      const result = await processCompany(company, processDate, processDate);
       results.push(result);
 
       // Delay between companies

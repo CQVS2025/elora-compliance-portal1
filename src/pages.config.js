@@ -8,11 +8,13 @@ import EmailReportSettings from './pages/EmailReportSettings';
 import LoginShadcn from './pages/LoginShadcn';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import TankLevels from './pages/TankLevels';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
 import CompanyManagement from './pages/admin/CompanyManagement';
 import RoleManagementInfo from './pages/admin/RoleManagementInfo';
 import RoleTabSettings from './pages/admin/RoleTabSettings';
+import TankConfiguration from './pages/admin/TankConfiguration';
 import EloraAI from './pages/EloraAI';
 import __Layout from './Layout.jsx';
 
@@ -28,11 +30,13 @@ export const PAGES = {
     "Login": LoginShadcn,
     "Profile": Profile,
     "Settings": Settings,
+    "TankLevels": TankLevels,
     "admin": AdminDashboard,
     "admin/users": UserManagement,
     "admin/companies": CompanyManagement,
     "admin/role-management": RoleManagementInfo,
     "admin/tab-visibility": RoleTabSettings,
+    "admin/tank-configuration": TankConfiguration,
     "EloraAI": EloraAI,
 }
 
