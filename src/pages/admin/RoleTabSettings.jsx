@@ -19,7 +19,7 @@ const EMAIL_REPORT_TYPES = [
 const ALL_TABS = [
   { value: 'compliance', label: 'Compliance' },
   { value: 'costs', label: 'Usage Costs' },
-  { value: 'refills', label: 'Refills' },
+  { value: 'refills', label: 'Tank Levels' },
   { value: 'devices', label: 'Device Health' },
   { value: 'sites', label: 'Sites' },
   { value: 'reports', label: 'Reports' },

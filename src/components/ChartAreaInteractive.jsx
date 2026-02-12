@@ -6,22 +6,30 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { cn } from '@/lib/utils';
 
 const TIME_RANGES = [
-  { value: '7d', label: '7d' },
-  { value: '30d', label: '30d' },
-  { value: '90d', label: '90d' },
+  { value: '7d', label: '7 days' },
+  { value: '14d', label: '14 days' },
+  { value: '30d', label: '30 days' },
+  { value: '60d', label: '60 days' },
+  { value: '90d', label: '90 days' },
+  { value: 'all', label: 'All' },
 ];
 
 /**
  * Interactive area chart for wash frequency trends.
  * data: [{ date, washes }] (e.g. from dashboard washTrendsData).
- * Time range selector filters displayed points (last 7, 30, or 90 entries).
+ * Period selector filters displayed points (last N days or all).
  */
 export default function ChartAreaInteractive({ data = [], className }) {
   const [range, setRange] = useState('30d');
 
   const chartData = useMemo(() => {
     if (!Array.isArray(data) || data.length === 0) return [];
-    const n = range === '7d' ? 7 : range === '30d' ? 30 : 90;
+    if (range === 'all') return data;
+    const days = { '7d': 7, '14d': 14, '30d': 30, '60d': 60, '90d': 90 }[range] ?? 30;
+    // Detect if data is monthly (e.g. "7/2021", "1/2022") vs daily (e.g. "Jan 15", "Feb 12")
+    const firstDate = data[0]?.date ?? '';
+    const isMonthly = /^\d{1,2}\/\d{2,4}$/.test(String(firstDate).trim());
+    const n = isMonthly ? Math.max(1, Math.ceil(days / 30)) : days;
     return data.slice(-n);
   }, [data, range]);
 
@@ -37,14 +45,18 @@ export default function ChartAreaInteractive({ data = [], className }) {
 
   return (
     <Card className={cn('overflow-hidden', className)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base font-medium">Wash frequency</CardTitle>
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2">
+        <div>
+          <CardTitle className="text-base font-medium">Wash Frequency</CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">Washes per day/month in selected period</p>
+        </div>
         <ToggleGroup
           type="single"
           value={range}
           onValueChange={(v) => v && setRange(v)}
           variant="outline"
           size="sm"
+          className="flex flex-wrap justify-end"
         >
           {TIME_RANGES.map((r) => (
             <ToggleGroupItem key={r.value} value={r.value} aria-label={r.label}>

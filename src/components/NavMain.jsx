@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils';
 const ALL_TABS = [
   { value: 'compliance', label: 'Compliance', icon: Home, path: '/' },
   { value: 'costs', label: 'Usage Costs', icon: DollarSign, path: '/usage-costs' },
-  { value: 'refills', label: 'Refills', icon: Droplets, path: '/refills' },
+  { value: 'refills', label: 'Tank Levels', icon: Droplets, path: '/tank-levels' },
   { value: 'devices', label: 'Device Health', icon: Activity, path: '/device-health' },
   { value: 'sites', label: 'Sites', icon: MapPin, path: '/sites' },
   { value: 'reports', label: 'Reports', icon: FileText, path: '/reports' },

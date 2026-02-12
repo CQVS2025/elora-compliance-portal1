@@ -2,8 +2,8 @@ name: Daily AI Insights Processing
 
 on:
   schedule:
-    # Run daily at 6:00 AM Adelaide (19:30 UTC)
-    - cron: '30 19 * * *'
+    # Fixed UTC: 14:00 UTC daily (no DST drift). Business day is computed in code as Australia/Adelaide "yesterday".
+    - cron: '0 14 * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install @supabase/supabase-js node-fetch
+          npm install @supabase/supabase-js node-fetch luxon
 
       - name: Run AI Insights Pipeline
         env:

@@ -7,12 +7,15 @@ import NavUser from '@/components/NavUser';
 import SiteHeader from '@/components/SiteHeader';
 import { useAuth } from '@/lib/AuthContext';
 
+const ELORA_LOGO_URL = 'https://mtjfypwrtvzhnzgatoim.supabase.co/storage/v1/object/public/EloraBucket/company-logos/89d845f5-e06f-4d47-8137-b58c79245a6c/1770066973198-3tv73wrjy56.jpg';
+
 const PATH_TO_HEADER = {
   '/': { title: 'Compliance', description: 'Fleet compliance overview' },
   '/Dashboard': { title: 'Compliance', description: 'Fleet compliance overview' },
   '/dashboard': { title: 'Compliance', description: 'Fleet compliance overview' },
   '/usage-costs': { title: 'Usage Costs', description: 'Cost and usage analytics' },
-  '/refills': { title: 'Refills', description: 'Refill management' },
+  '/tank-levels': { title: 'Tank Levels', description: 'Real-time chemical inventory monitoring' },
+  '/refills': { title: 'Tank Levels', description: 'Real-time chemical inventory monitoring' }, // Legacy redirect
   '/device-health': { title: 'Device Health', description: 'Device status' },
   '/sites': { title: 'Sites', description: 'Site management' },
   '/reports': { title: 'Reports', description: 'Reports and exports' },
@@ -30,6 +33,7 @@ const PATH_TO_HEADER = {
   '/admin/companies': { title: 'Company Management', description: 'Manage companies and branding' },
   '/admin/role-management': { title: 'Role Management', description: 'View role definitions and permissions' },
   '/admin/tab-visibility': { title: 'Tab Visibility', description: 'Override which tabs each role can see' },
+  '/admin/tank-configuration': { title: 'Tank Configuration', description: 'Manage tank capacities and calibration settings' },
 };
 
 /** Breadcrumb items for admin section: [ { label, path } ]. path null = current page. */
@@ -69,24 +73,24 @@ export default function DashboardLayout({ children, title: titleProp, descriptio
                 >
                   <div
                     className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-sidebar-border group-data-[collapsible=icon]:!h-8 group-data-[collapsible=icon]:!w-8 group-data-[collapsible=icon]:!min-h-0 group-data-[collapsible=icon]:!min-w-0 ${
-                      companyLogoUrl
-                        ? 'h-14 w-14 min-h-[3.5rem] min-w-[3.5rem] bg-background'
-                        : 'aspect-square size-9 bg-primary text-primary-foreground'
+                      companyLogoUrl || ELORA_LOGO_URL
+                        ? 'h-20 w-20 min-h-[5rem] min-w-[5rem] bg-background'
+                        : 'aspect-square size-10 bg-primary text-primary-foreground'
                     }`}
                   >
-                    {companyLogoUrl ? (
+                    {(companyLogoUrl || ELORA_LOGO_URL) ? (
                       <img
-                        src={companyLogoUrl}
-                        alt=""
-                        className="h-full w-full object-contain p-1.5 group-data-[collapsible=icon]:p-0.5"
+                        src={companyLogoUrl || ELORA_LOGO_URL}
+                        alt="ELORA"
+                        className="h-full w-full object-contain p-2 group-data-[collapsible=icon]:p-0.5"
                       />
                     ) : (
-                      <Home className="size-4" />
+                      <Home className="size-5" />
                     )}
                   </div>
                   <div className="grid min-w-0 flex-1 gap-0.5 text-left group-data-[collapsible=icon]:hidden">
-                    <span className="truncate text-sm font-semibold leading-snug">Fleet Compliance</span>
-                    <span className="truncate text-xs leading-snug text-muted-foreground">Portal</span>
+                    <span className="truncate text-base font-semibold leading-snug">ELORA</span>
+                    <span className="truncate text-xs leading-snug text-muted-foreground">System</span>
                     {(companyName || isSuperAdmin) && (
                       <>
                         <span className="my-1.5 block h-px w-full shrink-0 bg-sidebar-border" aria-hidden />

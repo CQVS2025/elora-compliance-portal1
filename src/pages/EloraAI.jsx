@@ -709,7 +709,7 @@ export default function EloraAI() {
                   className="h-9"
                 >
                   {runFleetLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                  <span className="ml-2">Process All Vehicles</span>
+                  <span className="ml-2">Run AI Analysis</span>
                 </Button>
               </div>
             </div>
@@ -740,12 +740,12 @@ export default function EloraAI() {
             <Sparkles className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
             <h3 className="text-lg font-semibold mb-2">No insights available yet</h3>
             <p className="text-muted-foreground text-sm max-w-md mx-auto mb-6">
-              Click &quot;Process All Vehicles&quot; to generate AI-powered insights for this customer (all sites). Results will appear here.
+              Click &quot;Run AI Analysis&quot; to generate AI-powered insights for this customer (all sites). Results will appear here.
             </p>
             {canRunFleetAnalysis && (
               <Button onClick={runFleetAnalysisAll} disabled={runFleetLoading}>
                 {runFleetLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
-                Process All Vehicles
+                Run AI Analysis
               </Button>
             )}
           </CardContent>

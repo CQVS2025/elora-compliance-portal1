@@ -90,6 +90,8 @@ export default function DataTable({
   onSearchChange,
   pageSize: controlledPageSize,
   onPageSizeChange,
+  disablePagination = false,
+  footerMessage = null,
   columnVisibility: controlledColumnVisibility,
   onColumnVisibilityChange,
   selectedRowIds,
@@ -134,12 +136,14 @@ export default function DataTable({
     );
   }, [data, search, columns]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
-  const page = Math.min(internalPage, totalPages);
+  const totalPages = disablePagination ? 1 : Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const page = disablePagination ? 1 : Math.min(internalPage, totalPages);
   const paginatedData = useMemo(
     () =>
-      filteredData.slice((page - 1) * pageSize, page * pageSize),
-    [filteredData, page, pageSize]
+      disablePagination
+        ? filteredData
+        : filteredData.slice((page - 1) * pageSize, page * pageSize),
+    [filteredData, page, pageSize, disablePagination]
   );
 
   const toggleColumn = (colId) => {
@@ -318,76 +322,84 @@ export default function DataTable({
           {tableBody}
         </Table>
         <div className="flex items-center justify-between border-t px-4 py-2">
-          <p className="text-sm text-muted-foreground">
-            {filteredData.length} row{filteredData.length !== 1 ? 's' : ''}
-          </p>
-          <div className="flex items-center gap-4">
-            <select
-              className="h-8 rounded-md border border-input bg-background text-foreground px-2 text-sm"
-              value={pageSize}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                setPageSize(v);
-                setInternalPage(1);
-              }}
-            >
-              {PAGE_SIZES.map((s) => (
-                <option key={s} value={s}>
-                  {s} per page
-                </option>
-              ))}
-            </select>
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (page > 1) setInternalPage((p) => p - 1);
-                    }}
-                    className={page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    aria-disabled={page <= 1}
-                  />
-                </PaginationItem>
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter((p) => p === 1 || p === totalPages || (p >= page - 2 && p <= page + 2))
-                  .map((p, i, arr) => (
-                    <React.Fragment key={p}>
-                      {i > 0 && arr[i - 1] !== p - 1 && (
-                        <PaginationItem>
-                          <span className="px-2">…</span>
-                        </PaginationItem>
-                      )}
-                      <PaginationItem>
-                        <PaginationLink
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setInternalPage(p);
-                          }}
-                          isActive={page === p}
-                          className="cursor-pointer"
-                        >
-                          {p}
-                        </PaginationLink>
-                      </PaginationItem>
-                    </React.Fragment>
+          {disablePagination ? (
+            <p className="text-sm text-muted-foreground">
+              {footerMessage ?? `Showing ${filteredData.length} vehicle${filteredData.length !== 1 ? 's' : ''}`}
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {filteredData.length} row{filteredData.length !== 1 ? 's' : ''}
+              </p>
+              <div className="flex items-center gap-4">
+                <select
+                  className="h-8 rounded-md border border-input bg-background text-foreground px-2 text-sm"
+                  value={pageSize}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setPageSize(v);
+                    setInternalPage(1);
+                  }}
+                >
+                  {PAGE_SIZES.map((s) => (
+                    <option key={s} value={s}>
+                      {s} per page
+                    </option>
                   ))}
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (page < totalPages) setInternalPage((p) => p + 1);
-                    }}
-                    className={page >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                    aria-disabled={page >= totalPages}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          </div>
+                </select>
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (page > 1) setInternalPage((p) => p - 1);
+                        }}
+                        className={page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        aria-disabled={page <= 1}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((p) => p === 1 || p === totalPages || (p >= page - 2 && p <= page + 2))
+                      .map((p, i, arr) => (
+                        <React.Fragment key={p}>
+                          {i > 0 && arr[i - 1] !== p - 1 && (
+                            <PaginationItem>
+                              <span className="px-2">…</span>
+                            </PaginationItem>
+                          )}
+                          <PaginationItem>
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setInternalPage(p);
+                              }}
+                              isActive={page === p}
+                              className="cursor-pointer"
+                            >
+                              {p}
+                            </PaginationLink>
+                          </PaginationItem>
+                        </React.Fragment>
+                      ))}
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (page < totalPages) setInternalPage((p) => p + 1);
+                        }}
+                        className={page >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        aria-disabled={page >= totalPages}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

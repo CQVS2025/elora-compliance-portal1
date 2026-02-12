@@ -7,6 +7,7 @@
 
 // User mutations
 export * from './favorites';
+export * from './vehicleLikelihoodOverrides';
 export * from './compliance';
 export * from './preferences';
 
