@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { roleTabSettingsOptions } from '@/query/options';
 import { getDefaultEmailReportTypes } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
-import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, MapPin } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Chart } from 'chart.js/auto';
@@ -71,7 +72,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     report_types: [],
     include_charts: true,
     duration_type: 'months',
-    duration_count: 1
+    duration_count: 1,
+    selectedReportSites: [],
+    selectedReportVehicles: [],
   });
 
   // All report types (filtered by role's allowed types)
@@ -95,6 +98,48 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     ALL_REPORT_TYPES.filter(r => allowedEmailReportTypeIds.includes(r.id)),
     [allowedEmailReportTypeIds]
   );
+
+  // Sites and vehicles for report filter (from dashboard's filtered vehicles)
+  const reportSitesOptions = useMemo(() => {
+    const vehicles = reportData?.filteredVehicles ?? [];
+    const bySite = new Map();
+    vehicles.forEach(v => {
+      const id = v.site_id ?? v.site_name;
+      const name = v.site_name || '—';
+      if (id != null && id !== '' && !bySite.has(String(id))) bySite.set(String(id), { id: String(id), name });
+    });
+    return Array.from(bySite.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [reportData?.filteredVehicles]);
+
+  const reportVehiclesOptions = useMemo(() => {
+    const vehicles = reportData?.filteredVehicles ?? [];
+    return vehicles.map(v => ({
+      id: v.id ?? v.rfid,
+      name: v.name || v.rfid || '—',
+      rfid: v.rfid,
+      site_name: v.site_name,
+    })).filter(v => v.id != null && v.id !== '');
+  }, [reportData?.filteredVehicles]);
+
+  // Vehicles to include in report (after applying site/vehicle filters)
+  const reportVehicles = useMemo(() => {
+    let list = reportData?.filteredVehicles ?? [];
+    if (formData.selectedReportSites.length > 0) {
+      const siteIds = new Set(formData.selectedReportSites);
+      list = list.filter(v => {
+        const sid = v.site_id ?? v.site_name;
+        return sid != null && siteIds.has(String(sid));
+      });
+    }
+    if (formData.selectedReportVehicles.length > 0) {
+      const vehicleIds = new Set(formData.selectedReportVehicles);
+      list = list.filter(v => {
+        const vid = v.id ?? v.rfid;
+        return vid != null && vehicleIds.has(String(vid));
+      });
+    }
+    return list;
+  }, [reportData?.filteredVehicles, formData.selectedReportSites, formData.selectedReportVehicles]);
 
   // Update form when preferences load (filter report_types to allowed for this role)
   useEffect(() => {
@@ -279,11 +324,41 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         includeCharts: formData.include_charts
       });
 
+      // Build report data with site/vehicle filters applied
+      let dataToSend = reportData;
+      if (reportData && (formData.selectedReportSites.length > 0 || formData.selectedReportVehicles.length > 0)) {
+        const vehicles = reportVehicles;
+        const targetDefault = 12;
+        const compliantCount = vehicles.filter(v => (v.washes_completed ?? 0) >= (v.target ?? targetDefault)).length;
+        const totalWashes = vehicles.reduce((sum, v) => sum + (v?.washes_completed || 0), 0);
+        const activeDriversCount = vehicles.filter(v => v?.washes_completed > 0).length;
+        dataToSend = {
+          ...reportData,
+          filteredVehicles: vehicles,
+          stats: {
+            ...reportData.stats,
+            totalVehicles: vehicles.length,
+            complianceRate: vehicles.length > 0 ? Math.round((compliantCount / vehicles.length) * 100) : 0,
+            monthlyWashes: totalWashes,
+            activeDrivers: activeDriversCount,
+            complianceLikelihood: vehicles.length > 0 ? (() => {
+              const criticalCount = vehicles.filter(v => (v.washes_completed ?? 0) === 0).length;
+              const atRiskCount = vehicles.length - compliantCount - criticalCount;
+              return {
+                onTrackPct: Math.round((compliantCount / vehicles.length) * 100),
+                atRiskPct: Math.round((atRiskCount / vehicles.length) * 100),
+                criticalPct: Math.round((criticalCount / vehicles.length) * 100),
+              };
+            })() : { onTrackPct: 0, atRiskPct: 0, criticalPct: 0 },
+          },
+        };
+      }
+
       await supabaseClient.reports.send({
         userEmail,
         reportTypes: effectiveReportTypes,
         includeCharts: formData.include_charts,
-        reportData: reportData || null
+        reportData: dataToSend || null
       });
 
       setSuccessMessage(`Report sent successfully to ${userEmail}! Check your email inbox.`);
@@ -321,11 +396,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     return doc.body?.innerHTML || html;
   };
 
-  const generateChartImage = async (type, data, primaryColor) => {
-    // Create a temporary canvas for the chart
+  const generateChartImage = async (type, data, primaryColor, compact = false) => {
     const canvas = document.createElement('canvas');
-    canvas.width = 400;
-    canvas.height = 250;
+    canvas.width = compact ? 260 : 400;
+    canvas.height = compact ? 130 : 250;
 
     const ctx = canvas.getContext('2d');
 
@@ -349,14 +423,14 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         },
         options: {
           responsive: false,
-          cutout: '60%',
+          cutout: compact ? '55%' : '60%',
           plugins: {
             title: { display: false },
             legend: {
               position: 'bottom',
               labels: {
-                font: { size: 12 },
-                padding: 16,
+                font: { size: compact ? 10 : 12 },
+                padding: compact ? 8 : 16,
                 usePointStyle: true
               }
             }
@@ -423,6 +497,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     const selectedReports = [...new Set(
       requested.filter(id => allowedEmailReportTypeIds.includes(id))
     )];
+    const isComplianceOnly = selectedReports.length === 1 && selectedReports.includes('compliance');
 
     // Use client branding if provided, otherwise use default colors
     const primaryColor = clientBranding?.primary_color || 'hsl(var(--primary))';
@@ -430,28 +505,28 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     const companyName = clientBranding?.company_name || 'ELORA';
     const logoUrl = clientBranding?.logo_url || null;
 
-    // Section spacing - gap between Compliance and Cost & Usage
+    const pad = isComplianceOnly ? { card: '10px', cardVal: '22px', cardLabel: '10px' } : { card: '20px', cardVal: '32px', cardLabel: '12px' };
     const section = (title, content, startNewPage = false) => `
-      ${startNewPage ? '<div style="height: 96px;"></div>' : ''}
-      <div style="margin: ${startNewPage ? '0' : '30px'} 0 20px 0; page-break-inside: avoid;">
-        <h2 style="color: #0f172a; font-size: 24px; font-weight: 700; margin: 0 0 12px 0; font-family: Arial, sans-serif;">
+      ${startNewPage ? '<div style="height: 140px;" aria-hidden="true"></div>' : ''}
+      <div style="margin: ${startNewPage ? '0' : (isComplianceOnly ? '0' : '30px')} 0 ${isComplianceOnly ? '8px' : '20px'} 0; padding-top: ${startNewPage ? '24px' : '0'};">
+        <h2 style="color: #0f172a; font-size: ${isComplianceOnly ? '18px' : '24px'}; font-weight: 700; margin: 0 0 ${isComplianceOnly ? '6px' : '12px'} 0; font-family: Arial, sans-serif;">
           ${title}
         </h2>
-        <div style="height: 3px; width: 60px; background: ${primaryColor}; margin-bottom: 20px;"></div>
+        <div style="height: 2px; width: 40px; background: ${primaryColor}; margin-bottom: ${isComplianceOnly ? '10px' : '20px'};"></div>
       </div>
       ${content}
     `;
 
     const metricCard = (label, value, subtitle, color = primaryColor) => `
-      <div style="background: white; border-radius: 8px; padding: 20px; margin-bottom: 15px; border-left: 4px solid ${color}; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
-        <div style="color: #334155; font-size: 12px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; font-family: Arial, sans-serif;">${label}</div>
-        <div style="color: #0f172a; font-size: 32px; font-weight: 700; margin-bottom: 4px; font-family: Arial, sans-serif;">${value}</div>
-        <div style="color: #64748b; font-size: 13px; font-family: Arial, sans-serif;">${subtitle}</div>
+      <div style="background: white; border-radius: 6px; padding: ${pad.card}; margin-bottom: ${isComplianceOnly ? '8px' : '15px'}; border-left: 3px solid ${color}; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);">
+        <div style="color: #334155; font-size: ${pad.cardLabel}px; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">${label}</div>
+        <div style="color: #0f172a; font-size: ${pad.cardVal}px; font-weight: 700; margin-bottom: 2px; font-family: Arial, sans-serif;">${value}</div>
+        <div style="color: #64748b; font-size: ${isComplianceOnly ? '11px' : '13px'}; font-family: Arial, sans-serif;">${subtitle}</div>
       </div>
     `;
 
     const twoColumnMetrics = (leftCard, rightCard) => `
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: ${isComplianceOnly ? '8px' : '20px'};">
         <tr>
           <td width="48%" style="vertical-align: top;">${leftCard}</td>
           <td width="4%"></td>
@@ -460,8 +535,8 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       </table>
     `;
 
-    let content = `
-      <p style="color: #64748b; font-size: 15px; line-height: 1.6; margin: 0 0 30px 0; font-family: Arial, sans-serif;">
+    let content = isComplianceOnly ? '' : `
+      <p style="color: #64748b; font-size: 15px; line-height: 1.5; margin: 0 0 30px 0; font-family: Arial, sans-serif;">
         ${reportData ? 'This PDF was generated from your current fleet data.' : 'This PDF was generated from your current report selections. Live data could not be loaded, so placeholder values are shown.'}
       </p>
     `;
@@ -477,10 +552,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
             const chartImage = await generateChartImage('compliance', {
               compliant: complianceData.compliantVehicles || 0,
               atRisk: complianceData.atRiskVehicles || 0
-            }, primaryColor);
+            }, primaryColor, isComplianceOnly);
             chartHtml = `
-              <div style="text-align: center; margin: 20px 0; page-break-inside: avoid;">
-                <img src="${chartImage}" style="max-width: 400px; height: auto;" alt="Compliance Chart" />
+              <div style="text-align: center; margin: ${isComplianceOnly ? '8px' : '20px'} 0; page-break-inside: avoid;">
+                <img src="${chartImage}" style="max-width: ${isComplianceOnly ? '260px' : '400px'}; height: auto;" alt="Compliance Chart" />
               </div>
             `;
           } catch (error) {
@@ -488,22 +563,38 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           }
         }
 
+        const likelihood = complianceData.complianceLikelihood;
+        const likelihoodSection = likelihood ? `
+          <div style="background: #f8fafc; border-radius: 6px; padding: ${isComplianceOnly ? '10px' : '16px'}; margin: ${isComplianceOnly ? '8px' : '16px'} 0; page-break-inside: avoid;">
+            <div style="color: #334155; font-size: ${isComplianceOnly ? '10px' : '12px'}; font-weight: 600; margin-bottom: ${isComplianceOnly ? '6px' : '12px'}; text-transform: uppercase; letter-spacing: 1px;">Likelihood Status</div>
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td width="33%" style="vertical-align: top; padding-right: 8px;">
+                <div style="background: #dcfce7; color: #166534; padding: ${isComplianceOnly ? '6px 8px' : '8px 12px'}; border-radius: 6px; font-weight: 600; font-size: ${isComplianceOnly ? '14px' : '18px'};">${likelihood.onTrackPct ?? 0}%</div>
+                <div style="color: #64748b; font-size: 10px; margin-top: 2px;">On Track</div>
+              </td>
+              <td width="33%" style="vertical-align: top; padding: 0 4px;">
+                <div style="background: #fef3c7; color: #92400e; padding: ${isComplianceOnly ? '6px 8px' : '8px 12px'}; border-radius: 6px; font-weight: 600; font-size: ${isComplianceOnly ? '14px' : '18px'};">${likelihood.atRiskPct ?? 0}%</div>
+                <div style="color: #64748b; font-size: 10px; margin-top: 2px;">At Risk</div>
+              </td>
+              <td width="33%" style="vertical-align: top; padding-left: 8px;">
+                <div style="background: #fee2e2; color: #991b1b; padding: ${isComplianceOnly ? '6px 8px' : '8px 12px'}; border-radius: 6px; font-weight: 600; font-size: ${isComplianceOnly ? '14px' : '18px'};">${likelihood.criticalPct ?? 0}%</div>
+                <div style="color: #64748b; font-size: 10px; margin-top: 2px;">Critical</div>
+              </td>
+            </tr></table>
+          </div>
+        ` : '';
+
         content += section('Compliance Overview',
           twoColumnMetrics(
             metricCard('COMPLIANCE RATE', `${complianceData.averageCompliance || 0}%`, '% of vehicles meeting target', primaryColor),
             metricCard('TOTAL VEHICLES', `${complianceData.totalVehicles || 0}`, 'In your fleet', secondaryColor)
           ) +
           twoColumnMetrics(
-            metricCard('COMPLIANT', `${complianceData.compliantVehicles || 0}`, '≥80% compliance', primaryColor),
-            metricCard('AT RISK', `${complianceData.atRiskVehicles || 0}`, '<80% compliance', '#ef4444')
+            metricCard('COMPLIANT', `${complianceData.compliantVehicles || 0}`, 'Meeting target', primaryColor),
+            metricCard('AT RISK', `${complianceData.atRiskVehicles || 0}`, 'Below target', '#ef4444')
           ) +
-          chartHtml +
-          (complianceData.alerts && complianceData.alerts.length > 0 ? complianceData.alerts.map(alert => `
-            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 20px; margin: 20px 0; page-break-inside: avoid;">
-              <h4 style="color: #92400e; font-size: 15px; font-weight: 600; margin: 0 0 8px 0; font-family: Arial, sans-serif;">${alert.title}</h4>
-              <p style="color: #92400e; font-size: 13px; margin: 0; line-height: 1.6; font-family: Arial, sans-serif;">${alert.message}</p>
-            </div>
-          `).join('') : '')
+          (likelihoodSection || '') +
+          chartHtml
         );
       } else {
         content += section('Compliance Overview',
@@ -511,9 +602,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
             metricCard('AVERAGE COMPLIANCE', '—', 'Awaiting live data', primaryColor),
             metricCard('TOTAL VEHICLES', '—', 'Awaiting live data', secondaryColor)
           ) + `
-          <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 20px; margin: 20px 0;">
-            <h4 style="color: #92400e; font-size: 15px; font-weight: 600; margin: 0 0 8px 0; font-family: Arial, sans-serif;">Data Pending</h4>
-            <p style="color: #92400e; font-size: 13px; margin: 0; line-height: 1.6; font-family: Arial, sans-serif;">Connect to live data sources to populate compliance metrics.</p>
+          <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: ${isComplianceOnly ? '12px' : '20px'}; margin: ${isComplianceOnly ? '8px' : '20px'} 0;">
+            <h4 style="color: #92400e; font-size: ${isComplianceOnly ? '13px' : '15px'}; font-weight: 600; margin: 0 0 4px 0; font-family: Arial, sans-serif;">Data Pending</h4>
+            <p style="color: #92400e; font-size: ${isComplianceOnly ? '11px' : '13px'}; margin: 0; line-height: 1.5; font-family: Arial, sans-serif;">Connect to live data sources to populate compliance metrics.</p>
           </div>
         `);
       }
@@ -567,6 +658,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       }
     }
 
+    const headerPad = isComplianceOnly ? '16px 16px' : '40px 20px';
+    const contentPad = isComplianceOnly ? '16px 24px' : '40px 35px';
+    const footerPad = isComplianceOnly ? '12px 16px' : '25px 20px';
     return `
       <!DOCTYPE html>
       <html lang="en">
@@ -576,26 +670,26 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         <title>Fleet Compliance Report - ${companyName}</title>
       </head>
       <body style="margin: 0; padding: 0; background: #f1f5f9; font-family: Arial, sans-serif;">
-        <div style="width: 700px; margin: 30px auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%); padding: 40px 20px; text-align: center; border-radius: 12px 12px 0 0;">
+        <div style="width: 700px; margin: ${isComplianceOnly ? '12px' : '30px'} auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%); padding: ${headerPad}; text-align: center; border-radius: 12px 12px 0 0;">
             ${logoUrl ? `
-              <img src="${logoUrl}" alt="${companyName}" style="height: 60px; object-fit: contain; margin-bottom: 16px; display: inline-block;" />
+              <img src="${logoUrl}" alt="${companyName}" style="height: ${isComplianceOnly ? '36px' : '60px'}; object-fit: contain; margin-bottom: ${isComplianceOnly ? '8px' : '16px'}; display: inline-block;" />
             ` : ''}
-            <h1 style="color: white; margin: 0; font-size: 36px; font-weight: 700; font-family: Arial, sans-serif; letter-spacing: 2px;">
+            <h1 style="color: white; margin: 0; font-size: ${isComplianceOnly ? '24px' : '36px'}; font-weight: 700; font-family: Arial, sans-serif; letter-spacing: 2px;">
               ${companyName}
             </h1>
-            <p style="color: rgba(255, 255, 255, 0.95); margin: 12px 0 0 0; font-size: 16px; font-family: Arial, sans-serif; letter-spacing: 0.5px;">
+            <p style="color: rgba(255, 255, 255, 0.95); margin: ${isComplianceOnly ? '4px' : '12px'} 0 0 0; font-size: ${isComplianceOnly ? '12px' : '16px'}; font-family: Arial, sans-serif; letter-spacing: 0.5px;">
               Compliance Portal Report
             </p>
           </div>
-          <div style="padding: 40px 35px;">
+          <div style="padding: ${contentPad};">
             ${content}
           </div>
-          <div style="background: #f8fafc; padding: 25px 20px; text-align: center; border-radius: 0 0 12px 12px; border-top: 2px solid #e2e8f0;">
-            <p style="color: #64748b; font-size: 13px; margin: 0 0 8px 0; font-family: Arial, sans-serif;">
+          <div style="background: #f8fafc; padding: ${footerPad}; text-align: center; border-radius: 0 0 12px 12px; border-top: 2px solid #e2e8f0;">
+            <p style="color: #64748b; font-size: ${isComplianceOnly ? '11px' : '13px'}; margin: 0 0 4px 0; font-family: Arial, sans-serif;">
               This is a ${reportData ? '' : 'preview '}PDF generated from your current settings.
             </p>
-            <p style="color: #94a3b8; font-size: 11px; margin: 0; font-family: Arial, sans-serif;">
+            <p style="color: #94a3b8; font-size: 10px; margin: 0; font-family: Arial, sans-serif;">
               © ${new Date().getFullYear()} ${companyName}. All rights reserved.
             </p>
           </div>
@@ -661,34 +755,39 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         };
       }
 
-      // Use reportData from Dashboard (same data as email) - matches UI stats
+      // Use reportData from Dashboard, applying site/vehicle filters (reportVehicles)
       let reportDataForPdf = null;
-      if (reportData?.stats && reportData?.filteredVehicles) {
-        const { stats, filteredVehicles, dateRange } = reportData;
-        const vehicles = filteredVehicles || [];
-        const compliantCount = vehicles.filter(v => (v.washes_completed ?? 0) >= (v.target ?? 12)).length;
-        const atRiskCount = vehicles.length - compliantCount;
+      const vehiclesForReport = reportVehicles;
+      if (reportData?.stats && (vehiclesForReport.length > 0 || reportData?.filteredVehicles)) {
+        const { stats, dateRange } = reportData;
+        const vehicles = vehiclesForReport;
+        const targetDefault = 12;
+        const compliantCount = vehicles.filter(v => (v.washes_completed ?? 0) >= (v.target ?? targetDefault)).length;
+        const criticalCount = vehicles.filter(v => (v.washes_completed ?? 0) === 0).length;
+        const atRiskCount = vehicles.length - compliantCount - criticalCount;
+        const totalWashes = vehicles.reduce((sum, v) => sum + (v?.washes_completed || 0), 0);
+        const activeDriversCount = vehicles.filter(v => v?.washes_completed > 0).length;
 
         reportDataForPdf = {
           compliance: {
             summary: {
-              averageCompliance: stats.complianceRate ?? 0,
-              totalVehicles: stats.totalVehicles ?? vehicles.length,
+              averageCompliance: vehicles.length > 0 ? Math.round((compliantCount / vehicles.length) * 100) : 0,
+              totalVehicles: vehicles.length,
               compliantVehicles: compliantCount,
-              atRiskVehicles: atRiskCount,
-              alerts: atRiskCount > 0 ? [{
-                title: 'Low Compliance Alert',
-                message: `${atRiskCount} vehicle(s) are below the compliance threshold and require attention.`,
-                type: 'warning'
-              }] : []
+              atRiskVehicles: atRiskCount + criticalCount,
+              complianceLikelihood: vehicles.length > 0 ? {
+                onTrackPct: Math.round((compliantCount / vehicles.length) * 100),
+                atRiskPct: Math.round((atRiskCount / vehicles.length) * 100),
+                criticalPct: Math.round((criticalCount / vehicles.length) * 100),
+              } : { onTrackPct: 0, atRiskPct: 0, criticalPct: 0 }
             }
           },
           costs: {
             summary: {
               totalCost: 0,
               monthlyAverage: 0,
-              totalWashes: stats.monthlyWashes ?? 0,
-              activeDrivers: stats.activeDrivers ?? 0,
+              totalWashes,
+              activeDrivers: activeDriversCount,
               recordCount: 0
             }
           }
@@ -934,6 +1033,142 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         </CardContent>
       </Card>
 
+      {/* Filter by Site & Vehicle */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-base">Filter report data</CardTitle>
+          </div>
+          <CardDescription>
+            Optionally narrow the report to specific sites or vehicles. Leave empty to include all data from the filters above.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Filter by Site</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between font-normal"
+                  >
+                    {formData.selectedReportSites.length === 0
+                      ? 'All sites'
+                      : formData.selectedReportSites.length === 1
+                        ? (reportSitesOptions.find(s => s.id === formData.selectedReportSites[0])?.name ?? '1 site')
+                        : `${formData.selectedReportSites.length} sites`}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0" align="start">
+                  <div className="max-h-[240px] overflow-y-auto p-2">
+                    {reportSitesOptions.length === 0 ? (
+                      <p className="py-4 text-center text-sm text-muted-foreground">No sites available</p>
+                    ) : (
+                      reportSitesOptions.map((site) => (
+                        <label
+                          key={site.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+                        >
+                          <Checkbox
+                            checked={formData.selectedReportSites.includes(site.id)}
+                            onCheckedChange={(checked) => {
+                              setFormData(prev => ({
+                                ...prev,
+                                selectedReportSites: checked
+                                  ? [...prev.selectedReportSites, site.id]
+                                  : prev.selectedReportSites.filter(id => id !== site.id),
+                              }));
+                            }}
+                          />
+                          {site.name}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  {formData.selectedReportSites.length > 0 && (
+                    <div className="border-t p-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={() => setFormData(prev => ({ ...prev, selectedReportSites: [] }))}
+                      >
+                        Clear selection
+                      </Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Filter by Vehicle</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between font-normal"
+                  >
+                    {formData.selectedReportVehicles.length === 0
+                      ? 'All vehicles'
+                      : formData.selectedReportVehicles.length === 1
+                        ? (reportVehiclesOptions.find(v => String(v.id) === formData.selectedReportVehicles[0])?.name ?? formData.selectedReportVehicles[0])
+                        : `${formData.selectedReportVehicles.length} vehicles`}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0" align="start">
+                  <div className="max-h-[240px] overflow-y-auto p-2">
+                    {reportVehiclesOptions.length === 0 ? (
+                      <p className="py-4 text-center text-sm text-muted-foreground">No vehicles available</p>
+                    ) : (
+                      reportVehiclesOptions.map((v) => (
+                        <label
+                          key={v.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+                        >
+                          <Checkbox
+                            checked={formData.selectedReportVehicles.includes(String(v.id))}
+                            onCheckedChange={(checked) => {
+                              setFormData(prev => ({
+                                ...prev,
+                                selectedReportVehicles: checked
+                                  ? [...prev.selectedReportVehicles, String(v.id)]
+                                  : prev.selectedReportVehicles.filter(id => id !== String(v.id)),
+                              }));
+                            }}
+                          />
+                          <span className="truncate">{v.name}{v.site_name ? ` · ${v.site_name}` : ''}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  {formData.selectedReportVehicles.length > 0 && (
+                    <div className="border-t p-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={() => setFormData(prev => ({ ...prev, selectedReportVehicles: [] }))}
+                      >
+                        Clear selection
+                      </Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+          {reportVehicles.length > 0 && (formData.selectedReportSites.length > 0 || formData.selectedReportVehicles.length > 0) && (
+            <p className="text-xs text-muted-foreground">
+              Report will include {reportVehicles.length} vehicle{reportVehicles.length !== 1 ? 's' : ''}.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Report types */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -1079,7 +1314,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         style={{
           position: 'fixed',
           width: '820px',
-          minHeight: pdfHtml ? '1000px' : '0px',
+          minHeight: pdfHtml
+            ? (formData.report_types.length === 1 && formData.report_types.includes('compliance') ? '550px' : '1000px')
+            : '0px',
           padding: '24px',
           background: '#f1f5f9',
           top: '-99999px',
@@ -1097,7 +1334,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       <Alert className="border-border bg-muted/30">
         <Info className="h-4 w-4 text-muted-foreground" />
         <AlertDescription>
-          The report uses the date range and filters (customer, site) selected above. Reports will be sent to{' '}
+          The report uses the date range and filters (customer, site) from the dashboard above. You can further narrow by specific sites or vehicles in the filter section. Reports will be sent to{' '}
           <strong className="text-foreground">{userEmail || 'your email'}</strong>.
         </AlertDescription>
       </Alert>

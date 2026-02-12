@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import { useLocation } from 'react-router-dom';
 import { Loader2, Trophy, ChevronRight, AlertTriangle, Download, Check, X } from 'lucide-react';
+import VehicleLikelihoodCell from '@/components/dashboard/VehicleLikelihoodCell';
 import { motion, AnimatePresence } from 'framer-motion';
 import moment from 'moment';
 import { Link } from 'react-router-dom';
@@ -13,7 +15,9 @@ import {
   vehiclesOptions,
   dashboardOptions,
   refillsOptions,
+  vehicleLikelihoodOverridesOptions,
 } from '@/query/options';
+import { useSetVehicleLikelihood } from '@/query/mutations';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -149,6 +153,7 @@ export default function Dashboard() {
 
   // Single shared filter state - same customer, site, and date range across all navigation tabs
   const [sharedFilters, setSharedFilters] = useState(getDefaultFilters);
+  const { selectedCustomer, selectedSite, dateRange, activePeriod } = sharedFilters;
 
   // Use database-driven tab visibility from permissions (for filter/access checks)
   const availableTabs = useAvailableTabs(ALL_TABS);
@@ -160,7 +165,28 @@ export default function Dashboard() {
   // Get tenant context (company_id) from user profile for query keys
   const companyId = permissions.userProfile?.company_id;
 
-  const { selectedCustomer, selectedSite, dateRange, activePeriod } = sharedFilters;
+  // For super_admin viewing a specific customer, resolve company_id from elora_customer_ref
+  const { data: companyForCustomer } = useQuery({
+    queryKey: ['companyForEloraCustomer', selectedCustomer],
+    queryFn: async () => {
+      if (!selectedCustomer || selectedCustomer === 'all') return null;
+      const { data } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('elora_customer_ref', selectedCustomer)
+        .single();
+      return data?.id ?? null;
+    },
+    enabled: !companyId && !!selectedCustomer && selectedCustomer !== 'all' && !!permissions.isSuperAdmin,
+  });
+
+  const effectiveCompanyIdForLikelihood = companyId ?? companyForCustomer ?? null;
+
+  const { data: likelihoodOverrides = {} } = useQuery(
+    vehicleLikelihoodOverridesOptions(effectiveCompanyIdForLikelihood)
+  );
+
+  const setLikelihoodMutation = useSetVehicleLikelihood(effectiveCompanyIdForLikelihood);
 
   // Update shared filters (applies to all tabs)
   const updateSharedFilter = useCallback((updates) => {
@@ -209,7 +235,7 @@ export default function Dashboard() {
   );
 
   // Fetch ALL vehicles with filters and placeholderData to prevent flashing
-  const { data: allVehicles = [], isLoading: vehiclesLoading, isFetching: vehiclesFetching, error: vehiclesError } = useQuery({
+  const { data: allVehicles = [], isLoading: vehiclesLoading, isFetching: vehiclesFetching, dataUpdatedAt: vehiclesUpdatedAt, error: vehiclesError } = useQuery({
     ...vehiclesOptions(companyId, {
       customerId: selectedCustomer !== 'all' ? selectedCustomer : undefined,
       siteId: selectedSite !== 'all' ? selectedSite : undefined,
@@ -217,7 +243,7 @@ export default function Dashboard() {
     placeholderData: (previousData) => previousData, // Keep previous data while refetching
   });
 
-  const { data: dashboardData, isLoading: dashboardLoading, isFetching: dashboardFetching, error: dashboardError } = useQuery({
+  const { data: dashboardData, isLoading: dashboardLoading, isFetching: dashboardFetching, dataUpdatedAt: dashboardUpdatedAt, error: dashboardError } = useQuery({
     ...dashboardOptions(companyId, {
       customerId: selectedCustomer,
       siteId: selectedSite,
@@ -227,8 +253,22 @@ export default function Dashboard() {
     placeholderData: (previousData) => previousData, // Keep previous data while refetching
   });
 
+  // Extended dashboard fetch (last 90 days) for Wash Frequency chart so period filter (7d–90d) has data
+  const washChartEnd = moment(dateRange.end);
+  const washChartStart = moment(dateRange.end).subtract(89, 'days');
+  const { data: washChartDashboardData } = useQuery({
+    ...dashboardOptions(companyId, {
+      customerId: selectedCustomer,
+      siteId: selectedSite,
+      startDate: washChartStart.format('YYYY-MM-DD'),
+      endDate: washChartEnd.format('YYYY-MM-DD'),
+    }),
+    placeholderData: (previousData) => previousData,
+    enabled: FILTER_TABS.includes(activeTab),
+  });
+
   // Fetch ALL refills (no date range limit) - includes past and future scheduled refills
-  const { data: refills = [], isFetching: refillsFetching } = useQuery({
+  const { data: refills = [], isFetching: refillsFetching, dataUpdatedAt: refillsUpdatedAt } = useQuery({
     ...refillsOptions(companyId, {
       customerRef: selectedCustomer !== 'all' ? selectedCustomer : undefined,
       siteRef: selectedSite !== 'all' ? selectedSite : undefined,
@@ -238,6 +278,9 @@ export default function Dashboard() {
 
   // Show spinner when filters trigger refetch (only for tabs that use this data)
   const isFiltersFetching = (vehiclesFetching || dashboardFetching || refillsFetching) && FILTER_TABS.includes(activeTab);
+
+  // Last sync timestamp for signal indicator (max of relevant query updates)
+  const lastSyncedAt = Math.max(vehiclesUpdatedAt ?? 0, dashboardUpdatedAt ?? 0, refillsUpdatedAt ?? 0) || null;
 
   const processedData = useMemo(() => {
     // Start with ALL vehicles from vehicles API
@@ -455,23 +498,63 @@ export default function Dashboard() {
     return result;
   }, [scans, selectedCustomer, selectedSite, permissionFilteredSites, filteredVehicles]);
 
-  const washTrendsData = useMemo(() => {
-    if (!dashboardData?.charts?.totalWashesByMonth?.length) {
-      if (!filteredScans || !Array.isArray(filteredScans) || filteredScans.length === 0) return [];
+  // Scans from extended 90-day dashboard for Wash Frequency chart (so 7d–90d period filter has data)
+  const washChartScans = useMemo(() => {
+    const raw = [];
+    if (washChartDashboardData?.rows && Array.isArray(washChartDashboardData.rows)) {
+      washChartDashboardData.rows.forEach(row => {
+        if (row.totalScans > 0 && row.lastScan) {
+          raw.push({
+            vehicleRef: row.vehicleRef,
+            siteRef: row.siteRef,
+            siteName: row.siteName,
+            timestamp: row.lastScan,
+          });
+        }
+      });
+    }
+    let result = raw;
+    if (permissionFilteredSites.length === 0 && filteredVehicles?.length > 0) {
+      const accessibleVehicleRefs = new Set(
+        filteredVehicles.map(v => v.id || v.rfid).filter(Boolean)
+      );
+      result = result.filter(s => accessibleVehicleRefs.has(s.vehicleRef));
+    } else if (permissionFilteredSites.length > 0) {
+      const accessibleSiteIds = permissionFilteredSites.map(s => s.id);
+      result = result.filter(s => accessibleSiteIds.includes(s.siteRef));
+      if (selectedCustomer && selectedCustomer !== 'all') {
+        const customerSiteIds = permissionFilteredSites
+          .filter(s => s.customer_ref === selectedCustomer)
+          .map(s => s.id);
+        result = result.filter(s => customerSiteIds.includes(s.siteRef));
+      }
+      if (selectedSite && selectedSite !== 'all') {
+        result = result.filter(s => s.siteRef === selectedSite);
+      }
+    }
+    return result;
+  }, [washChartDashboardData, selectedCustomer, selectedSite, permissionFilteredSites, filteredVehicles]);
 
+  const washTrendsData = useMemo(() => {
+    // Use extended 90-day scans when available so chart period filter (7d–90d) shows correct x-axis range
+    const scansToUse = washChartScans?.length > 0 ? washChartScans : filteredScans;
+    const chartStart = washChartScans?.length > 0
+      ? moment(dateRange.end).subtract(89, 'days')
+      : moment(dateRange.start);
+    const chartEnd = moment(dateRange.end);
+    const maxDays = washChartScans?.length > 0 ? 90 : Math.min(chartEnd.diff(chartStart, 'days') + 1, 90);
+
+    if (scansToUse && Array.isArray(scansToUse) && scansToUse.length > 0) {
       const scansByDate = {};
-      filteredScans.forEach(scan => {
+      scansToUse.forEach(scan => {
         const date = moment(scan.timestamp).format('MMM D');
         scansByDate[date] = (scansByDate[date] || 0) + 1;
       });
 
       const days = [];
-      const start = moment(dateRange.start);
-      const end = moment(dateRange.end);
-      const diff = end.diff(start, 'days');
-
-      for (let i = 0; i <= Math.min(diff, 30); i++) {
-        const date = moment(start).add(i, 'days');
+      const diff = chartEnd.diff(chartStart, 'days');
+      for (let i = 0; i <= Math.min(diff, maxDays - 1); i++) {
+        const date = moment(chartStart).add(i, 'days');
         const dateKey = date.format('MMM D');
         days.push({
           date: dateKey,
@@ -481,25 +564,42 @@ export default function Dashboard() {
       return days;
     }
 
-    return dashboardData.charts.totalWashesByMonth.map(item => ({
-      date: `${item.month}/${item.year}`,
-      washes: item.totalWashes || 0
-    }));
-  }, [dashboardData, filteredScans, dateRange]);
+    // Fallback to monthly data when no scan data
+    if (!dashboardData?.charts?.totalWashesByMonth?.length) return [];
+
+    const start = moment(dateRange.start);
+    const end = moment(dateRange.end);
+    return dashboardData.charts.totalWashesByMonth
+      .filter(item => {
+        const monthDate = moment({ year: item.year, month: (item.month || 1) - 1, date: 1 });
+        return !monthDate.isBefore(start, 'month') && !monthDate.isAfter(end, 'month');
+      })
+      .map(item => ({
+        date: `${item.month}/${item.year}`,
+        washes: item.totalWashes || 0
+      }));
+  }, [dashboardData, filteredScans, washChartScans, dateRange]);
 
   const stats = useMemo(() => {
     const vehicles = Array.isArray(filteredVehicles) ? filteredVehicles : [];
-    const compliantCount = vehicles.filter(v => v && v.washes_completed >= v.target).length;
+    const targetDefault = 12;
+    const onTrackCount = vehicles.filter(v => v && (v.washes_completed ?? 0) >= (v.target ?? targetDefault)).length;
+    const criticalCount = vehicles.filter(v => v && (v.washes_completed ?? 0) === 0).length;
+    const atRiskCount = vehicles.length - onTrackCount - criticalCount;
     const totalWashes = vehicles.reduce((sum, v) => sum + (v?.washes_completed || 0), 0);
     const activeDriversCount = vehicles.filter(v => v && v.washes_completed > 0).length;
 
+    const total = vehicles.length;
     return {
-      totalVehicles: vehicles.length,
-      complianceRate: vehicles.length > 0
-        ? Math.round((compliantCount / vehicles.length) * 100)
-        : 0,
+      totalVehicles: total,
+      complianceRate: total > 0 ? Math.round((onTrackCount / total) * 100) : 0,
       monthlyWashes: totalWashes,
       activeDrivers: activeDriversCount,
+      complianceLikelihood: total > 0 ? {
+        onTrackPct: Math.round((onTrackCount / total) * 100),
+        atRiskPct: Math.round((atRiskCount / total) * 100),
+        criticalPct: Math.round((criticalCount / total) * 100),
+      } : { onTrackPct: 0, atRiskPct: 0, criticalPct: 0 },
     };
   }, [filteredVehicles]);
 
@@ -536,6 +636,18 @@ export default function Dashboard() {
     return list;
   }, [filteredVehicles, complianceStatusFilter, complianceSiteFilter]);
 
+  const handleLikelihoodOverride = useCallback(
+    (vehicleRef, value) => {
+      if (!effectiveCompanyIdForLikelihood) return;
+      setLikelihoodMutation.mutate({
+        vehicleRef,
+        likelihood: value,
+        userEmail: permissions.user?.email,
+      });
+    },
+    [effectiveCompanyIdForLikelihood, setLikelihoodMutation, permissions.user?.email]
+  );
+
   const exportComplianceCSV = useCallback(() => {
     const reportData = complianceFilteredVehicles.map((v) => ({
       Vehicle: v.name ?? '—',
@@ -567,8 +679,8 @@ export default function Dashboard() {
 
   // Must be called unconditionally (before any early return) to satisfy Rules of Hooks
   const userEmail = permissions.user?.email;
-  const vehicleColumns = useMemo(
-    () => [
+  const vehicleColumns = useMemo(() => {
+    const base = [
       {
         id: 'favorite',
         header: '',
@@ -582,7 +694,7 @@ export default function Dashboard() {
         ),
       },
       { id: 'name', header: 'Vehicle', accessorKey: 'name' },
-      { id: 'rfid', header: 'RFID', accessorKey: 'rfid' },
+      ...(permissions.isAdmin ? [] : [{ id: 'rfid', header: 'RFID', accessorKey: 'rfid' }]),
       { id: 'site_name', header: 'Site', accessorKey: 'site_name' },
       { id: 'washes_completed', header: 'Washes', accessorKey: 'washes_completed' },
       { id: 'target', header: 'Target', accessorKey: 'target' },
@@ -608,41 +720,53 @@ export default function Dashboard() {
             : '—',
       },
       {
+        id: 'likelihood',
+        header: 'Likelihood',
+        cell: (row) => (
+          <VehicleLikelihoodCell
+            row={row}
+            override={likelihoodOverrides[row.id ?? row.rfid]}
+            onOverride={handleLikelihoodOverride}
+            canEdit={!!effectiveCompanyIdForLikelihood}
+          />
+        ),
+      },
+      {
         id: 'on_track_day',
-        header: 'Day',
+        header: <span className="cursor-help underline decoration-dotted decoration-muted-foreground/50" title="Meets today's wash target — ✓ on track, ✗ off track, — not applicable">Day</span>,
         cell: (row) => {
           const status = getOnTrackStatus(row, dateRange, activePeriod).day;
-          if (status == null) return <span className="text-muted-foreground">—</span>;
+          if (status == null) return <span className="text-muted-foreground" title="Not applicable for this period">—</span>;
           return status === 'on_track' ? (
-            <span className="inline-flex items-center text-green-600" title="On track"><Check className="w-4 h-4" /></span>
+            <span className="inline-flex items-center text-green-600" title="On track for today"><Check className="w-4 h-4" /></span>
           ) : (
-            <span className="inline-flex items-center text-destructive" title="Off track"><X className="w-4 h-4" /></span>
+            <span className="inline-flex items-center text-destructive" title="Off track for today"><X className="w-4 h-4" /></span>
           );
         },
       },
       {
         id: 'on_track_week',
-        header: 'Week',
+        header: <span className="cursor-help underline decoration-dotted decoration-muted-foreground/50" title="Meets weekly wash target — ✓ on track, ✗ off track, — not applicable">Week</span>,
         cell: (row) => {
           const status = getOnTrackStatus(row, dateRange, activePeriod).week;
-          if (status == null) return <span className="text-muted-foreground">—</span>;
+          if (status == null) return <span className="text-muted-foreground" title="Not applicable for this period">—</span>;
           return status === 'on_track' ? (
-            <span className="inline-flex items-center text-green-600" title="On track"><Check className="w-4 h-4" /></span>
+            <span className="inline-flex items-center text-green-600" title="On track for week"><Check className="w-4 h-4" /></span>
           ) : (
-            <span className="inline-flex items-center text-destructive" title="Off track"><X className="w-4 h-4" /></span>
+            <span className="inline-flex items-center text-destructive" title="Off track for week"><X className="w-4 h-4" /></span>
           );
         },
       },
       {
         id: 'on_track_month',
-        header: 'Month',
+        header: <span className="cursor-help underline decoration-dotted decoration-muted-foreground/50" title="Meets monthly wash target — ✓ on track, ✗ off track, — not applicable">Month</span>,
         cell: (row) => {
           const status = getOnTrackStatus(row, dateRange, activePeriod).month;
-          if (status == null) return <span className="text-muted-foreground">—</span>;
+          if (status == null) return <span className="text-muted-foreground" title="Not applicable for this period">—</span>;
           return status === 'on_track' ? (
-            <span className="inline-flex items-center text-green-600" title="On track"><Check className="w-4 h-4" /></span>
+            <span className="inline-flex items-center text-green-600" title="On track for month"><Check className="w-4 h-4" /></span>
           ) : (
-            <span className="inline-flex items-center text-destructive" title="Off track"><X className="w-4 h-4" /></span>
+            <span className="inline-flex items-center text-destructive" title="Off track for month"><X className="w-4 h-4" /></span>
           );
         },
       },
@@ -651,9 +775,10 @@ export default function Dashboard() {
         header: 'Last Scan',
         cell: (row) => (row.last_scan ? moment(row.last_scan).fromNow() : '—'),
       },
-    ],
-    [userEmail, dateRange, activePeriod]
-  );
+    ];
+    return base;
+  }, [userEmail, dateRange, activePeriod, likelihoodOverrides, handleLikelihoodOverride, effectiveCompanyIdForLikelihood, permissions.isAdmin]);
+
 
   if (isMobile && permissions.isDriver) {
     return <MobileDashboard />;
@@ -729,55 +854,12 @@ export default function Dashboard() {
             restrictedSiteName={permissions.isBatcher && allSites.length === 1 ? allSites[0].name : null}
             isFiltering={isFiltersFetching}
             isDataLoading={isDataLoading}
+            lastSyncedAt={lastSyncedAt}
           />
         </div>
 
         {/* Stats cards (dashboard-01 SectionCards) */}
         <SectionCards stats={stats} dateRange={dateRange} />
-
-        {/* Favorite Vehicles and Leaderboard - only on Compliance tab */}
-        {activeTab === 'compliance' && (
-          <>
-            <div className="mb-8">
-              <FavoriteVehicles
-                vehicles={filteredVehicles}
-                selectedCustomer={selectedCustomer}
-                selectedSite={selectedSite}
-                userEmail={permissions.user?.email}
-              />
-            </div>
-
-            {!permissions.hideLeaderboard && (
-              <Link to={`${createPageUrl('Leaderboard')}?customer=${selectedCustomer}&site=${selectedSite}`}>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.99 }}
-                  className="
-                    backdrop-blur-xl bg-gradient-to-r from-purple-600 to-blue-600
-                    rounded-2xl p-6 mb-8
-                    shadow-xl shadow-purple-500/20
-                    cursor-pointer group
-                  "
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-primary-foreground/20 flex items-center justify-center">
-                        <Trophy className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-bold text-white">Driver Leaderboard</h3>
-                        <p className="text-purple-200">See who's leading the pack this month</p>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-6 h-6 text-white/70 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </motion.div>
-              </Link>
-            )}
-          </>
-        )}
 
         {/* Content by route (sidebar-driven) */}
         <AnimatePresence mode="wait">
@@ -790,6 +872,7 @@ export default function Dashboard() {
           >
             {activeTab === 'compliance' && (
               <div className="space-y-6">
+                {/* Vehicle Compliance Table - immediately after KPI cards */}
                 <DataTable
                   columns={vehicleColumns}
                   data={complianceFilteredVehicles}
@@ -797,6 +880,16 @@ export default function Dashboard() {
                   onRowClick={(row) => setSelectedVehicleForWashHistory(row)}
                   searchPlaceholder="Search by vehicle, RFID, or site..."
                   title="Vehicle compliance"
+                  disablePagination={complianceSiteFilter !== 'all'}
+                  footerMessage={
+                    complianceSiteFilter !== 'all'
+                      ? (() => {
+                          const site = complianceTableSites.find((s) => String(s.id) === String(complianceSiteFilter));
+                          const siteName = site?.name ?? 'selected site';
+                          return `Showing ${complianceFilteredVehicles.length} vehicle${complianceFilteredVehicles.length !== 1 ? 's' : ''} for ${siteName}`;
+                        })()
+                      : undefined
+                  }
                   headerExtra={
                     <>
                       <Select value={complianceStatusFilter} onValueChange={setComplianceStatusFilter}>
@@ -829,10 +922,50 @@ export default function Dashboard() {
                     </>
                   }
                 />
+                {/* Vehicle Performance Chart + Wash Frequency Chart */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <ChartAreaInteractive data={washTrendsData} />
                   <VehiclePerformanceChart vehicles={filteredVehicles} />
                 </div>
+                {/* Favorite Vehicles - moved to bottom */}
+                <div>
+                  <FavoriteVehicles
+                    vehicles={filteredVehicles}
+                    selectedCustomer={selectedCustomer}
+                    selectedSite={selectedSite}
+                    userEmail={permissions.user?.email}
+                  />
+                </div>
+                {/* Driver Leaderboard - moved to very bottom */}
+                {!permissions.hideLeaderboard && (
+                  <Link to={`${createPageUrl('Leaderboard')}?customer=${selectedCustomer}&site=${selectedSite}`}>
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      className="
+                        backdrop-blur-xl bg-gradient-to-r from-purple-600 to-blue-600
+                        rounded-2xl p-6
+                        shadow-xl shadow-purple-500/20
+                        cursor-pointer group
+                      "
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-full bg-primary-foreground/20 flex items-center justify-center">
+                            <Trophy className="w-6 h-6 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-bold text-white">Driver Leaderboard</h3>
+                            <p className="text-purple-200">See who's leading the pack this month</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-6 h-6 text-white/70 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </motion.div>
+                  </Link>
+                )}
 
                 <VehicleWashHistoryModal
                   vehicle={selectedVehicleForWashHistory}

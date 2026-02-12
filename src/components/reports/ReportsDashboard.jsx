@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { supabaseClient } from "@/api/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +36,6 @@ import {
   Bar, 
   Area,
   AreaChart,
-  PieChart, 
-  Pie, 
-  Cell,
   RadarChart,
   Radar,
   PolarGrid,
@@ -53,7 +49,6 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  Legend
 } from 'recharts';
 import {
   ChartContainer,
@@ -208,7 +203,8 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
       data = data.filter(v =>
         (v.name ?? '').toLowerCase().includes(q) ||
         (v.rfid ?? '').toLowerCase().includes(q) ||
-        (v.site_name ?? '').toLowerCase().includes(q)
+        (v.site_name ?? '').toLowerCase().includes(q) ||
+        (v.customer_name ?? '').toLowerCase().includes(q)
       );
     }
     if (complianceStatusFilter === 'compliant') {
@@ -240,6 +236,29 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
       { status: 'non-compliant', count: nonCompliant, fill: 'hsl(var(--primary) / 0.3)' },
     ];
   }, [filteredData.filteredVehicles, complianceStats]);
+
+  // Compliance Over Time (Area Chart - uses same dateAggregation, capped points)
+  const complianceOverTime = useMemo(() => {
+    if (!dateRange) return [];
+    const start = moment(dateRange.start);
+    const end = moment(dateRange.end);
+    const diffDays = end.diff(start, 'days');
+    const maxDays = Math.min(diffDays, 90);
+    const totalVehicles = filteredData.filteredVehicles.length;
+    const indices = sampleDateIndices(maxDays, MAX_CHART_POINTS);
+    const dailyData = [];
+    for (let j = 0; j < indices.length; j++) {
+      const i = indices[j];
+      const date = moment(start).add(i, 'days');
+      const dateStr = date.format('YYYY-MM-DD');
+      const entry = dateAggregation.get(dateStr);
+      const washes = entry ? entry.count : 0;
+      const vehiclesWashedOnDate = entry ? entry.vehicleRefs.size : 0;
+      const dailyRate = totalVehicles > 0 ? Math.round((vehiclesWashedOnDate / totalVehicles) * 100) : 0;
+      dailyData.push({ date: date.format('MMM D'), rate: dailyRate, washes });
+    }
+    return dailyData;
+  }, [dateAggregation, filteredData.filteredVehicles.length, dateRange]);
 
   // Site Performance Radar (Top 6 sites across multiple metrics)
   const sitePerformanceRadar = useMemo(() => {
@@ -278,31 +297,6 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
     }));
   }, [filteredData.filteredVehicles]);
 
-  // Compliance Over Time (Area Chart - uses same dateAggregation, capped points)
-  const complianceOverTime = useMemo(() => {
-    if (!dateRange) return [];
-    const start = moment(dateRange.start);
-    const end = moment(dateRange.end);
-    const diffDays = end.diff(start, 'days');
-    const maxDays = Math.min(diffDays, 90);
-    const totalVehicles = filteredData.filteredVehicles.length;
-    const indices = sampleDateIndices(maxDays, MAX_CHART_POINTS);
-    const dailyData = [];
-    for (let j = 0; j < indices.length; j++) {
-      const i = indices[j];
-      const date = moment(start).add(i, 'days');
-      const dateStr = date.format('YYYY-MM-DD');
-      const entry = dateAggregation.get(dateStr);
-      const washes = entry ? entry.count : 0;
-      const vehiclesWashedOnDate = entry ? entry.vehicleRefs.size : 0;
-      const dailyRate = totalVehicles > 0 ? Math.round((vehiclesWashedOnDate / totalVehicles) * 100) : 0;
-      dailyData.push({ date: date.format('MMM D'), rate: dailyRate, washes });
-    }
-    return dailyData;
-  }, [dateAggregation, filteredData.filteredVehicles.length, dateRange]);
-
-  const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
-
   // Export Functions
   const exportToCSV = (data, filename) => {
     const headers = Object.keys(data[0] || {});
@@ -322,7 +316,7 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
     const source = useFiltered ? filteredComplianceVehicles : (filteredData.filteredVehicles || []);
     const reportData = source.map(v => ({
       Vehicle: v.name,
-      RFID: v.rfid,
+      Customer: v.customer_name,
       Site: v.site_name,
       'Washes Completed': v.washes_completed,
       Target: v.target,
@@ -421,7 +415,7 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
                   <p className="text-xs text-muted-foreground/90 mt-0.5">{reportsDateRangeStr}</p>
                 )}
                 <p className="text-3xl font-bold text-foreground mt-1">
-                  {filteredData.filteredScans.length}
+                  {filteredData.filteredVehicles.reduce((sum, v) => sum + (v.washes_completed ?? 0), 0)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-2">In selected period</p>
               </div>
@@ -433,8 +427,215 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
         </Card>
       </div>
 
+      {/* 1. Vehicle Compliance Details - directly under KPI cards */}
+      <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
+        <CardHeader>
+          <div className="flex flex-col gap-4">
+            <CardTitle className="text-lg">Vehicle Compliance Details</CardTitle>
+            <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by vehicle, customer, or site..."
+                  value={complianceSearch}
+                  onChange={(e) => setComplianceSearch(e.target.value)}
+                  className="pl-10 h-9"
+                />
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="w-[160px]">
+                  <Select value={complianceStatusFilter} onValueChange={setComplianceStatusFilter}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="compliant">Compliant</SelectItem>
+                      <SelectItem value="non-compliant">Non-Compliant</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-[100px]">
+                  <Select
+                    value={String(compliancePageSize)}
+                    onValueChange={(v) => setCompliancePageSize(Number(v))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COMPLIANCE_PAGE_SIZES.map((s) => (
+                        <SelectItem key={s} value={String(s)}>{s} per page</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportComplianceReport(true)}
+                  className="gap-2 h-9"
+                >
+                  <Download className="w-4 h-4" />
+                  Export CSV
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border border-border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="font-semibold">Vehicle</TableHead>
+                  <TableHead className="font-semibold">Customer</TableHead>
+                  <TableHead className="font-semibold">Site</TableHead>
+                  <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold text-right">Washes</TableHead>
+                  <TableHead className="font-semibold text-right">Target</TableHead>
+                  <TableHead className="font-semibold text-right">Rate</TableHead>
+                  <TableHead className="font-semibold text-right w-[80px]">Export</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedComplianceVehicles.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                      No vehicles match your filters
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedComplianceVehicles.map((v, idx) => {
+                    const rate = (v.target && v.target > 0)
+                      ? Math.round(((v.washes_completed ?? 0) / v.target) * 100)
+                      : 0;
+                    const isCompliant = (v.washes_completed ?? 0) >= (v.target ?? 12);
+                    const vehicleCsvData = [
+                      { Vehicle: v.name ?? '—', Customer: v.customer_name ?? '—', Site: v.site_name ?? '—', Status: isCompliant ? 'Compliant' : 'Non-Compliant', Washes: v.washes_completed ?? 0, Target: v.target ?? '—', 'Rate %': rate, 'Last Scan': v.last_scan ? moment(v.last_scan).format('YYYY-MM-DD HH:mm') : '—' }
+                    ];
+                    return (
+                      <TableRow key={v.id || v.rfid || idx} className="hover:bg-muted/30">
+                        <TableCell className="font-medium">{v.name || '—'}</TableCell>
+                        <TableCell>{v.customer_name || '—'}</TableCell>
+                        <TableCell>{v.site_name || '—'}</TableCell>
+                        <TableCell>
+                          <Badge className={isCompliant ? 'bg-primary' : 'bg-red-500'}>
+                            {isCompliant ? 'Compliant' : 'Non-Compliant'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{v.washes_completed ?? 0}</TableCell>
+                        <TableCell className="text-right">{v.target ?? '—'}</TableCell>
+                        <TableCell className="text-right font-medium">{rate}%</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 gap-1.5 text-xs"
+                            onClick={() => {
+                              const headers = Object.keys(vehicleCsvData[0] || {});
+                              const rows = vehicleCsvData.map(row => headers.map(h => row[h] ?? '').join(','));
+                              const csv = [headers.join(','), ...rows].join('\n');
+                              const blob = new Blob([csv], { type: 'text/csv' });
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `vehicle_${(v.name || v.rfid || 'export').replace(/\s+/g, '_')}_${moment().format('YYYY-MM-DD')}.csv`;
+                              a.click();
+                              window.URL.revokeObjectURL(url);
+                            }}
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            CSV
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          {filteredComplianceVehicles.length > 0 && (
+            <DataPagination
+              currentPage={compliancePage}
+              totalPages={complianceTotalPages}
+              totalItems={filteredComplianceVehicles.length}
+              pageSize={compliancePageSize}
+              onPageChange={setCompliancePage}
+              className="mt-4"
+            />
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Compliance Distribution - Radial Chart */}
+      {/* 2. Wash Activity Trend */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
+          <CardHeader>
+            <CardTitle className="text-lg text-foreground">Wash Activity Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isCalculating || isStale ? (
+              <ChartSkeleton height="300px" />
+            ) : (
+            <LazyChart skeleton={<ChartSkeleton height="300px" />}>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={complianceTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                <Line 
+                  type="monotone" 
+                  dataKey="scans" 
+                  stroke="hsl(var(--primary))" 
+                  strokeWidth={2}
+                  dot={{ fill: 'hsl(var(--primary))', r: 4 }}
+                  name="Washes"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+            </LazyChart>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center justify-between text-foreground">
+              <span>Wash Frequency by Site</span>
+              <Button 
+                size="sm" 
+                variant="ghost"
+                onClick={() => setDrillDownModal({ open: true, type: 'site', data: washFrequencyBySite })}
+                disabled={isCalculating || isStale}
+              >
+                <ZoomIn className="w-4 h-4" />
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isCalculating || isStale ? (
+              <ChartSkeleton height="300px" />
+            ) : (
+            <LazyChart skeleton={<ChartSkeleton height="300px" />}>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={washFrequencyBySite} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis dataKey="site" type="category" width={120} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                <Bar dataKey="washes" fill="hsl(var(--primary))" name="Washes" />
+              </BarChart>
+            </ResponsiveContainer>
+            </LazyChart>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Fleet Compliance Distribution + Compliance Rate Over Time */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="flex flex-col bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
           <CardHeader className="items-center pb-0">
@@ -616,188 +817,6 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           </div>
           </>
           </LazyChart>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Original Charts - Side by side on large screens */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
-          <CardHeader>
-            <CardTitle className="text-lg text-foreground">Wash Activity Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isCalculating || isStale ? (
-              <ChartSkeleton height="300px" />
-            ) : (
-            <LazyChart skeleton={<ChartSkeleton height="300px" />}>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={complianceTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                <Line 
-                  type="monotone" 
-                  dataKey="scans" 
-                  stroke="hsl(var(--primary))" 
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--primary))', r: 4 }}
-                  name="Washes"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-            </LazyChart>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center justify-between text-foreground">
-              <span>Wash Frequency by Site</span>
-              <Button 
-                size="sm" 
-                variant="ghost"
-                onClick={() => setDrillDownModal({ open: true, type: 'site', data: washFrequencyBySite })}
-                disabled={isCalculating || isStale}
-              >
-                <ZoomIn className="w-4 h-4" />
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isCalculating || isStale ? (
-              <ChartSkeleton height="300px" />
-            ) : (
-            <LazyChart skeleton={<ChartSkeleton height="300px" />}>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={washFrequencyBySite} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis dataKey="site" type="category" width={120} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                <Bar dataKey="washes" fill="hsl(var(--primary))" name="Washes" />
-              </BarChart>
-            </ResponsiveContainer>
-            </LazyChart>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Vehicle Compliance Details - Inline Table */}
-      <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
-        <CardHeader>
-          <div className="flex flex-col gap-4">
-            <CardTitle className="text-lg">Vehicle Compliance Details</CardTitle>
-            <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search by vehicle, RFID, or site..."
-                  value={complianceSearch}
-                  onChange={(e) => setComplianceSearch(e.target.value)}
-                  className="pl-10 h-9"
-                />
-              </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="w-[160px]">
-                  <Select value={complianceStatusFilter} onValueChange={setComplianceStatusFilter}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="compliant">Compliant</SelectItem>
-                      <SelectItem value="non-compliant">Non-Compliant</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="w-[100px]">
-                  <Select
-                    value={String(compliancePageSize)}
-                    onValueChange={(v) => setCompliancePageSize(Number(v))}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COMPLIANCE_PAGE_SIZES.map((s) => (
-                        <SelectItem key={s} value={String(s)}>{s} per page</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => exportComplianceReport(true)}
-                  className="gap-2 h-9"
-                >
-                  <Download className="w-4 h-4" />
-                  Export CSV
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border border-border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="font-semibold">Vehicle</TableHead>
-                  <TableHead className="font-semibold">RFID</TableHead>
-                  <TableHead className="font-semibold">Site</TableHead>
-                  <TableHead className="font-semibold">Status</TableHead>
-                  <TableHead className="font-semibold text-right">Washes</TableHead>
-                  <TableHead className="font-semibold text-right">Target</TableHead>
-                  <TableHead className="font-semibold text-right">Rate</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedComplianceVehicles.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                      No vehicles match your filters
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedComplianceVehicles.map((v, idx) => {
-                    const rate = (v.target && v.target > 0)
-                      ? Math.round(((v.washes_completed ?? 0) / v.target) * 100)
-                      : 0;
-                    const isCompliant = (v.washes_completed ?? 0) >= (v.target ?? 12);
-                    return (
-                      <TableRow key={v.id || v.rfid || idx} className="hover:bg-muted/30">
-                        <TableCell className="font-medium">{v.name || '—'}</TableCell>
-                        <TableCell className="font-mono text-sm">{v.rfid || '—'}</TableCell>
-                        <TableCell>{v.site_name || '—'}</TableCell>
-                        <TableCell>
-                          <Badge className={isCompliant ? 'bg-primary' : 'bg-red-500'}>
-                            {isCompliant ? 'Compliant' : 'Non-Compliant'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">{v.washes_completed ?? 0}</TableCell>
-                        <TableCell className="text-right">{v.target ?? '—'}</TableCell>
-                        <TableCell className="text-right font-medium">{rate}%</TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          {filteredComplianceVehicles.length > 0 && (
-            <DataPagination
-              currentPage={compliancePage}
-              totalPages={complianceTotalPages}
-              totalItems={filteredComplianceVehicles.length}
-              pageSize={compliancePageSize}
-              onPageChange={setCompliancePage}
-              className="mt-4"
-            />
           )}
         </CardContent>
       </Card>

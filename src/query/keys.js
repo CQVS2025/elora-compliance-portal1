@@ -145,6 +145,9 @@ export const queryKeys = {
     
     // Companies (super admin)
     companies: (companyId) => ['tenant', companyId, 'companies'],
+
+    // Vehicle likelihood overrides (manager-set Green/Orange/Red per vehicle)
+    vehicleLikelihoodOverrides: (companyId) => ['tenant', companyId, 'vehicleLikelihoodOverrides'],
     company: (companyId, targetCompanyId) => [
       'tenant',
       companyId,

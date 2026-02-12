@@ -32,6 +32,7 @@ const STAT_CARDS = [
     format: (v) => `${v ?? 0}%`,
     trendLabel: 'vs target 80%',
     accentClass: 'text-primary',
+    showLikelihood: true,
   },
   {
     key: 'monthlyWashes',
@@ -43,7 +44,7 @@ const STAT_CARDS = [
   },
   {
     key: 'activeDrivers',
-    label: 'Active Drivers',
+    label: 'Drivers Scanning?',
     icon: Users,
     valueKey: 'activeDrivers',
     format: (v) => (v ?? 0).toLocaleString(),
@@ -52,8 +53,9 @@ const STAT_CARDS = [
 ];
 
 /**
- * Stats cards for dashboard-01: Total Vehicles, Compliance Rate, Total Washes, Active Drivers.
- * Uses existing stats shape: { totalVehicles, complianceRate, monthlyWashes, activeDrivers }.
+ * Stats cards for dashboard-01: Total Vehicles, Compliance Rate, Total Washes, Drivers Scanning?.
+ * Stats shape: { totalVehicles, complianceRate, monthlyWashes, activeDrivers, complianceLikelihood }.
+ * complianceLikelihood: { onTrackPct, atRiskPct, criticalPct } for the Compliance Rate card breakdown.
  * Optional dateRange shows the period the data refers to beside each card label.
  */
 export default function SectionCards({ stats = {}, dateRange = null, className }) {
@@ -65,9 +67,11 @@ export default function SectionCards({ stats = {}, dateRange = null, className }
   };
   const dateRangeStr = formatDateRange(dateRange);
 
+  const likelihood = stats.complianceLikelihood ?? { onTrackPct: 0, atRiskPct: 0, criticalPct: 0 };
+
   return (
     <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4', className)}>
-      {STAT_CARDS.map(({ key, label, icon: Icon, valueKey, format: formatValue, trendLabel, accentClass }) => (
+      {STAT_CARDS.map(({ key, label, icon: Icon, valueKey, format: formatValue, trendLabel, accentClass, showLikelihood }) => (
         <Card key={key} className="overflow-hidden">
           <CardContent className="p-6">
             <div className="flex items-start justify-between gap-2">
@@ -84,6 +88,48 @@ export default function SectionCards({ stats = {}, dateRange = null, className }
             </p>
             {trendLabel && (
               <p className="mt-1 text-xs text-muted-foreground">{trendLabel}</p>
+            )}
+            {showLikelihood && (
+              <div className="mt-3 space-y-2.5">
+                <div
+                  className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted/60"
+                  role="img"
+                  aria-label={`Compliance breakdown: ${likelihood.onTrackPct}% on track, ${likelihood.atRiskPct}% at risk, ${likelihood.criticalPct}% critical`}
+                >
+                  {likelihood.onTrackPct > 0 && (
+                    <div
+                      className="bg-emerald-500 shrink-0 transition-[width] duration-300"
+                      style={{ width: `${likelihood.onTrackPct}%` }}
+                    />
+                  )}
+                  {likelihood.atRiskPct > 0 && (
+                    <div
+                      className="bg-amber-500 shrink-0 transition-[width] duration-300"
+                      style={{ width: `${likelihood.atRiskPct}%` }}
+                    />
+                  )}
+                  {likelihood.criticalPct > 0 && (
+                    <div
+                      className="bg-red-500 shrink-0 transition-[width] duration-300"
+                      style={{ width: `${likelihood.criticalPct}%` }}
+                    />
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+                    {likelihood.onTrackPct}% On Track
+                  </span>
+                  <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
+                    {likelihood.atRiskPct}% At Risk
+                  </span>
+                  <span className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden />
+                    {likelihood.criticalPct}% Critical
+                  </span>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
