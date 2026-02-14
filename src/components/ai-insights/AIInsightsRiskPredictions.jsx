@@ -106,13 +106,23 @@ export default function AIInsightsRiskPredictions({
     const bySite = {};
     (predictions || []).forEach((p) => {
       const s = p.site_name || p.site_ref || 'Unknown';
-      bySite[s] = (bySite[s] || 0) + 1;
+      if (!bySite[s]) bySite[s] = { site: s, critical: 0, high: 0, medium: 0, low: 0, total: 0 };
+      const level = p.risk_level || 'low';
+      if (['critical', 'high', 'medium', 'low'].includes(level)) {
+        bySite[s][level]++;
+        bySite[s].total++;
+      }
     });
-    return Object.entries(bySite).map(([site, count]) => ({ site, count, fill: 'hsl(var(--primary))' })).sort((a, b) => b.count - a.count).slice(0, 8);
+    return Object.values(bySite).sort((a, b) => b.total - a.total).slice(0, 8);
   }, [predictions]);
 
   const riskChartConfig = { count: { label: 'Vehicles' }, level: { label: 'Risk Level' } };
-  const siteChartConfig = { count: { label: 'At risk' }, primary: { label: 'At risk', color: 'hsl(var(--primary))' } };
+  const siteChartConfig = {
+    critical: { label: 'Critical', color: 'hsl(var(--chart-critical))' },
+    high: { label: 'High', color: 'hsl(var(--chart-high))' },
+    medium: { label: 'Medium', color: 'hsl(var(--chart-medium))' },
+    low: { label: 'Low', color: 'hsl(var(--chart-low))' },
+  };
 
   const handleSendReminder = (vehicleRef) => {
     if (!canSendAlerts) return;
@@ -297,7 +307,7 @@ export default function AIInsightsRiskPredictions({
             <Card>
               <CardHeader>
                 <CardTitle>At-risk vehicles by site</CardTitle>
-                <CardDescription>Sites with most at-risk vehicles</CardDescription>
+                <CardDescription>Sites with most at-risk vehicles, segmented by risk level</CardDescription>
               </CardHeader>
               <CardContent>
                 <ChartContainer config={siteChartConfig} className="aspect-auto h-[200px] w-full">
@@ -306,9 +316,18 @@ export default function AIInsightsRiskPredictions({
                     <XAxis type="number" hide />
                     <YAxis dataKey="site" type="category" width={100} tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(v) => (v && v.length > 12 ? v.slice(0, 10) + '…' : v)} />
                     <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={4} layout="vertical" />
+                    <Bar dataKey="critical" stackId="site" fill="hsl(var(--chart-critical))" radius={[0, 0, 0, 0]} layout="vertical" />
+                    <Bar dataKey="high" stackId="site" fill="hsl(var(--chart-high))" radius={[0, 0, 0, 0]} layout="vertical" />
+                    <Bar dataKey="medium" stackId="site" fill="hsl(var(--chart-medium))" radius={[0, 0, 0, 0]} layout="vertical" />
+                    <Bar dataKey="low" stackId="site" fill="hsl(var(--chart-low))" radius={[0, 4, 4, 0]} layout="vertical" />
                   </BarChart>
                 </ChartContainer>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground justify-center">
+                  <span><span className="inline-block w-2 h-2 rounded-full bg-[hsl(var(--chart-critical))]" /> Critical</span>
+                  <span><span className="inline-block w-2 h-2 rounded-full bg-[hsl(var(--chart-high))]" /> High</span>
+                  <span><span className="inline-block w-2 h-2 rounded-full bg-[hsl(var(--chart-medium))]" /> Medium</span>
+                  <span><span className="inline-block w-2 h-2 rounded-full bg-[hsl(var(--chart-low))]" /> Low</span>
+                </div>
               </CardContent>
             </Card>
           )}

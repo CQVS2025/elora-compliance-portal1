@@ -74,9 +74,22 @@ function SortableRow({ id, children, disabled }) {
   );
 }
 
+/** Flatten column groups into a single list of leaf columns (for body cells and visibility). */
+function flattenColumns(columns) {
+  const out = [];
+  for (const col of columns) {
+    if (col.columns?.length) {
+      for (const child of col.columns) out.push(child);
+    } else {
+      out.push(col);
+    }
+  }
+  return out;
+}
+
 /**
  * Full-featured data table: search, column visibility, pagination, row selection, optional DnD sortable rows.
- * columns: [{ id, header, accessorKey?, cell?(row) }]
+ * columns: [{ id, header, accessorKey?, cell?(row) }] or [{ id, header, columns: [{ id, header, ... }] }] for grouped headers
  * data: array of rows
  * getRowId: (row) => string (default: row.id ?? index)
  * sortable: boolean - enable drag-and-drop row reorder; onReorder(newData) called when order changes
@@ -94,6 +107,7 @@ export default function DataTable({
   footerMessage = null,
   columnVisibility: controlledColumnVisibility,
   onColumnVisibilityChange,
+  defaultHiddenColumns = [],
   selectedRowIds,
   onSelectionChange,
   sortable = false,
@@ -106,35 +120,38 @@ export default function DataTable({
   const [internalSearch, setInternalSearch] = useState('');
   const [internalPage, setInternalPage] = useState(1);
   const [internalPageSize, setInternalPageSize] = useState(controlledPageSize ?? 10);
+  const leafColumns = useMemo(() => flattenColumns(columns), [columns]);
+  const hiddenSet = useMemo(() => new Set(defaultHiddenColumns), [defaultHiddenColumns]);
   const [internalColumnVisibility, setInternalColumnVisibility] = useState(
-    () => columns.reduce((acc, col) => ({ ...acc, [col.id]: true }), {})
+    () => leafColumns.reduce((acc, col) => ({ ...acc, [col.id]: !hiddenSet.has(col.id) }), {})
   );
   const [internalSelection, setInternalSelection] = useState(new Set());
 
   const search = controlledSearch !== undefined ? controlledSearch : internalSearch;
   const setSearch = onSearchChange ?? setInternalSearch;
   const pageSize = controlledPageSize !== undefined ? controlledPageSize : internalPageSize;
-  const setPageSize = onPageSizeChange ?? setInternalPageSize;
   const columnVisibility = controlledColumnVisibility ?? internalColumnVisibility;
   const setColumnVisibility = onColumnVisibilityChange ?? setInternalColumnVisibility;
   const selection = selectedRowIds ?? internalSelection;
   const setSelection = onSelectionChange ?? setInternalSelection;
 
   const visibleColumns = useMemo(
-    () => columns.filter((col) => columnVisibility[col.id] !== false),
-    [columns, columnVisibility]
+    () => leafColumns.filter((col) => columnVisibility[col.id] !== false),
+    [leafColumns, columnVisibility]
   );
+
+  const hasGroupHeader = useMemo(() => columns.some((col) => col.columns?.length), [columns]);
 
   const filteredData = useMemo(() => {
     if (!search.trim()) return data;
     const q = search.toLowerCase();
     return data.filter((row) =>
-      columns.some((col) => {
+      leafColumns.some((col) => {
         const val = col.accessorKey ? row[col.accessorKey] : row[col.id];
         return String(val ?? '').toLowerCase().includes(q);
       })
     );
-  }, [data, search, columns]);
+  }, [data, search, leafColumns]);
 
   const totalPages = disablePagination ? 1 : Math.max(1, Math.ceil(filteredData.length / pageSize));
   const page = disablePagination ? 1 : Math.min(internalPage, totalPages);
@@ -259,7 +276,7 @@ export default function DataTable({
   );
 
   return (
-    <Card className={cn('overflow-hidden', className)}>
+    <Card className={cn('max-w-full min-w-0', className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         {title && <h3 className="text-lg font-semibold">{title}</h3>}
         <div className="flex items-center gap-2 flex-wrap">
@@ -283,7 +300,7 @@ export default function DataTable({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[180px]">
-              {columns.map((col) => (
+              {leafColumns.map((col) => (
                 <DropdownMenuCheckboxItem
                   key={col.id}
                   checked={columnVisibility[col.id] !== false}
@@ -296,31 +313,87 @@ export default function DataTable({
           </DropdownMenu>
         </div>
       </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {onSelectionChange || selectedRowIds ? (
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={
-                      paginatedData.length > 0 &&
-                      paginatedData.every((row, i) =>
-                        selection.has(getRowId(row, (page - 1) * pageSize + i))
-                      )
+      <CardContent className="p-0 overflow-hidden">
+        <div className="w-full overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
+          <Table className="min-w-max">
+          <TableHeader className="sticky top-0 z-10 bg-muted/60 shadow-sm [&_th]:text-center [&_th]:align-middle [&_th]:px-4 [&_th]:py-3 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wider [&_th]:text-foreground [&_th]:border-b-2 [&_th]:border-border">
+            {hasGroupHeader ? (
+              <>
+                <TableRow className="border-b border-border/50">
+                  {onSelectionChange || selectedRowIds ? (
+                    <TableHead rowSpan={2} className="w-10 [&]:text-center">
+                      <div className="flex justify-center">
+                        <Checkbox
+                          checked={
+                            paginatedData.length > 0 &&
+                            paginatedData.every((row, i) =>
+                              selection.has(getRowId(row, (page - 1) * pageSize + i))
+                            )
+                          }
+                          onCheckedChange={toggleAll}
+                          aria-label="Select all"
+                        />
+                      </div>
+                    </TableHead>
+                  ) : null}
+                  {columns.map((col) => {
+                    if (col.columns?.length) {
+                      const visibleChildren = col.columns.filter((c) => columnVisibility[c.id] !== false);
+                      if (visibleChildren.length === 0) return null;
+                      return (
+                        <TableHead key={col.id} colSpan={visibleChildren.length}>
+                          {col.header}
+                        </TableHead>
+                      );
                     }
-                    onCheckedChange={toggleAll}
-                    aria-label="Select all"
-                  />
-                </TableHead>
-              ) : null}
-              {visibleColumns.map((col) => (
-                <TableHead key={col.id}>{col.header}</TableHead>
-              ))}
-            </TableRow>
+                    if (columnVisibility[col.id] === false) return null;
+                    return (
+                      <TableHead key={col.id} rowSpan={2}>
+                        {col.header}
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+                <TableRow className="border-b border-border/50">
+                  {columns.map((col) => {
+                    if (!col.columns?.length) return null;
+                    return col.columns
+                      .filter((c) => columnVisibility[c.id] !== false)
+                      .map((c) => (
+                        <TableHead key={c.id} className="font-normal text-muted-foreground text-[11px] normal-case tracking-normal">
+                          {c.header}
+                        </TableHead>
+                      ));
+                  })}
+                </TableRow>
+              </>
+            ) : (
+              <TableRow className="border-b border-border/50">
+                {onSelectionChange || selectedRowIds ? (
+                  <TableHead className="w-10">
+                    <div className="flex justify-center">
+                      <Checkbox
+                        checked={
+                          paginatedData.length > 0 &&
+                          paginatedData.every((row, i) =>
+                            selection.has(getRowId(row, (page - 1) * pageSize + i))
+                          )
+                        }
+                        onCheckedChange={toggleAll}
+                        aria-label="Select all"
+                      />
+                    </div>
+                  </TableHead>
+                ) : null}
+                {visibleColumns.map((col) => (
+                  <TableHead key={col.id}>{col.header}</TableHead>
+                ))}
+              </TableRow>
+            )}
           </TableHeader>
           {tableBody}
         </Table>
+        </div>
         <div className="flex items-center justify-between border-t px-4 py-2">
           {disablePagination ? (
             <p className="text-sm text-muted-foreground">

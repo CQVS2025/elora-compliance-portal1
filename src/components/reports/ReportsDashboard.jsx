@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +28,13 @@ import {
   FileSpreadsheet,
   ZoomIn,
   Search,
-  Download
+  Download,
+  FileText,
+  Loader2
 } from 'lucide-react';
+import { scansOptions } from '@/query/options';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { 
   LineChart, 
   Line, 
@@ -58,6 +64,7 @@ import {
   ChartTooltipContent,
 } from '@/components/ui/chart';
 import moment from 'moment';
+import { toast } from '@/lib/toast';
 import DrillDownModal from './DrillDownModal';
 import { LazyChart, sampleDateIndices, MAX_CHART_POINTS } from './LazyChart';
 
@@ -72,15 +79,19 @@ const CHART_CONFIG = {
   vehicles: { label: 'Vehicles', color: 'hsl(var(--primary) / 0.4)' },
 };
 
-export default function ReportsDashboard({ vehicles, scans, dateRange, selectedSite }) {
+export default function ReportsDashboard({ vehicles, scans, dateRange, selectedSite, selectedCustomer, selectedDriverIds, companyId, isSyncing = false }) {
   const [drillDownModal, setDrillDownModal] = useState({ open: false, type: null, data: null });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const pdfCaptureRef = useRef(null);
 
   const [complianceSearch, setComplianceSearch] = useState('');
   const [complianceStatusFilter, setComplianceStatusFilter] = useState('all');
   const [compliancePage, setCompliancePage] = useState(1);
   const [compliancePageSize, setCompliancePageSize] = useState(10);
+  const [exportingVehicleRef, setExportingVehicleRef] = useState(null);
+  const queryClient = useQueryClient();
 
   // Loading state when filters change
   const [isCalculating, setIsCalculating] = useState(false);
@@ -114,6 +125,35 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
       : vehicles;
     return { filteredScans, filteredVehicles };
   }, [scans, vehicles, selectedSite]);
+
+  // Fetch individual wash records (scans) for CSV/PDF export - respects filters
+  const { data: rawScansData = [], isLoading: scansLoading } = useQuery({
+    ...scansOptions(companyId, {
+      fromDate: dateRange?.start,
+      toDate: dateRange?.end,
+      customerId: selectedCustomer && selectedCustomer !== 'all' ? selectedCustomer : undefined,
+      siteId: selectedSite && selectedSite !== 'all' ? selectedSite : undefined,
+      status: 'success,exceeded',
+      export: 'all',
+    }),
+    enabled: !!companyId && !!dateRange?.start && !!dateRange?.end,
+  });
+
+  const allScans = Array.isArray(rawScansData) ? rawScansData : (rawScansData?.data ?? []);
+  const exportScans = useMemo(() => {
+    let list = allScans;
+    if (selectedDriverIds?.length > 0) {
+      const driverSet = new Set(selectedDriverIds.map(String));
+      list = list.filter(s => s.vehicleRef != null && driverSet.has(String(s.vehicleRef)));
+    }
+    return list;
+  }, [allScans, selectedDriverIds]);
+
+  const vehicleMap = useMemo(() => {
+    const map = new Map();
+    (vehicles || []).forEach(v => map.set(v.id ?? v.rfid, v));
+    return map;
+  }, [vehicles]);
 
 
   // Fleet Compliance Analysis
@@ -327,6 +367,126 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
     exportToCSV(reportData, 'vehicle_compliance_detail');
   };
 
+  /** Export all wash events for a single vehicle - one row per wash event with timestamps (Option A).
+   * No date restriction. Fetches all pages (API returns paginated, max 1000/page) so export includes every wash. */
+  const exportVehicleWashEventsCSV = async (vehicle) => {
+    const vehicleRef = vehicle.vehicleRef ?? vehicle.id;
+    if (!vehicleRef || !companyId) {
+      toast('Cannot export', { description: 'Missing vehicle or company.' });
+      return;
+    }
+    setExportingVehicleRef(vehicleRef);
+    try {
+      const baseFilters = {
+        customerId: selectedCustomer && selectedCustomer !== 'all' ? selectedCustomer : undefined,
+        siteId: selectedSite && selectedSite !== 'all' ? selectedSite : undefined,
+        status: 'success,exceeded',
+        vehicleId: vehicleRef,
+      };
+      const pageSize = 1000;
+      let allScans = [];
+      let page = 1;
+      let pageCount = 1;
+      do {
+        const options = scansOptions(companyId, { ...baseFilters, page, pageSize });
+        const raw = await queryClient.fetchQuery(options);
+        const data = Array.isArray(raw) ? raw : (raw?.data ?? []);
+        allScans = allScans.concat(data);
+        pageCount = raw?.pageCount ?? 1;
+        if (data.length < pageSize || page >= pageCount) break;
+        page += 1;
+      } while (true);
+
+      const vehicleScans = allScans;
+      if (vehicleScans.length === 0) {
+        toast('No wash events', { description: `No wash events found for ${vehicle.name ?? vehicle.rfid ?? 'this vehicle'}.` });
+        return;
+      }
+      const rows = vehicleScans.map(s => {
+        const dt = s.createdAt ?? s.timestamp ?? s.scanDate;
+        const m = dt ? moment(dt) : null;
+        const duration = s.washDurationSeconds ?? s.durationSeconds ?? s.washTime;
+        return {
+          Site: s.siteName ?? vehicle.site_name ?? '—',
+          'Vehicle / Truck': s.vehicleName ?? vehicle.name ?? '—',
+          'Vehicle RFID': s.rfid ?? vehicle.rfid ?? '—',
+          'Wash Timestamp': m ? m.format('YYYY-MM-DD HH:mm:ss') : '—',
+          'Wash Type / Status': s.statusLabel ?? s.status ?? '—',
+          Location: s.siteName ?? vehicle.site_name ?? '—',
+          'Wash Time (Secs)': duration != null ? duration : '—',
+        };
+      });
+      exportToCSV(rows, `wash_events_${(vehicle.name || vehicle.rfid || 'vehicle').toString().replace(/\s+/g, '_')}`);
+      toast('Export complete', { description: `${rows.length} wash event${rows.length === 1 ? '' : 's'} for ${vehicle.name ?? 'vehicle'} (all time, one row per wash).` });
+    } catch (e) {
+      console.error('Export vehicle wash events failed:', e);
+      toast('Export failed', { description: e?.message || 'Could not load wash events for this vehicle.' });
+    } finally {
+      setExportingVehicleRef(null);
+    }
+  };
+
+  const exportWashRecordsCSV = () => {
+    const rows = exportScans.map(s => {
+      const dt = s.createdAt ?? s.timestamp ?? s.scanDate;
+      const m = dt ? moment(dt) : null;
+      const v = vehicleMap.get(s.vehicleRef) || {};
+      const duration = s.washDurationSeconds ?? s.durationSeconds ?? s.washTime;
+      return {
+        Date: m ? m.format('YYYY-MM-DD') : '—',
+        Time: m ? m.format('HH:mm:ss') : '—',
+        Vehicle: s.vehicleName ?? v.name ?? '—',
+        'Vehicle RFID': s.rfid ?? v.rfid ?? s.vehicleRef ?? '—',
+        Site: s.siteName ?? '—',
+        Customer: s.customerName ?? v.customer_name ?? '—',
+        Status: s.statusLabel ?? s.status ?? '—',
+        'Wash Time (Secs)': duration != null ? duration : '—',
+      };
+    });
+    if (rows.length === 0) return;
+    exportToCSV(rows, 'wash_records');
+  };
+
+  const handleExportPdf = async () => {
+    if (!pdfCaptureRef.current) return;
+    setExportingPdf(true);
+    try {
+      const el = pdfCaptureRef.current;
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#f8fafc',
+        logging: false,
+        height: el.scrollHeight,
+        windowHeight: el.scrollHeight,
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 20;
+      const contentWidth = pageWidth - margin * 2;
+      const imgWidth = contentWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = margin;
+      pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= (pageHeight - margin * 2);
+      while (heightLeft > 0) {
+        position = -(imgHeight - heightLeft) + margin;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= (pageHeight - margin * 2);
+      }
+      pdf.save(`reports-${moment().format('YYYY-MM-DD')}.pdf`);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   // Skeleton components for charts
   const ChartSkeleton = ({ height = "250px" }) => (
     <div className="space-y-3" style={{ height }}>
@@ -349,8 +509,48 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
     ? `${moment(dateRange.start).format('D MMM yyyy')} – ${moment(dateRange.end).format('D MMM yyyy')}`
     : null;
 
+  if (isSyncing) {
+    return (
+      <div className="space-y-8 w-full">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <Skeleton className="h-8 w-64 mb-2" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="rounded-2xl"><CardContent className="p-5"><Skeleton className="h-24 w-full" /></CardContent></Card>
+          <Card className="rounded-2xl"><CardContent className="p-5"><Skeleton className="h-24 w-full" /></CardContent></Card>
+        </div>
+        <Card className="rounded-2xl">
+          <CardHeader><Skeleton className="h-6 w-48" /><Skeleton className="h-10 w-full mt-3" /></CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader><TableRow>
+                {[1,2,3,4,5,6].map(i => <TableHead key={i}><Skeleton className="h-4 w-16" /></TableHead>)}
+              </TableRow></TableHeader>
+              <TableBody>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {[1,2,3,4,5,6].map(j => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton className="h-[300px] w-full rounded-lg" />
+          <Skeleton className="h-[300px] w-full rounded-lg" />
+        </div>
+        <Skeleton className="h-[250px] w-full rounded-lg" />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8 w-full">
+    <div className="space-y-8 w-full" ref={pdfCaptureRef}>
       {/* Header with Filters */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -358,11 +558,13 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           <p className="text-muted-foreground mt-1">Advanced analytics with predictive insights</p>
         </div>
         
-        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <Button 
             variant="outline" 
+            size="sm"
             onClick={exportComplianceReport}
             className="gap-2"
+            disabled={filteredData.filteredVehicles.length === 0}
           >
             <FileSpreadsheet className="w-4 h-4" />
             Export Compliance
@@ -511,9 +713,6 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
                       ? Math.round(((v.washes_completed ?? 0) / v.target) * 100)
                       : 0;
                     const isCompliant = (v.washes_completed ?? 0) >= (v.target ?? 12);
-                    const vehicleCsvData = [
-                      { Vehicle: v.name ?? '—', Customer: v.customer_name ?? '—', Site: v.site_name ?? '—', Status: isCompliant ? 'Compliant' : 'Non-Compliant', Washes: v.washes_completed ?? 0, Target: v.target ?? '—', 'Rate %': rate, 'Last Scan': v.last_scan ? moment(v.last_scan).format('YYYY-MM-DD HH:mm') : '—' }
-                    ];
                     return (
                       <TableRow key={v.id || v.rfid || idx} className="hover:bg-muted/30">
                         <TableCell className="font-medium">{v.name || '—'}</TableCell>
@@ -532,20 +731,11 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
                             variant="ghost"
                             size="sm"
                             className="h-8 gap-1.5 text-xs"
-                            onClick={() => {
-                              const headers = Object.keys(vehicleCsvData[0] || {});
-                              const rows = vehicleCsvData.map(row => headers.map(h => row[h] ?? '').join(','));
-                              const csv = [headers.join(','), ...rows].join('\n');
-                              const blob = new Blob([csv], { type: 'text/csv' });
-                              const url = window.URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = `vehicle_${(v.name || v.rfid || 'export').replace(/\s+/g, '_')}_${moment().format('YYYY-MM-DD')}.csv`;
-                              a.click();
-                              window.URL.revokeObjectURL(url);
-                            }}
+                            onClick={() => exportVehicleWashEventsCSV(v)}
+                            disabled={scansLoading || exportingVehicleRef != null}
+                            title={exportingVehicleRef ? 'Exporting...' : (scansLoading ? 'Loading...' : 'Export all wash events (one row per event with timestamps)')}
                           >
-                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            {(scansLoading || exportingVehicleRef === (v.vehicleRef ?? v.id)) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
                             CSV
                           </Button>
                         </TableCell>
@@ -760,6 +950,54 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           </CardContent>
         </Card>
       </div>
+
+      {/* Wash Records - individual wash events with date stamps */}
+      {exportScans.length > 0 && (
+        <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
+          <CardHeader>
+            <CardTitle className="text-lg">Wash Records</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Individual wash events with date stamps. {exportScans.length > 100 ? `Showing most recent 100 of ${exportScans.length}. Use Export CSV for full dataset.` : `${exportScans.length} records.`}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border border-border overflow-hidden max-h-[400px] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Date</TableHead>
+                    <TableHead className="font-semibold">Time</TableHead>
+                    <TableHead className="font-semibold">Vehicle</TableHead>
+                    <TableHead className="font-semibold">Site</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="font-semibold text-right">Wash Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {exportScans.slice(0, 100).map((s, idx) => {
+                    const dt = s.createdAt ?? s.timestamp ?? s.scanDate;
+                    const m = dt ? moment(dt) : null;
+                    const v = vehicleMap.get(s.vehicleRef) || {};
+                    const duration = s.washDurationSeconds ?? s.durationSeconds ?? s.washTime;
+                    return (
+                      <TableRow key={s.scanRef ?? s.internalScanId ?? idx}>
+                        <TableCell className="text-muted-foreground text-sm">{m ? m.format('DD/MM/YYYY') : '—'}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{m ? m.format('HH:mm') : '—'}</TableCell>
+                        <TableCell className="font-medium">{s.vehicleName ?? v.name ?? '—'}</TableCell>
+                        <TableCell>{s.siteName ?? '—'}</TableCell>
+                        <TableCell>{s.statusLabel ?? s.status ?? '—'}</TableCell>
+                        <TableCell className="text-right text-muted-foreground text-sm">
+                          {duration != null ? (duration >= 60 ? `${Math.round(duration / 60)}m` : `${duration}s`) : '—'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Site Performance Comparison - Radar Chart */}
       <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">

@@ -117,7 +117,7 @@ export default function DashboardLayout({ children, title: titleProp, descriptio
           </SidebarFooter>
         </Sidebar>
 
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
           <SiteHeader title={title} description={description} breadcrumbs={breadcrumbs} />
           <main className="relative z-0 flex-1 overflow-y-auto overflow-x-hidden bg-muted/40 [scrollbar-gutter:stable]">
             {children}

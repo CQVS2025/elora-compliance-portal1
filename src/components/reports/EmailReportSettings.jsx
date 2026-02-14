@@ -1,3 +1,6 @@
+
+
+
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from '@/api/supabaseClient';
@@ -5,7 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { roleTabSettingsOptions } from '@/query/options';
 import { getDefaultEmailReportTypes } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
-import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, MapPin } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -190,14 +193,14 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
   useEffect(() => {
     const loadEmailNotifications = async () => {
       if (!currentUser?.id) return;
-      
+
       try {
         const { data } = await supabase
           .from('notification_preferences')
           .select('email_notifications_enabled')
           .eq('user_id', currentUser.id)
           .single();
-        
+
         if (data) {
           setEmailNotificationsEnabled(data.email_notifications_enabled ?? true);
         }
@@ -396,10 +399,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     return doc.body?.innerHTML || html;
   };
 
-  const generateChartImage = async (type, data, primaryColor, compact = false) => {
+  const generateChartImage = async (type, data, primaryColor, compact = false, atRiskColor = 'hsl(0, 84%, 60%)', secondaryBarColor = 'hsl(173, 58%, 39%)') => {
     const canvas = document.createElement('canvas');
-    canvas.width = compact ? 260 : 400;
-    canvas.height = compact ? 130 : 250;
+    canvas.width = compact ? 280 : 420;
+    canvas.height = compact ? 140 : 260;
 
     const ctx = canvas.getContext('2d');
 
@@ -415,23 +418,24 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           labels: ['Compliant', 'At Risk'],
           datasets: [{
             data: total > 0 ? [compliant, atRisk] : [1],
-            backgroundColor: total > 0 ? [primaryColor || 'hsl(var(--primary))', '#ef4444'] : ['#e2e8f0'],
-            borderWidth: 3,
+            backgroundColor: total > 0 ? [primaryColor || 'hsl(217, 91%, 60%)', atRiskColor] : ['hsl(220, 13%, 91%)'],
+            borderWidth: 4,
             borderColor: '#fff',
-            hoverOffset: 4
+            hoverOffset: 6
           }]
         },
         options: {
           responsive: false,
-          cutout: compact ? '55%' : '60%',
+          cutout: compact ? '60%' : '65%',
           plugins: {
             title: { display: false },
             legend: {
               position: 'bottom',
               labels: {
-                font: { size: compact ? 10 : 12 },
-                padding: compact ? 8 : 16,
-                usePointStyle: true
+                font: { size: compact ? 11 : 13, weight: '600', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+                padding: compact ? 10 : 18,
+                usePointStyle: true,
+                pointStyle: 'circle'
               }
             }
           }
@@ -451,9 +455,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
             label: hasBoth ? 'Value' : 'Total Washes',
             data: values,
             backgroundColor: hasBoth
-              ? [primaryColor || 'hsl(var(--primary))', '#10b981']
-              : primaryColor || 'hsl(var(--primary))',
-            borderRadius: 6,
+              ? [primaryColor || 'hsl(217, 91%, 60%)', secondaryBarColor]
+              : primaryColor || 'hsl(217, 91%, 60%)',
+            borderRadius: 8,
             borderSkipped: false
           }]
         },
@@ -462,12 +466,12 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           scales: {
             y: {
               beginAtZero: true,
-              grid: { color: '#e2e8f0' },
-              ticks: { font: { size: 11 }, color: '#64748b' }
+              grid: { color: 'hsl(220, 13%, 91%)', lineWidth: 1 },
+              ticks: { font: { size: 11, family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }, color: 'hsl(220, 9%, 46%)' }
             },
             x: {
               grid: { display: false },
-              ticks: { font: { size: 11 }, color: '#334155' }
+              ticks: { font: { size: 12, weight: '600', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }, color: 'hsl(220, 13%, 9%)' }
             }
           },
           plugins: {
@@ -477,6 +481,86 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           }
         }
       };
+    } else if (type === 'complianceBySite') {
+      const sites = data.sites || [];
+      const labels = sites.map((s) => (s.siteName || '').length > 12 ? (s.siteName || '').substring(0, 11) + '…' : (s.siteName || ''));
+      const values = sites.map((s) => s.compliancePct ?? 0);
+      const colors = values.map((v) => v >= 75 ? (primaryColor || 'hsl(217, 91%, 60%)') : v >= 50 ? 'hsl(38, 92%, 50%)' : 'hsl(0, 84%, 60%)');
+      chartConfig = {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Compliance %',
+            data: values,
+            backgroundColor: colors,
+            borderRadius: 6,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: false,
+          scales: {
+            x: {
+              min: 0,
+              max: 100,
+              grid: { color: 'hsl(220, 13%, 91%)', lineWidth: 1 },
+              ticks: { font: { size: 10, family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }, color: 'hsl(220, 9%, 46%)' }
+            },
+            y: {
+              grid: { display: false },
+              ticks: { font: { size: 10, weight: '600', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }, color: 'hsl(220, 13%, 9%)', maxRotation: 0 }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: { enabled: false },
+            title: { display: false }
+          }
+        }
+      };
+      canvas.width = compact ? 320 : 480;
+      canvas.height = Math.max(160, Math.min(320, (labels.length || 1) * 36));
+    } else if (type === 'washesBySite') {
+      const sites = data.sites || [];
+      const labels = sites.map((s) => (s.siteName || '').length > 12 ? (s.siteName || '').substring(0, 11) + '…' : (s.siteName || ''));
+      const values = sites.map((s) => s.totalWashes ?? 0);
+      chartConfig = {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Washes',
+            data: values,
+            backgroundColor: primaryColor || 'hsl(217, 91%, 60%)',
+            borderRadius: 6,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: false,
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: 'hsl(220, 13%, 91%)', lineWidth: 1 },
+              ticks: { font: { size: 10, family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }, color: 'hsl(220, 9%, 46%)' }
+            },
+            y: {
+              grid: { display: false },
+              ticks: { font: { size: 10, weight: '600', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }, color: 'hsl(220, 13%, 9%)', maxRotation: 0 }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: { enabled: false },
+            title: { display: false }
+          }
+        }
+      };
+      canvas.width = compact ? 320 : 480;
+      canvas.height = Math.max(160, Math.min(320, (labels.length || 1) * 36));
     }
 
     const chart = new Chart(ctx, chartConfig);
@@ -499,34 +583,70 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     )];
     const isComplianceOnly = selectedReports.length === 1 && selectedReports.includes('compliance');
 
-    // Use client branding if provided, otherwise use default colors
-    const primaryColor = clientBranding?.primary_color || 'hsl(var(--primary))';
-    const secondaryColor = clientBranding?.secondary_color || '#9CCC65';
+    // Enhanced color palette with modern design system
+    const portal = {
+      primary: 'hsl(217, 91%, 60%)',
+      primaryLight: 'hsl(217, 91%, 95%)',
+      primaryDark: 'hsl(217, 91%, 45%)',
+      secondary: 'hsl(220, 14%, 96%)',
+      background: 'hsl(0, 0%, 100%)',
+      foreground: 'hsl(220, 13%, 9%)',
+      muted: 'hsl(220, 14%, 96%)',
+      mutedForeground: 'hsl(220, 9%, 46%)',
+      border: 'hsl(220, 13%, 91%)',
+      destructive: 'hsl(0, 84%, 60%)',
+      destructiveLight: 'hsl(0, 84%, 97%)',
+      success: 'hsl(142, 71%, 45%)',
+      successLight: 'hsl(142, 71%, 96%)',
+      warning: 'hsl(38, 92%, 50%)',
+      warningLight: 'hsl(38, 92%, 95%)',
+      chart2: 'hsl(173, 58%, 39%)',
+      chart2Light: 'hsl(173, 58%, 95%)',
+    };
+
+    const primaryColor = clientBranding?.primary_color || portal.primary;
+    const secondaryColor = clientBranding?.secondary_color || portal.secondary;
     const companyName = clientBranding?.company_name || 'ELORA';
     const logoUrl = clientBranding?.logo_url || null;
+    const fg = portal.foreground;
+    const mutedFg = portal.mutedForeground;
+    const border = portal.border;
+    const mutedBg = portal.muted;
 
-    const pad = isComplianceOnly ? { card: '10px', cardVal: '22px', cardLabel: '10px' } : { card: '20px', cardVal: '32px', cardLabel: '12px' };
+    const formatDate = (d) => {
+      if (!d) return '—';
+      const date = typeof d === 'string' ? new Date(d) : d;
+      return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
+    const pad = isComplianceOnly ? { card: '12px 16px', cardVal: '24px', cardLabel: '10px' } : { card: '14px 20px', cardVal: '28px', cardLabel: '11px' };
+
     const section = (title, content, startNewPage = false) => `
-      ${startNewPage ? '<div style="height: 140px;" aria-hidden="true"></div>' : ''}
-      <div style="margin: ${startNewPage ? '0' : (isComplianceOnly ? '0' : '30px')} 0 ${isComplianceOnly ? '8px' : '20px'} 0; padding-top: ${startNewPage ? '24px' : '0'};">
-        <h2 style="color: #0f172a; font-size: ${isComplianceOnly ? '18px' : '24px'}; font-weight: 700; margin: 0 0 ${isComplianceOnly ? '6px' : '12px'} 0; font-family: Arial, sans-serif;">
-          ${title}
-        </h2>
-        <div style="height: 2px; width: 40px; background: ${primaryColor}; margin-bottom: ${isComplianceOnly ? '10px' : '20px'};"></div>
+      ${startNewPage ? '<div style="height: 90px;" aria-hidden="true"></div>' : ''}
+      <div style="page-break-inside: avoid; break-inside: avoid;">
+        <div style="margin: ${startNewPage ? '0' : (isComplianceOnly ? '24px' : '40px')} 0 ${isComplianceOnly ? '16px' : '24px'} 0; padding-top: ${startNewPage ? '66px' : '0'};">
+          <div style="display: inline-block; position: relative; margin-bottom: ${isComplianceOnly ? '16px' : '20px'};">
+            <h2 style="color: ${fg}; font-size: ${isComplianceOnly ? '20px' : '28px'}; font-weight: 700; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; letter-spacing: -0.5px;">
+              ${title}
+            </h2>
+            <div style="height: 3px; width: 50px; background: linear-gradient(90deg, ${primaryColor} 0%, ${primaryColor}80 100%); margin-top: 8px; border-radius: 2px;"></div>
+          </div>
+        </div>
+        ${content}
       </div>
-      ${content}
     `;
 
-    const metricCard = (label, value, subtitle, color = primaryColor) => `
-      <div style="background: white; border-radius: 6px; padding: ${pad.card}; margin-bottom: ${isComplianceOnly ? '8px' : '15px'}; border-left: 3px solid ${color}; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);">
-        <div style="color: #334155; font-size: ${pad.cardLabel}px; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; font-family: Arial, sans-serif;">${label}</div>
-        <div style="color: #0f172a; font-size: ${pad.cardVal}px; font-weight: 700; margin-bottom: 2px; font-family: Arial, sans-serif;">${value}</div>
-        <div style="color: #64748b; font-size: ${isComplianceOnly ? '11px' : '13px'}; font-family: Arial, sans-serif;">${subtitle}</div>
+    const metricCard = (label, value, subtitle, color = primaryColor, icon = null) => `
+      <div style="background: linear-gradient(135deg, ${portal.background} 0%, ${mutedBg} 100%); border-radius: 10px; padding: ${pad.card}; margin-bottom: ${isComplianceOnly ? '8px' : '10px'}; border: 1px solid ${border}; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04); position: relative; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">
+        <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: ${color}; border-radius: 10px 0 0 10px;"></div>
+        <div style="color: ${mutedFg}; font-size: ${pad.cardLabel}px; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${label}</div>
+        <div style="color: ${fg}; font-size: ${pad.cardVal}px; font-weight: 700; margin-bottom: 2px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; letter-spacing: -0.5px; line-height: 1;">${value}</div>
+        <div style="color: ${mutedFg}; font-size: ${isComplianceOnly ? '11px' : '12px'}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.3;">${subtitle}</div>
       </div>
     `;
 
     const twoColumnMetrics = (leftCard, rightCard) => `
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: ${isComplianceOnly ? '8px' : '20px'};">
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: ${isComplianceOnly ? '10px' : '14px'};">
         <tr>
           <td width="48%" style="vertical-align: top;">${leftCard}</td>
           <td width="4%"></td>
@@ -535,11 +655,34 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       </table>
     `;
 
-    let content = isComplianceOnly ? '' : `
-      <p style="color: #64748b; font-size: 15px; line-height: 1.5; margin: 0 0 30px 0; font-family: Arial, sans-serif;">
-        ${reportData ? 'This PDF was generated from your current fleet data.' : 'This PDF was generated from your current report selections. Live data could not be loaded, so placeholder values are shown.'}
-      </p>
+    const dateRange = reportData?.dateRange;
+    const reportPeriod = dateRange?.start && dateRange?.end
+      ? `${formatDate(dateRange.start)} – ${formatDate(dateRange.end)}`
+      : null;
+    const filterSummary = reportData?.filterSummary || '—';
+    const totalVehicles = reportData?.totalVehicles ?? 0;
+    const vehicleList = reportData?.vehicleList || [];
+
+    const summaryBlock = `
+      <div style="background: linear-gradient(135deg, ${portal.primaryLight} 0%, ${mutedBg} 100%); border-radius: 12px; padding: ${isComplianceOnly ? '16px 20px' : '24px 28px'}; margin-bottom: ${isComplianceOnly ? '20px' : '32px'}; border: 1px solid ${border}; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); page-break-inside: avoid; break-inside: avoid;">
+        <div style="display: flex; align-items: center; margin-bottom: 12px;">
+          <div style="width: 4px; height: 20px; background: ${primaryColor}; border-radius: 2px; margin-right: 10px;"></div>
+          <div style="color: ${fg}; font-size: ${isComplianceOnly ? '13px' : '14px'}; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Report Summary</div>
+        </div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size: ${isComplianceOnly ? '13px' : '15px'}; color: ${mutedFg}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          <tr><td style="padding: 6px 0; width: 150px; font-weight: 500;">Report period</td><td style="padding: 6px 0; font-weight: 700; color: ${fg};">${reportPeriod || '—'}</td></tr>
+          <tr><td style="padding: 6px 0; font-weight: 500;">Scope</td><td style="padding: 6px 0; font-weight: 700; color: ${fg};">${filterSummary}</td></tr>
+          <tr><td style="padding: 6px 0; font-weight: 500;">Vehicles in scope</td><td style="padding: 6px 0; font-weight: 700; color: ${fg};">${totalVehicles.toLocaleString()}</td></tr>
+        </table>
+        ${!isComplianceOnly ? `<p style="color: ${mutedFg}; font-size: 13px; line-height: 1.6; margin: 16px 0 0 0; font-style: italic;">${reportData ? 'This report was generated from your current dashboard filters and fleet data.' : 'Live data could not be loaded; placeholder values are shown.'}</p>` : ''}
+      </div>
     `;
+
+    let content = (reportData && (reportPeriod || filterSummary || totalVehicles > 0)) ? summaryBlock : (isComplianceOnly ? '' : `
+      <p style="color: ${mutedFg}; font-size: 15px; line-height: 1.6; margin: 0 0 32px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        ${reportData ? 'This report was generated from your current fleet data.' : 'Live data could not be loaded; placeholder values are shown.'}
+      </p>
+    `);
 
     // Compliance section
     if (selectedReports.includes('compliance')) {
@@ -552,10 +695,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
             const chartImage = await generateChartImage('compliance', {
               compliant: complianceData.compliantVehicles || 0,
               atRisk: complianceData.atRiskVehicles || 0
-            }, primaryColor, isComplianceOnly);
+            }, primaryColor, isComplianceOnly, portal.destructive);
             chartHtml = `
-              <div style="text-align: center; margin: ${isComplianceOnly ? '8px' : '20px'} 0; page-break-inside: avoid;">
-                <img src="${chartImage}" style="max-width: ${isComplianceOnly ? '260px' : '400px'}; height: auto;" alt="Compliance Chart" />
+              <div style="text-align: center; margin: ${isComplianceOnly ? '12px' : '24px'} 0; page-break-inside: avoid; break-inside: avoid; background: ${portal.background}; border-radius: 12px; padding: 20px; border: 1px solid ${border}; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);">
+                <img src="${chartImage}" style="max-width: ${isComplianceOnly ? '280px' : '420px'}; height: auto;" alt="Compliance Chart" />
               </div>
             `;
           } catch (error) {
@@ -565,51 +708,99 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
 
         const likelihood = complianceData.complianceLikelihood;
         const likelihoodSection = likelihood ? `
-          <div style="background: #f8fafc; border-radius: 6px; padding: ${isComplianceOnly ? '10px' : '16px'}; margin: ${isComplianceOnly ? '8px' : '16px'} 0; page-break-inside: avoid;">
-            <div style="color: #334155; font-size: ${isComplianceOnly ? '10px' : '12px'}; font-weight: 600; margin-bottom: ${isComplianceOnly ? '6px' : '12px'}; text-transform: uppercase; letter-spacing: 1px;">Likelihood Status</div>
-            <table width="100%" cellpadding="0" cellspacing="0"><tr>
-              <td width="33%" style="vertical-align: top; padding-right: 8px;">
-                <div style="background: #dcfce7; color: #166534; padding: ${isComplianceOnly ? '6px 8px' : '8px 12px'}; border-radius: 6px; font-weight: 600; font-size: ${isComplianceOnly ? '14px' : '18px'};">${likelihood.onTrackPct ?? 0}%</div>
-                <div style="color: #64748b; font-size: 10px; margin-top: 2px;">On Track</div>
+          <div style="background: ${mutedBg}; border-radius: 10px; padding: ${isComplianceOnly ? '14px 16px' : '20px 24px'}; margin: ${isComplianceOnly ? '436px' : '184px'} 0 ${isComplianceOnly ? '12px' : '20px'} 0; page-break-inside: avoid; break-inside: avoid; border: 1px solid ${border};">
+            <div style="color: ${fg}; font-size: ${isComplianceOnly ? '12px' : '13px'}; font-weight: 700; margin-top: ${isComplianceOnly ? '26px' : '34px'}; margin-bottom: ${isComplianceOnly ? '10px' : '16px'}; text-transform: uppercase; letter-spacing: 1.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Likelihood Status</div>
+            <table width="100%" cellpadding="0" cellspacing="0" style="page-break-inside: avoid; break-inside: avoid;"><tr>
+              <td width="33%" style="vertical-align: top; padding-right: 10px;">
+                <div style="background: ${portal.primaryLight}; color: ${primaryColor}; padding: ${isComplianceOnly ? '10px 12px' : '14px 16px'}; border-radius: 10px; font-weight: 700; font-size: ${isComplianceOnly ? '16px' : '22px'}; text-align: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; letter-spacing: -0.5px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);">${likelihood.onTrackPct ?? 0}%</div>
+                <div style="color: ${mutedFg}; font-size: ${isComplianceOnly ? '11px' : '12px'}; margin-top: 6px; text-align: center; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">On Track</div>
               </td>
-              <td width="33%" style="vertical-align: top; padding: 0 4px;">
-                <div style="background: #fef3c7; color: #92400e; padding: ${isComplianceOnly ? '6px 8px' : '8px 12px'}; border-radius: 6px; font-weight: 600; font-size: ${isComplianceOnly ? '14px' : '18px'};">${likelihood.atRiskPct ?? 0}%</div>
-                <div style="color: #64748b; font-size: 10px; margin-top: 2px;">At Risk</div>
+              <td width="33%" style="vertical-align: top; padding: 0 5px;">
+                <div style="background: ${portal.warningLight}; color: ${portal.warning}; padding: ${isComplianceOnly ? '10px 12px' : '14px 16px'}; border-radius: 10px; font-weight: 700; font-size: ${isComplianceOnly ? '16px' : '22px'}; text-align: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; letter-spacing: -0.5px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);">${likelihood.atRiskPct ?? 0}%</div>
+                <div style="color: ${mutedFg}; font-size: ${isComplianceOnly ? '11px' : '12px'}; margin-top: 6px; text-align: center; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">At Risk</div>
               </td>
-              <td width="33%" style="vertical-align: top; padding-left: 8px;">
-                <div style="background: #fee2e2; color: #991b1b; padding: ${isComplianceOnly ? '6px 8px' : '8px 12px'}; border-radius: 6px; font-weight: 600; font-size: ${isComplianceOnly ? '14px' : '18px'};">${likelihood.criticalPct ?? 0}%</div>
-                <div style="color: #64748b; font-size: 10px; margin-top: 2px;">Critical</div>
+              <td width="33%" style="vertical-align: top; padding-left: 10px;">
+                <div style="background: ${portal.destructiveLight}; color: ${portal.destructive}; padding: ${isComplianceOnly ? '10px 12px' : '14px 16px'}; border-radius: 10px; font-weight: 700; font-size: ${isComplianceOnly ? '16px' : '22px'}; text-align: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; letter-spacing: -0.5px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);">${likelihood.criticalPct ?? 0}%</div>
+                <div style="color: ${mutedFg}; font-size: ${isComplianceOnly ? '11px' : '12px'}; margin-top: 6px; text-align: center; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Critical</div>
               </td>
             </tr></table>
           </div>
         ` : '';
 
-        content += section('Compliance Overview',
-          twoColumnMetrics(
-            metricCard('COMPLIANCE RATE', `${complianceData.averageCompliance || 0}%`, '% of vehicles meeting target', primaryColor),
-            metricCard('TOTAL VEHICLES', `${complianceData.totalVehicles || 0}`, 'In your fleet', secondaryColor)
-          ) +
-          twoColumnMetrics(
-            metricCard('COMPLIANT', `${complianceData.compliantVehicles || 0}`, 'Meeting target', primaryColor),
-            metricCard('AT RISK', `${complianceData.atRiskVehicles || 0}`, 'Below target', '#ef4444')
-          ) +
-          (likelihoodSection || '') +
-          chartHtml
+        const costSummary = reportData?.costs?.summary;
+        const totalWashes = costSummary?.totalWashes ?? 0;
+        const activeDrivers = costSummary?.activeDrivers ?? 0;
+        const criticalVehicles = complianceData.criticalVehicles ?? 0;
+        const siteCount = reportData?.siteCount ?? 0;
+        const avgWashesPerVehicle = reportData?.avgWashesPerVehicle ?? costSummary?.avgWashesPerVehicle ?? 0;
+
+        const extraMetrics = twoColumnMetrics(
+          metricCard('TOTAL WASHES', `${totalWashes.toLocaleString()}`, 'In report period', primaryColor),
+          metricCard('ACTIVE DRIVERS', `${activeDrivers}`, 'Vehicles with at least one wash', portal.chart2)
         );
+        const analysisMetrics = twoColumnMetrics(
+          metricCard('CRITICAL VEHICLES', `${criticalVehicles}`, 'Zero washes in period', criticalVehicles > 0 ? portal.destructive : portal.success),
+          metricCard('AVG WASHES / VEHICLE', `${Number(avgWashesPerVehicle).toFixed(1)}`, 'Fleet average', portal.chart2)
+        );
+
+        let complianceBySiteChartHtml = '';
+        const siteSummary = reportData?.siteSummary || [];
+        if (includeCharts && siteSummary.length > 0) {
+          try {
+            const bySiteImage = await generateChartImage('complianceBySite', { sites: siteSummary }, primaryColor, isComplianceOnly);
+            complianceBySiteChartHtml = `
+              <div style="margin-top: ${isComplianceOnly ? '16px' : '24px'}; page-break-inside: avoid; break-inside: avoid;">
+                <div style="color: ${fg}; font-size: ${isComplianceOnly ? '12px' : '13px'}; font-weight: 700; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Compliance by site</div>
+                <div style="text-align: center; background: ${portal.background}; border-radius: 12px; padding: 16px; border: 1px solid ${border}; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);">
+                  <img src="${bySiteImage}" style="max-width: ${isComplianceOnly ? '320px' : '480px'}; height: auto;" alt="Compliance by site" />
+                </div>
+              </div>
+            `;
+          } catch (err) {
+            console.error('Error generating compliance-by-site chart:', err);
+          }
+        }
+
+        const topSite = siteSummary.length > 0 ? siteSummary[0] : null;
+        const insightsBlock = (siteCount > 0 || topSite) ? `
+          <div style="background: linear-gradient(135deg, ${portal.chart2Light || mutedBg} 0%, ${mutedBg} 100%); border-radius: 10px; padding: ${isComplianceOnly ? '14px 16px' : '18px 20px'}; margin: ${isComplianceOnly ? '12px' : '20px'} 0; border-left: 4px solid ${portal.chart2}; page-break-inside: avoid; break-inside: avoid;">
+            <div style="color: ${fg}; font-size: ${isComplianceOnly ? '12px' : '13px'}; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Analysis</div>
+            <p style="color: ${mutedFg}; font-size: ${isComplianceOnly ? '12px' : '13px'}; margin: 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+              ${siteCount > 0 ? `Report covers <strong>${siteCount}</strong> site${siteCount !== 1 ? 's' : ''}. ` : ''}
+              ${topSite ? `Top site by washes: <strong>${(topSite.siteName || '—').toString().replace(/</g, '&lt;')}</strong> (${topSite.compliancePct}% compliant, ${topSite.totalWashes} washes). ` : ''}
+              ${criticalVehicles > 0 ? `<strong>${criticalVehicles} vehicle${criticalVehicles !== 1 ? 's' : ''}</strong> with zero washes need attention.` : 'No vehicles with zero washes in this period.'}
+            </p>
+          </div>
+        ` : '';
+
+        const complianceCardsBlock = `<div style="page-break-inside: avoid; break-inside: avoid;">${twoColumnMetrics(
+            metricCard('COMPLIANCE RATE', `${complianceData.averageCompliance || 0}%`, '% of vehicles meeting target', primaryColor),
+            metricCard('TOTAL VEHICLES', `${complianceData.totalVehicles || 0}`, 'In scope', portal.chart2)
+          ) +
+          twoColumnMetrics(
+            metricCard('COMPLIANT', `${complianceData.compliantVehicles || 0}`, 'Meeting target', portal.success),
+            metricCard('AT RISK', `${complianceData.atRiskVehicles || 0}`, 'Below target', portal.destructive)
+          ) +
+          analysisMetrics +
+          extraMetrics}</div>` +
+          (likelihoodSection || '') +
+          chartHtml +
+          complianceBySiteChartHtml +
+          insightsBlock;
+        content += section('Compliance Overview', complianceCardsBlock);
       } else {
         content += section('Compliance Overview',
           twoColumnMetrics(
             metricCard('AVERAGE COMPLIANCE', '—', 'Awaiting live data', primaryColor),
-            metricCard('TOTAL VEHICLES', '—', 'Awaiting live data', secondaryColor)
+            metricCard('TOTAL VEHICLES', '—', 'Awaiting live data', portal.chart2)
           ) + `
-          <div style="background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: ${isComplianceOnly ? '12px' : '20px'}; margin: ${isComplianceOnly ? '8px' : '20px'} 0;">
-            <h4 style="color: #92400e; font-size: ${isComplianceOnly ? '13px' : '15px'}; font-weight: 600; margin: 0 0 4px 0; font-family: Arial, sans-serif;">Data Pending</h4>
-            <p style="color: #92400e; font-size: ${isComplianceOnly ? '11px' : '13px'}; margin: 0; line-height: 1.5; font-family: Arial, sans-serif;">Connect to live data sources to populate compliance metrics.</p>
+          <div style="background: ${portal.warningLight}; border-left: 4px solid ${portal.warning}; border-radius: 10px; padding: ${isComplianceOnly ? '14px 16px' : '20px 24px'}; margin: ${isComplianceOnly ? '12px' : '20px'} 0; page-break-inside: avoid; break-inside: avoid;">
+            <h4 style="color: ${portal.warning}; font-size: ${isComplianceOnly ? '14px' : '16px'}; font-weight: 700; margin: 0 0 6px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">⚠ Data Pending</h4>
+            <p style="color: ${portal.warning}; font-size: ${isComplianceOnly ? '12px' : '14px'}; margin: 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Connect to live data sources to populate compliance metrics.</p>
           </div>
         `);
       }
     }
-
 
     // Cost Analysis / Usage section
     if (selectedReports.includes('costs')) {
@@ -619,6 +810,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         const totalWashes = costData.totalWashes ?? 0;
         const totalCost = costData.totalCost ?? 0;
         const hasCostData = totalCost > 0 || costData.monthlyAverage > 0;
+        const siteCount = costData.siteCount ?? reportData?.siteCount ?? 0;
+        const avgWashesPerVehicle = costData.avgWashesPerVehicle ?? reportData?.avgWashesPerVehicle ?? 0;
+        const siteSummary = reportData?.siteSummary || [];
 
         let chartHtml = '';
         if (includeCharts && (totalWashes > 0 || totalCost > 0)) {
@@ -626,10 +820,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
             const chartImage = await generateChartImage('costs', {
               monthly: costData.monthlyAverage || 0,
               total: hasCostData ? totalCost : totalWashes
-            }, primaryColor);
+            }, primaryColor, false, undefined, portal.chart2);
             chartHtml = `
-              <div style="text-align: center; margin: 20px 0; page-break-inside: avoid;">
-                <img src="${chartImage}" style="max-width: 400px; height: auto;" alt="Usage Chart" />
+              <div style="text-align: center; margin: 24px 0; page-break-inside: avoid; break-inside: avoid; background: ${portal.background}; border-radius: 12px; padding: 20px; border: 1px solid ${border}; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);">
+                <img src="${chartImage}" style="max-width: 420px; height: auto;" alt="Usage Chart" />
               </div>
             `;
           } catch (error) {
@@ -637,30 +831,70 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           }
         }
 
-        const costContent = (hasCostData
+        let washesBySiteChartHtml = '';
+        if (includeCharts && siteSummary.length > 0) {
+          try {
+            const bySiteImage = await generateChartImage('washesBySite', { sites: siteSummary }, primaryColor, false);
+            const washesBySiteTopMargin = selectedReports.includes('compliance') ? '34px' : '92px';
+            washesBySiteChartHtml = `
+              <div style="margin-top: ${washesBySiteTopMargin}; page-break-inside: avoid; break-inside: avoid;">
+                <div style="color: ${fg}; font-size: 13px; font-weight: 700; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Washes by site</div>
+                <div style="text-align: center; background: ${portal.background}; border-radius: 12px; padding: 16px; border: 1px solid ${border}; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);">
+                  <img src="${bySiteImage}" style="max-width: 480px; height: auto;" alt="Washes by site" />
+                </div>
+              </div>
+            `;
+          } catch (err) {
+            console.error('Error generating washes-by-site chart:', err);
+          }
+        }
+
+        // const usageInsightsBlock = (siteCount > 0 || siteSummary.length > 0) ? `
+        //   <div style="background: linear-gradient(135deg, ${portal.primaryLight} 0%, ${mutedBg} 100%); border-radius: 10px; padding: 18px 20px; margin: 40px 0 20px 0; border-left: 4px solid ${primaryColor}; page-break-inside: avoid; break-inside: avoid;">
+        //     <div style="color: ${fg}; font-size: 13px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Usage analysis</div>
+        //     <p style="color: ${mutedFg}; font-size: 13px; margin: 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        //       ${siteCount > 0 ? `Activity across <strong>${siteCount}</strong> site${siteCount !== 1 ? 's' : ''}. ` : ''}
+        //       Average <strong>${Number(avgWashesPerVehicle).toFixed(1)}</strong> washes per vehicle in period.
+        //       ${siteSummary.length > 0 && siteSummary[0] ? ` Highest volume: <strong>${(siteSummary[0].siteName || '—').toString().replace(/</g, '&lt;')}</strong> (${siteSummary[0].totalWashes} washes).` : ''}
+        //     </p>
+        //   </div>
+        // ` : '';
+        const usageInsightsBlock = ``;
+        const usageExtraCards = twoColumnMetrics(
+          metricCard('AVG WASHES / VEHICLE', `${Number(avgWashesPerVehicle).toFixed(1)}`, 'Fleet average in period', portal.chart2),
+          metricCard('SITES WITH ACTIVITY', `${siteCount}`, 'Sites in scope', primaryColor)
+        );
+
+        const costBodyContent = (hasCostData
           ? twoColumnMetrics(
-              metricCard('MONTHLY AVERAGE', `$${costData.monthlyAverage || 0}`, 'Per month', primaryColor),
-              metricCard('TOTAL THIS PERIOD', `$${totalCost}`, 'In selected period', '#10b981')
-            )
+            metricCard('MONTHLY AVERAGE', `$${costData.monthlyAverage || 0}`, 'Per month', primaryColor),
+            metricCard('TOTAL THIS PERIOD', `$${totalCost}`, 'In selected period', portal.chart2)
+          )
           : twoColumnMetrics(
-              metricCard('TOTAL WASHES', `${totalWashes.toLocaleString()}`, 'In selected period', primaryColor),
-              metricCard('ACTIVE DRIVERS', `${costData.activeDrivers ?? 0}`, 'Vehicles with washes in period', '#10b981')
-            )) + chartHtml;
-        content += section('Cost & Usage', costContent, true);
+            metricCard('TOTAL WASHES', `${totalWashes.toLocaleString()}`, 'In selected period', primaryColor),
+            metricCard('DRIVER SCANNING', `${costData.activeDrivers ?? 0}`, 'Vehicles with washes in period', portal.chart2)
+          )) + usageExtraCards + chartHtml + washesBySiteChartHtml + usageInsightsBlock;
+        const costContent = `<div style="page-break-inside: avoid; break-inside: avoid;">${costBodyContent}</div>`;
+        const costSectionStartNewPage = selectedReports.includes('compliance');
+        content += section('Cost & Usage', costContent, costSectionStartNewPage);
       } else {
+        const costSectionStartNewPage = selectedReports.includes('compliance');
         content += section('Cost & Usage',
           twoColumnMetrics(
             metricCard('MONTHLY AVERAGE', '—', 'Awaiting live data', primaryColor),
-            metricCard('TOTAL THIS PERIOD', '—', 'Awaiting live data', '#10b981')
+            metricCard('TOTAL THIS PERIOD', '—', 'Awaiting live data', portal.chart2)
           ),
-          true
+          costSectionStartNewPage
         );
       }
     }
 
-    const headerPad = isComplianceOnly ? '16px 16px' : '40px 20px';
-    const contentPad = isComplianceOnly ? '16px 24px' : '40px 35px';
-    const footerPad = isComplianceOnly ? '12px 16px' : '25px 20px';
+    const generatedDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const headerPad = isComplianceOnly ? '20px 24px' : '36px 32px';
+    const contentPad = isComplianceOnly ? '20px 28px' : '40px 44px';
+    const footerPad = isComplianceOnly ? '16px 24px' : '24px 32px';
+    const pageWidth = isComplianceOnly ? 720 : 820;
+
     return `
       <!DOCTYPE html>
       <html lang="en">
@@ -669,27 +903,34 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Fleet Compliance Report - ${companyName}</title>
       </head>
-      <body style="margin: 0; padding: 0; background: #f1f5f9; font-family: Arial, sans-serif;">
-        <div style="width: 700px; margin: ${isComplianceOnly ? '12px' : '30px'} auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%); padding: ${headerPad}; text-align: center; border-radius: 12px 12px 0 0;">
+      <body style="margin: 0; padding: 0; background: linear-gradient(135deg, ${border} 0%, #e2e8f0 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; color: ${fg};">
+        <div style="width: ${pageWidth}px; margin: ${isComplianceOnly ? '16px' : '28px'} auto; background: ${portal.background}; border-radius: 16px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08); overflow: hidden;">
+          <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor || primaryColor} 100%); padding: ${headerPad}; text-align: center; border-radius: 16px 16px 0 0; position: relative; overflow: hidden;">
+            <div style="position: absolute; top: -50%; right: -10%; width: 300px; height: 300px; background: rgba(255, 255, 255, 0.08); border-radius: 50%; filter: blur(60px);"></div>
+            <div style="position: absolute; bottom: -30%; left: -5%; width: 250px; height: 250px; background: rgba(255, 255, 255, 0.05); border-radius: 50%; filter: blur(50px);"></div>
             ${logoUrl ? `
-              <img src="${logoUrl}" alt="${companyName}" style="height: ${isComplianceOnly ? '36px' : '60px'}; object-fit: contain; margin-bottom: ${isComplianceOnly ? '8px' : '16px'}; display: inline-block;" />
+              <img src="${logoUrl}" alt="${companyName}" style="height: ${isComplianceOnly ? '44px' : '60px'}; object-fit: contain; margin-bottom: ${isComplianceOnly ? '12px' : '16px'}; display: inline-block; position: relative; z-index: 1; filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));" />
             ` : ''}
-            <h1 style="color: white; margin: 0; font-size: ${isComplianceOnly ? '24px' : '36px'}; font-weight: 700; font-family: Arial, sans-serif; letter-spacing: 2px;">
+            <h1 style="color: rgba(255, 255, 255, 0.98); margin: 0; font-size: ${isComplianceOnly ? '26px' : '36px'}; font-weight: 800; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; letter-spacing: -0.5px; position: relative; z-index: 1; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
               ${companyName}
             </h1>
-            <p style="color: rgba(255, 255, 255, 0.95); margin: ${isComplianceOnly ? '4px' : '12px'} 0 0 0; font-size: ${isComplianceOnly ? '12px' : '16px'}; font-family: Arial, sans-serif; letter-spacing: 0.5px;">
-              Compliance Portal Report
+            <p style="color: rgba(255, 255, 255, 0.95); margin: 8px 0 0 0; font-size: ${isComplianceOnly ? '14px' : '17px'}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; position: relative; z-index: 1; font-weight: 500;">
+              Fleet Compliance &amp; Usage Report
             </p>
+            <div style="display: inline-block; background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px); padding: 8px 20px; border-radius: 20px; margin-top: 12px; position: relative; z-index: 1; border: 1px solid rgba(255, 255, 255, 0.2);">
+              <p style="color: rgba(255, 255, 255, 0.95); margin: 0; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600;">
+                📅 ${generatedDate}
+              </p>
+            </div>
           </div>
           <div style="padding: ${contentPad};">
             ${content}
           </div>
-          <div style="background: #f8fafc; padding: ${footerPad}; text-align: center; border-radius: 0 0 12px 12px; border-top: 2px solid #e2e8f0;">
-            <p style="color: #64748b; font-size: ${isComplianceOnly ? '11px' : '13px'}; margin: 0 0 4px 0; font-family: Arial, sans-serif;">
-              This is a ${reportData ? '' : 'preview '}PDF generated from your current settings.
+          <div style="background: linear-gradient(135deg, ${mutedBg} 0%, ${portal.background} 100%); padding: ${footerPad}; text-align: center; border-top: 1px solid ${border};">
+            <p style="color: ${mutedFg}; font-size: ${isComplianceOnly ? '12px' : '13px'}; margin: 0 0 6px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500;">
+              ${reportData ? '✓ Report reflects current dashboard filters and live fleet data.' : '⚠ Preview — connect to live data for full report.'}
             </p>
-            <p style="color: #94a3b8; font-size: 10px; margin: 0; font-family: Arial, sans-serif;">
+            <p style="color: ${mutedFg}; font-size: 12px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
               © ${new Date().getFullYear()} ${companyName}. All rights reserved.
             </p>
           </div>
@@ -768,13 +1009,70 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         const totalWashes = vehicles.reduce((sum, v) => sum + (v?.washes_completed || 0), 0);
         const activeDriversCount = vehicles.filter(v => v?.washes_completed > 0).length;
 
+        // Build filter summary from unique customer/site names in the list
+        const customerSet = new Set(vehicles.map(v => v.customer_name).filter(Boolean));
+        const siteSet = new Set(vehicles.map(v => v.site_name).filter(Boolean));
+        const filterSummary =
+          customerSet.size === 0 && siteSet.size === 0
+            ? 'All (dashboard filters)'
+            : [
+              customerSet.size <= 3 ? Array.from(customerSet).join(', ') : `${customerSet.size} customers`,
+              siteSet.size <= 3 ? Array.from(siteSet).join(', ') : `${siteSet.size} sites`,
+            ].join(' · ');
+
+        // Vehicle list for fleet table (first 50; include status)
+        const vehicleList = vehicles.slice(0, 50).map((v) => {
+          const washes = v.washes_completed ?? 0;
+          const target = v.target ?? targetDefault;
+          const status = washes >= target ? 'Compliant' : washes === 0 ? 'Critical' : 'At Risk';
+          return {
+            name: v.name || v.rfid || '—',
+            customer_name: v.customer_name || '—',
+            site_name: v.site_name || '—',
+            washes_completed: washes,
+            target,
+            status,
+          };
+        });
+
+        // Site-level summary for charts and analysis (top 10 by washes)
+        const siteMap = new Map();
+        vehicles.forEach((v) => {
+          const siteName = v.site_name || 'Unknown';
+          if (!siteMap.has(siteName)) {
+            siteMap.set(siteName, { siteName, vehicles: 0, compliant: 0, totalWashes: 0 });
+          }
+          const entry = siteMap.get(siteName);
+          entry.vehicles += 1;
+          entry.totalWashes += v.washes_completed ?? 0;
+          if ((v.washes_completed ?? 0) >= (v.target ?? targetDefault)) entry.compliant += 1;
+        });
+        const siteSummary = Array.from(siteMap.values())
+          .map((s) => ({
+            ...s,
+            compliancePct: s.vehicles > 0 ? Math.round((s.compliant / s.vehicles) * 100) : 0,
+          }))
+          .sort((a, b) => b.totalWashes - a.totalWashes)
+          .slice(0, 10);
+
+        const avgWashesPerVehicle = vehicles.length > 0 ? (totalWashes / vehicles.length).toFixed(1) : 0;
+        const siteCount = siteMap.size;
+
         reportDataForPdf = {
+          dateRange: dateRange ? { start: dateRange.start, end: dateRange.end } : null,
+          filterSummary,
+          totalVehicles: vehicles.length,
+          vehicleList,
+          siteSummary,
+          siteCount,
+          avgWashesPerVehicle: Number(avgWashesPerVehicle),
           compliance: {
             summary: {
               averageCompliance: vehicles.length > 0 ? Math.round((compliantCount / vehicles.length) * 100) : 0,
               totalVehicles: vehicles.length,
               compliantVehicles: compliantCount,
               atRiskVehicles: atRiskCount + criticalCount,
+              criticalVehicles: criticalCount,
               complianceLikelihood: vehicles.length > 0 ? {
                 onTrackPct: Math.round((compliantCount / vehicles.length) * 100),
                 atRiskPct: Math.round((atRiskCount / vehicles.length) * 100),
@@ -788,7 +1086,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
               monthlyAverage: 0,
               totalWashes,
               activeDrivers: activeDriversCount,
-              recordCount: 0
+              recordCount: 0,
+              siteCount,
+              avgWashesPerVehicle: Number(avgWashesPerVehicle),
             }
           }
         };
@@ -806,7 +1106,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       setPdfHtml(bodyContent);
 
       // Wait for React to render the HTML and all resources to load
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1200));
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
       // Verify the container exists
@@ -823,12 +1123,12 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
 
       // Capture the HTML as a canvas with improved settings
       const canvas = await html2canvas(pdfContainerRef.current, {
-        scale: 2,
+        scale: 2.5,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#f1f5f9',
         logging: false,
-        width: 820,
+        width: 860,
         height: pdfContainerRef.current.scrollHeight || 1200,
         x: 0,
         y: 0
@@ -837,7 +1137,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       console.log('[handleExportPdf] Canvas captured:', canvas.width, 'x', canvas.height);
 
       // Convert canvas to PDF with better page handling
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/png', 0.95);
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'pt',
@@ -847,7 +1147,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 20;
+      const margin = 24;
       const contentWidth = pageWidth - (margin * 2);
 
       const imgWidth = contentWidth;
@@ -869,7 +1169,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       }
 
       // Save the PDF
-      const filename = `${branding.company_name.replace(/\s+/g, '-')}-compliance-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+      const filename = `${branding.company_name.replace(/\s+/g, '-')}-fleet-report-${new Date().toISOString().slice(0, 10)}.pdf`;
       console.log('[handleExportPdf] Saving PDF as:', filename);
       pdf.save(filename);
 
@@ -977,6 +1277,17 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         </Alert>
       )}
 
+      {/* How it works */}
+      <Alert className="border-border bg-muted/30">
+        <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+        <AlertDescription>
+          <span className="font-medium text-foreground">How email reports work</span>
+          <span className="block mt-1.5 text-muted-foreground">
+            The report uses the <strong className="text-foreground">current dashboard filters</strong> at the top of this page (customer, site, and drivers) plus the date range. Set your filters above (e.g. select a customer, site, or drivers), then choose the report duration and which sections to include below. The exported PDF and email will show data that matches that filtered view.
+          </span>
+        </AlertDescription>
+      </Alert>
+
       {/* Report duration */}
       <Card>
         <CardHeader>
@@ -1015,156 +1326,34 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
                 type="number"
                 min={1}
                 max={formData.duration_type === 'days' ? 365 : formData.duration_type === 'weeks' ? 52 : 60}
-                value={formData.duration_count}
+                value={formData.duration_count === '' ? '' : formData.duration_count}
                 onChange={(e) => {
-                  const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                  const raw = e.target.value;
+                  if (raw === '') {
+                    setFormData(prev => ({ ...prev, duration_count: '' }));
+                    return;
+                  }
+                  const num = parseInt(raw, 10);
+                  if (Number.isNaN(num)) return;
+                  const max = formData.duration_type === 'days' ? 365 : formData.duration_type === 'weeks' ? 52 : 60;
+                  const val = Math.max(1, Math.min(max, num));
                   setFormData(prev => ({ ...prev, duration_count: val }));
                   applyDurationToFilters(formData.duration_type, val);
+                }}
+                onBlur={() => {
+                  if (formData.duration_count === '') {
+                    setFormData(prev => ({ ...prev, duration_count: 1 }));
+                    applyDurationToFilters(formData.duration_type, 1);
+                  }
                 }}
                 className="w-24"
               />
               <span className="text-sm text-muted-foreground">
-                {formData.duration_type === 'days' && `Last ${formData.duration_count} day${formData.duration_count > 1 ? 's' : ''}`}
-                {formData.duration_type === 'weeks' && `Last ${formData.duration_count} week${formData.duration_count > 1 ? 's' : ''}`}
-                {formData.duration_type === 'months' && `Last ${formData.duration_count} month${formData.duration_count > 1 ? 's' : ''}`}
+                {formData.duration_type === 'days' && `Last ${Number(formData.duration_count) || 1} day${(Number(formData.duration_count) || 1) > 1 ? 's' : ''}`}
+                {formData.duration_type === 'weeks' && `Last ${Number(formData.duration_count) || 1} week${(Number(formData.duration_count) || 1) > 1 ? 's' : ''}`}
+                {formData.duration_type === 'months' && `Last ${Number(formData.duration_count) || 1} month${(Number(formData.duration_count) || 1) > 1 ? 's' : ''}`}
               </span>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Filter by Site & Vehicle */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-base">Filter report data</CardTitle>
-          </div>
-          <CardDescription>
-            Optionally narrow the report to specific sites or vehicles. Leave empty to include all data from the filters above.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Filter by Site</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between font-normal"
-                  >
-                    {formData.selectedReportSites.length === 0
-                      ? 'All sites'
-                      : formData.selectedReportSites.length === 1
-                        ? (reportSitesOptions.find(s => s.id === formData.selectedReportSites[0])?.name ?? '1 site')
-                        : `${formData.selectedReportSites.length} sites`}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[280px] p-0" align="start">
-                  <div className="max-h-[240px] overflow-y-auto p-2">
-                    {reportSitesOptions.length === 0 ? (
-                      <p className="py-4 text-center text-sm text-muted-foreground">No sites available</p>
-                    ) : (
-                      reportSitesOptions.map((site) => (
-                        <label
-                          key={site.id}
-                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
-                        >
-                          <Checkbox
-                            checked={formData.selectedReportSites.includes(site.id)}
-                            onCheckedChange={(checked) => {
-                              setFormData(prev => ({
-                                ...prev,
-                                selectedReportSites: checked
-                                  ? [...prev.selectedReportSites, site.id]
-                                  : prev.selectedReportSites.filter(id => id !== site.id),
-                              }));
-                            }}
-                          />
-                          {site.name}
-                        </label>
-                      ))
-                    )}
-                  </div>
-                  {formData.selectedReportSites.length > 0 && (
-                    <div className="border-t p-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full text-xs"
-                        onClick={() => setFormData(prev => ({ ...prev, selectedReportSites: [] }))}
-                      >
-                        Clear selection
-                      </Button>
-                    </div>
-                  )}
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Filter by Vehicle</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between font-normal"
-                  >
-                    {formData.selectedReportVehicles.length === 0
-                      ? 'All vehicles'
-                      : formData.selectedReportVehicles.length === 1
-                        ? (reportVehiclesOptions.find(v => String(v.id) === formData.selectedReportVehicles[0])?.name ?? formData.selectedReportVehicles[0])
-                        : `${formData.selectedReportVehicles.length} vehicles`}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[280px] p-0" align="start">
-                  <div className="max-h-[240px] overflow-y-auto p-2">
-                    {reportVehiclesOptions.length === 0 ? (
-                      <p className="py-4 text-center text-sm text-muted-foreground">No vehicles available</p>
-                    ) : (
-                      reportVehiclesOptions.map((v) => (
-                        <label
-                          key={v.id}
-                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
-                        >
-                          <Checkbox
-                            checked={formData.selectedReportVehicles.includes(String(v.id))}
-                            onCheckedChange={(checked) => {
-                              setFormData(prev => ({
-                                ...prev,
-                                selectedReportVehicles: checked
-                                  ? [...prev.selectedReportVehicles, String(v.id)]
-                                  : prev.selectedReportVehicles.filter(id => id !== String(v.id)),
-                              }));
-                            }}
-                          />
-                          <span className="truncate">{v.name}{v.site_name ? ` · ${v.site_name}` : ''}</span>
-                        </label>
-                      ))
-                    )}
-                  </div>
-                  {formData.selectedReportVehicles.length > 0 && (
-                    <div className="border-t p-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full text-xs"
-                        onClick={() => setFormData(prev => ({ ...prev, selectedReportVehicles: [] }))}
-                      >
-                        Clear selection
-                      </Button>
-                    </div>
-                  )}
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-          {reportVehicles.length > 0 && (formData.selectedReportSites.length > 0 || formData.selectedReportVehicles.length > 0) && (
-            <p className="text-xs text-muted-foreground">
-              Report will include {reportVehicles.length} vehicle{reportVehicles.length !== 1 ? 's' : ''}.
-            </p>
           )}
         </CardContent>
       </Card>
@@ -1245,10 +1434,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
               disabled={actionDisabled}
               title={
                 isReportDataUpdating ? 'Please wait for data to finish updating' :
-                userLoading ? 'Loading user information...' :
-                !userEmail ? 'User email not available' :
-                formData.report_types.length === 0 ? 'Please select at least one report type' :
-                'Send email report now'
+                  userLoading ? 'Loading user information...' :
+                    !userEmail ? 'User email not available' :
+                      formData.report_types.length === 0 ? 'Please select at least one report type' :
+                        'Send email report now'
               }
             >
               {sendingNow ? (
@@ -1281,10 +1470,10 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
               disabled={actionDisabled}
               title={
                 isReportDataUpdating ? 'Please wait for data to finish updating' :
-                userLoading ? 'Loading user information...' :
-                !userEmail ? 'User email not available' :
-                formData.report_types.length === 0 ? 'Please select at least one report type' :
-                'Export report to PDF'
+                  userLoading ? 'Loading user information...' :
+                    !userEmail ? 'User email not available' :
+                      formData.report_types.length === 0 ? 'Please select at least one report type' :
+                        'Export report to PDF'
               }
             >
               {exportingPdf ? (
@@ -1313,12 +1502,12 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         ref={pdfContainerRef}
         style={{
           position: 'fixed',
-          width: '820px',
+          width: '860px',
           minHeight: pdfHtml
-            ? (formData.report_types.length === 1 && formData.report_types.includes('compliance') ? '550px' : '1000px')
+            ? (formData.report_types.length === 1 && formData.report_types.includes('compliance') ? '600px' : '1100px')
             : '0px',
-          padding: '24px',
-          background: '#f1f5f9',
+          padding: '28px',
+          background: 'linear-gradient(135deg, hsl(220, 13%, 91%) 0%, #e2e8f0 100%)',
           top: '-99999px',
           left: '0',
           pointerEvents: 'none',
@@ -1334,7 +1523,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       <Alert className="border-border bg-muted/30">
         <Info className="h-4 w-4 text-muted-foreground" />
         <AlertDescription>
-          The report uses the date range and filters (customer, site) from the dashboard above. You can further narrow by specific sites or vehicles in the filter section. Reports will be sent to{' '}
+          The report uses the date range and current filters (customer, site, drivers) from the dashboard above. Reports will be sent to{' '}
           <strong className="text-foreground">{userEmail || 'your email'}</strong>.
         </AlertDescription>
       </Alert>

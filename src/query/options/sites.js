@@ -7,17 +7,24 @@ import { queryKeys } from '../keys';
  * Site Query Options
  * 
  * Provides site-related queries with tenant isolation.
- * API does not support filters; we fetch all and filter client-side for non-super-admin.
+ * Pass customer so backend can return only that customer's sites (ACATC: filter by customer when supported).
  */
 
 /**
- * Fetch all sites with optional filters
+ * Fetch sites, optionally filtered by customer (sites belonging to that customer only).
+ * @param {string} companyId
+ * @param {{ customerId?: string }} filters - customerId = customer ref (e.g. C00001); when set, only sites for that customer are requested.
  */
 export const sitesOptions = (companyId, filters = {}) =>
   queryOptions({
     queryKey: queryKeys.tenant.sites(companyId, filters),
     queryFn: async ({ signal }) => {
-      const response = await callEdgeFunction('elora_sites', filters);
+      const params = {};
+      if (filters.customerId && filters.customerId !== 'all') {
+        params.customer = filters.customerId;
+        params.customer_ref = filters.customerId;
+      }
+      const response = await callEdgeFunction('elora_sites', params);
       let data = response?.data ?? response ?? [];
       const { companyEloraCustomerRef, isSuperAdmin } = getEloraTenantContext();
       // Include items with null customer ref (trust backend); only exclude when ref differs.

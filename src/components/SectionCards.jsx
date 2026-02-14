@@ -44,7 +44,7 @@ const STAT_CARDS = [
   },
   {
     key: 'activeDrivers',
-    label: 'Drivers Scanning?',
+    label: 'Driver Scanning',
     icon: Users,
     valueKey: 'activeDrivers',
     format: (v) => (v ?? 0).toLocaleString(),

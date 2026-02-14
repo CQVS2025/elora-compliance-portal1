@@ -18,9 +18,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import DataTable from '@/components/DataTable';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp, AlertTriangle, CheckCircle2, X, RotateCcw } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle2, X, RotateCcw, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const PRIORITY_COLORS = {
@@ -64,6 +80,10 @@ export default function AIInsightsRecommendations({
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectedRecommendation, setSelectedRecommendation] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [groupPage, setGroupPage] = useState(1);
+  const GROUP_PAGE_SIZE = 20;
 
   // Handler for clicking on chart segments to filter
   const handleChartClick = (data) => {
@@ -95,8 +115,50 @@ export default function AIInsightsRecommendations({
     if (statusFilter !== 'all') list = list.filter((r) => r.status === statusFilter);
     if (typeFilter === 'vehicle') list = list.filter((r) => r.vehicle_ref || r.vehicle_name);
     if (typeFilter === 'fleet') list = list.filter((r) => !r.vehicle_ref && !r.vehicle_name);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((r) =>
+        (r.title || '').toLowerCase().includes(q) ||
+        (r.vehicle_name || '').toLowerCase().includes(q) ||
+        (r.vehicle_ref || '').toLowerCase().includes(q) ||
+        (r.site_name || '').toLowerCase().includes(q)
+      );
+    }
     return list;
-  }, [recommendations, priorityFilter, statusFilter, typeFilter]);
+  }, [recommendations, priorityFilter, statusFilter, typeFilter, searchQuery]);
+
+  const groupedByVehicle = useMemo(() => {
+    const groups = new Map();
+    for (const r of filteredRecommendations) {
+      const key = r.vehicle_ref || r.vehicle_name || null;
+      const groupKey = key ?? `fleet-${r.id}`;
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          key: groupKey,
+          label: key ? (r.vehicle_name || r.vehicle_ref) : 'Fleet-wide',
+          site: r.site_name || null,
+          items: [],
+        });
+      }
+      groups.get(groupKey).items.push(r);
+    }
+    return Array.from(groups.values());
+  }, [filteredRecommendations]);
+
+  const totalGroupPages = Math.max(1, Math.ceil(groupedByVehicle.length / GROUP_PAGE_SIZE));
+  const paginatedGroups = useMemo(
+    () => groupedByVehicle.slice((groupPage - 1) * GROUP_PAGE_SIZE, groupPage * GROUP_PAGE_SIZE),
+    [groupedByVehicle, groupPage]
+  );
+
+  const toggleGroup = (key) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const priorityChartData = useMemo(() => {
     const list = recommendations || [];
@@ -115,44 +177,6 @@ export default function AIInsightsRecommendations({
     Medium: { label: 'Medium', color: 'hsl(var(--chart-medium))' },
     Low: { label: 'Low', color: 'hsl(var(--chart-low))' },
   };
-
-  const columns = [
-    {
-      id: 'type',
-      header: 'Type',
-      cell: (row) => (row.vehicle_ref || row.vehicle_name ? 'Vehicle' : 'Fleet'),
-    },
-    {
-      id: 'vehicle_site',
-      header: 'Vehicle / Scope',
-      accessorKey: 'vehicle_name',
-      cell: (row) => row.vehicle_name || row.vehicle_ref || (row.site_name || '—'),
-    },
-    {
-      id: 'priority',
-      header: 'Priority',
-      cell: (row) => (
-        <Badge className={PRIORITY_COLORS[row.priority] || PRIORITY_COLORS.low}>{row.priority}</Badge>
-      ),
-    },
-    { id: 'title', header: 'Title', accessorKey: 'title' },
-    {
-      id: 'description',
-      header: 'Description',
-      accessorKey: 'description',
-      cell: (row) => (
-        <span className="line-clamp-2 max-w-[280px]" title={row.description}>
-          {row.description}
-        </span>
-      ),
-    },
-    {
-      id: 'gain',
-      header: 'Compliance gain',
-      cell: (row) =>
-        row.potential_compliance_gain != null ? `${Number(row.potential_compliance_gain)}%` : '—',
-    },
-  ];
 
   return (
     <div className="space-y-6">
@@ -420,18 +444,20 @@ export default function AIInsightsRecommendations({
               </div>
             )}
 
-            <DataTable
-              columns={columns}
-              data={filteredRecommendations}
-              getRowId={(row) => row.id}
-              searchPlaceholder="Filter by title, vehicle, or site..."
-              title="Recommendations"
-              pageSize={20}
-              onRowClick={(row) => setSelectedRecommendation(row)}
-              className="cursor-pointer"
-              headerExtra={
-                <>
-                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-2">
+                <h3 className="text-lg font-semibold">Recommendations</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter by title, vehicle, or site..."
+                      value={searchQuery}
+                      onChange={(e) => { setSearchQuery(e.target.value); setGroupPage(1); }}
+                      className="pl-8 w-[220px] h-9"
+                    />
+                  </div>
+                  <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setGroupPage(1); }}>
                     <SelectTrigger className="w-[180px] h-9">
                       <SelectValue placeholder="Filter by type" />
                     </SelectTrigger>
@@ -443,7 +469,7 @@ export default function AIInsightsRecommendations({
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                  <Select value={priorityFilter} onValueChange={(v) => { setPriorityFilter(v); setGroupPage(1); }}>
                     <SelectTrigger className="w-[160px] h-9">
                       <SelectValue placeholder="Filter by priority" />
                     </SelectTrigger>
@@ -466,9 +492,173 @@ export default function AIInsightsRecommendations({
                       Refresh
                     </Button>
                   )}
-                </>
-              }
-            />
+                </div>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="w-10" />
+                      <TableHead>Vehicle / Scope</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead className="max-w-[280px]">Description</TableHead>
+                      <TableHead>Compliance gain</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedGroups.map((group) => {
+                      const isExpanded = expandedGroups.has(group.key);
+                      const hasMultiple = group.items.length > 1;
+                      return (
+                        <React.Fragment key={group.key}>
+                          <TableRow
+                            className={cn(
+                              'cursor-pointer hover:bg-muted/50',
+                              hasMultiple && 'font-medium'
+                            )}
+                            onClick={() => {
+                              if (hasMultiple) {
+                                toggleGroup(group.key);
+                              } else {
+                                setSelectedRecommendation(group.items[0]);
+                              }
+                            }}
+                          >
+                            <TableCell className="w-10 py-2">
+                              {hasMultiple ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); toggleGroup(group.key); }}
+                                  className="p-0.5 rounded hover:bg-muted"
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="w-4 inline-block" />
+                              )}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              <span className="font-medium">{group.label}</span>
+                              {group.site && <span className="text-muted-foreground text-sm ml-1">({group.site})</span>}
+                              {hasMultiple && (
+                                <Badge variant="secondary" className="ml-2 text-xs">
+                                  {group.items.length}
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              {hasMultiple ? (
+                                <div className="flex gap-1 flex-wrap">
+                                  {[...new Set(group.items.map((r) => r.priority))].map((p) => (
+                                    <Badge key={p} className={cn('text-xs', PRIORITY_COLORS[p] || PRIORITY_COLORS.low)}>
+                                      {p}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <Badge className={PRIORITY_COLORS[group.items[0]?.priority] || PRIORITY_COLORS.low}>
+                                  {group.items[0]?.priority}
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              {hasMultiple && !isExpanded
+                                ? `${group.items.length} recommendations`
+                                : group.items[0]?.title}
+                            </TableCell>
+                            <TableCell className="py-2 max-w-[280px]">
+                              {hasMultiple && !isExpanded ? (
+                                <span className="text-muted-foreground text-sm">Click to expand</span>
+                              ) : (
+                                <span className="line-clamp-2 text-sm" title={group.items[0]?.description}>
+                                  {group.items[0]?.description}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              {group.items[0]?.potential_compliance_gain != null
+                                ? `${Number(group.items[0].potential_compliance_gain)}%`
+                                : '—'}
+                            </TableCell>
+                          </TableRow>
+                          {isExpanded &&
+                            group.items.map((rec, idx) => (
+                              <TableRow
+                                key={rec.id || idx}
+                                className="cursor-pointer hover:bg-muted/30 bg-muted/10"
+                                onClick={() => setSelectedRecommendation(rec)}
+                              >
+                                <TableCell className="w-10 py-2" />
+                                <TableCell className="py-2 pl-8 text-sm text-muted-foreground">
+                                  {rec.vehicle_name || rec.vehicle_ref || rec.site_name || '—'}
+                                </TableCell>
+                                <TableCell className="py-2">
+                                  <Badge className={PRIORITY_COLORS[rec.priority] || PRIORITY_COLORS.low}>
+                                    {rec.priority}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="py-2 font-medium">{rec.title}</TableCell>
+                                <TableCell className="py-2 max-w-[280px]">
+                                  <span className="line-clamp-2 text-sm" title={rec.description}>
+                                    {rec.description}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="py-2">
+                                  {rec.potential_compliance_gain != null
+                                    ? `${Number(rec.potential_compliance_gain)}%`
+                                    : '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </React.Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              {totalGroupPages > 1 && (
+                <div className="flex items-center justify-between px-6 py-3 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {((groupPage - 1) * GROUP_PAGE_SIZE) + 1}–{Math.min(groupPage * GROUP_PAGE_SIZE, groupedByVehicle.length)} of {groupedByVehicle.length} vehicle groups
+                  </p>
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => setGroupPage((p) => Math.max(1, p - 1))}
+                          className={groupPage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: Math.min(5, totalGroupPages) }, (_, i) => {
+                        const p = groupPage <= 3 ? i + 1 : Math.min(groupPage - 2 + i, totalGroupPages);
+                        return (
+                          <PaginationItem key={p}>
+                            <PaginationLink
+                              onClick={() => setGroupPage(p)}
+                              isActive={groupPage === p}
+                              className="cursor-pointer"
+                            >
+                              {p}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      })}
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() => setGroupPage((p) => Math.min(totalGroupPages, p + 1))}
+                          className={groupPage >= totalGroupPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </Card>

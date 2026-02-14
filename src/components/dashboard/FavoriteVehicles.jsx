@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Star, StarOff, Loader2 } from 'lucide-react';
+import { Star, StarOff, Loader2, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import moment from 'moment';
 import { toast } from '@/lib/toast';
@@ -309,7 +309,12 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
           {favoriteVehicles.map((vehicle) => {
             const vehicleRef = vehicle.id || vehicle.rfid || vehicle.vehicleRef;
             const favorite = isFavorite(vehicleRef);
-            const isCompliant = vehicle.washes_completed >= vehicle.target;
+            const target = vehicle.target ?? 6;
+            const washes = vehicle.washes_completed ?? 0;
+            const isCompliant = target > 0 && washes >= target;
+            const lastScan = vehicle.last_scan ? moment(vehicle.last_scan) : null;
+            const monthsSinceLastWash = lastScan ? moment().diff(lastScan, 'months', true) : null;
+            const isInactive = monthsSinceLastWash !== null && monthsSinceLastWash >= 6;
 
             return (
               <motion.div
@@ -327,9 +332,20 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-foreground truncate">
-                      {vehicle.name}
-                    </h4>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-semibold text-foreground truncate">
+                        {vehicle.name}
+                      </h4>
+                      {isInactive && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                          title="No wash activity in 6+ months"
+                        >
+                          <AlertCircle className="h-2.5 w-2.5" />
+                          Inactive
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
                       {vehicle.site_name}
                     </p>
@@ -355,7 +371,7 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Washes</span>
                     <span className="text-sm font-semibold text-foreground">
-                      {vehicle.washes_completed}/{vehicle.target}
+                      {washes}/{target}
                     </span>
                   </div>
 
@@ -367,15 +383,17 @@ export default function FavoriteVehicles({ vehicles, selectedCustomer, selectedS
                           : 'bg-amber-500'
                       }`}
                       style={{
-                        width: `${Math.min(100, Math.round((vehicle.washes_completed / vehicle.target) * 100))}%`
+                        width: target > 0 ? `${Math.min(100, Math.round((washes / target) * 100))}%` : '0%'
                       }}
                     />
                   </div>
 
-                  {vehicle.last_scan && (
+                  {vehicle.last_scan ? (
                     <p className="text-xs text-muted-foreground">
                       Last: {moment(vehicle.last_scan).fromNow()}
                     </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">No wash data</p>
                   )}
                 </div>
               </motion.div>

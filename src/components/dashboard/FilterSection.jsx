@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Calendar as CalendarIcon, Loader2, RotateCcw, Building2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -16,9 +16,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { MultiSelection } from '@/components/ui/multi-selection';
 /**
- * shadcn-style Filter Section: Customer, Site, Date range.
- * Role-based visibility and locks preserved.
+ * shadcn-style Filter Section: Customer, Site, Drivers/Vehicles, Date range.
+ * Role-based visibility and locks preserved. Driver selection persists app-wide.
  */
 export default function FilterSection({
   customers,
@@ -27,6 +28,9 @@ export default function FilterSection({
   setSelectedCustomer,
   selectedSite,
   setSelectedSite,
+  vehiclesForDriverFilter = [],
+  selectedDriverIds = [],
+  setSelectedDriverIds,
   dateRange,
   setDateRange,
   activePeriod,
@@ -39,13 +43,39 @@ export default function FilterSection({
   restrictedCustomerName = null,
   restrictedSiteName = null,
   isFiltering = false,
+  filterQueriesFetching,
   isDataLoading = false,
+  isResetting = false,
+  suppressDriverDropdownLoader = false,
   lastSyncedAt = null,
 }) {
-  const showLoading = isFiltering || isDataLoading;
-  const syncLabel = lastSyncedAt
-    ? formatDistanceToNow(lastSyncedAt, { addSuffix: false }).replace('about ', '')
+  const driverOptions = useMemo(() => {
+    const list = vehiclesForDriverFilter || [];
+    return list
+      .map((v) => {
+        const ref = String(v.id ?? v.rfid ?? '');
+        return ref ? { value: ref, label: v.name ?? ref } : null;
+      })
+      .filter(Boolean);
+  }, [vehiclesForDriverFilter]);
+
+  const isSyncing = (filterQueriesFetching ?? isFiltering) || isDataLoading;
+  const showLoading = !suppressDriverDropdownLoader && isSyncing;
+  const syncDate = lastSyncedAt ? (typeof lastSyncedAt === 'number' ? new Date(lastSyncedAt) : lastSyncedAt) : null;
+  const syncLabel = syncDate
+    ? formatDistanceToNow(syncDate, { addSuffix: false }).replace('about ', '')
     : null;
+
+  const statusMessage = (() => {
+    if (isSyncing) {
+      if (syncLabel) return `Syncing — ${syncLabel} since last update`;
+      return 'Syncing…';
+    }
+    if (syncLabel) return `Live — Synced ${syncLabel} ago`;
+    return null;
+  })();
+  const showSyncingPill = isSyncing;
+  const showLivePill = !isSyncing && !!statusMessage;
   const displayName = companyName || restrictedCustomerName;
   const showCompanyBadge = lockCustomerFilter && displayName;
   const showSiteBadgeOnly = lockSiteFilter && restrictedSiteName && !showCompanyBadge;
@@ -147,6 +177,17 @@ export default function FilterSection({
           </div>
         )}
 
+        {typeof setSelectedDriverIds === 'function' && (
+          <div className="min-w-[200px] max-w-[280px]">
+            <MultiSelection
+              value={selectedDriverIds}
+              options={driverOptions}
+              onValueSelected={(ids) => setSelectedDriverIds(ids ?? [])}
+              isLoading={showLoading}
+            />
+          </div>
+        )}
+
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -196,7 +237,7 @@ export default function FilterSection({
         )}
 
         <AnimatePresence mode="wait">
-          {showLoading ? (
+          {showSyncingPill ? (
             <motion.div
               key="syncing"
               initial={{ opacity: 0, x: -8 }}
@@ -210,10 +251,10 @@ export default function FilterSection({
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
               </span>
               <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                {syncLabel ? `Syncing — ${syncLabel} since last update` : (isDataLoading && !isFiltering ? 'Loading data…' : 'Syncing…')}
+                {statusMessage}
               </span>
             </motion.div>
-          ) : lastSyncedAt ? (
+          ) : showLivePill ? (
             <motion.div
               key="live"
               initial={{ opacity: 0, x: -8 }}
@@ -226,7 +267,7 @@ export default function FilterSection({
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
               </span>
               <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                Live — Synced {syncLabel} ago
+                {statusMessage}
               </span>
             </motion.div>
           ) : null}

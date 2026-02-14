@@ -15,7 +15,7 @@ const LIKELIHOOD_OPTIONS = [
   { value: 'red', label: 'Off Track (Critical)', pillClass: 'bg-red-500 hover:bg-red-600', dotClass: 'bg-red-500' },
 ];
 
-function getDefaultLikelihood(row, targetDefault = 12) {
+export function getDefaultLikelihood(row, targetDefault = 12) {
   const target = row.target ?? targetDefault;
   const washes = row.washes_completed ?? 0;
   if (washes >= target) return 'green';

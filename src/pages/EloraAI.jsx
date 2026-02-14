@@ -316,10 +316,29 @@ export default function EloraAI() {
   });
 
   // Filter displayed data by site (client-side filtering)
-  const predictions = useMemo(() => {
+  const siteFilteredPredictions = useMemo(() => {
     if (viewSiteFilter === 'all') return allPredictions;
     return allPredictions.filter(p => p.site_ref === viewSiteFilter);
   }, [allPredictions, viewSiteFilter]);
+
+  // Deduplicate predictions: one row per vehicle_ref, keep highest confidence (or highest risk on tie)
+  const RISK_ORDER = { critical: 4, high: 3, medium: 2, low: 1 };
+  const predictions = useMemo(() => {
+    const byVehicle = new Map();
+    for (const p of siteFilteredPredictions) {
+      const ref = p.vehicle_ref || p.vehicleRef;
+      if (!ref) continue;
+      const existing = byVehicle.get(ref);
+      const conf = Number(p.confidence_score ?? 0);
+      const riskVal = RISK_ORDER[p.risk_level] ?? 0;
+      const existingConf = existing ? Number(existing.confidence_score ?? 0) : -1;
+      const existingRisk = existing ? (RISK_ORDER[existing.risk_level] ?? 0) : -1;
+      if (!existing || conf > existingConf || (conf === existingConf && riskVal > existingRisk)) {
+        byVehicle.set(ref, p);
+      }
+    }
+    return Array.from(byVehicle.values());
+  }, [siteFilteredPredictions]);
 
   const recommendations = useMemo(() => {
     if (viewSiteFilter === 'all') return allRecommendations;
@@ -638,10 +657,10 @@ export default function EloraAI() {
       {/* Header: title + Powered by ELORA AI + Process button */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          {/* <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Sparkles className="h-4 w-4 text-primary" />
             <span>Powered by ELORA AI</span>
-          </div>
+          </div> */}
           <h1 className="text-2xl font-bold tracking-tight mt-1">Elora AI</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Intelligent wash optimization & predictions</p>
         </div>

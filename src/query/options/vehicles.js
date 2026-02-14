@@ -18,14 +18,24 @@ export const vehiclesOptions = (companyId, filters = {}) =>
     queryKey: queryKeys.tenant.vehicles(companyId, filters),
     queryFn: async ({ signal }) => {
       const { companyEloraCustomerRef, isSuperAdmin } = getEloraTenantContext();
-      const params = {
-        customer_id: filters.customerId && filters.customerId !== 'all'
+      const customerRef =
+        filters.customerId && filters.customerId !== 'all'
           ? filters.customerId
           : !isSuperAdmin && companyEloraCustomerRef
             ? companyEloraCustomerRef
-            : filters.customerId,
-        site_id: filters.siteId,
-      };
+            : filters.customerId;
+      const siteRef = filters.siteId && filters.siteId !== 'all' ? filters.siteId : undefined;
+      const params = {};
+      if (customerRef) {
+        params.customer = customerRef;
+        params.customer_id = customerRef;
+        params.customerRef = customerRef;
+      }
+      if (siteRef) {
+        params.site = siteRef;
+        params.site_id = siteRef;
+        params.siteRef = siteRef;
+      }
 
       const response = await callEdgeFunction('elora_vehicles', params);
       return response?.data ?? response ?? [];

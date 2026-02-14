@@ -75,6 +75,27 @@ export default function VehicleWashHistoryModal({
           </DialogDescription>
         </DialogHeader>
 
+        {/* ScanCard Program Parameters (from CMS) */}
+        <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">ScanCard Program Parameters</p>
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Wash Time</span>
+              <p className="font-medium">
+                {vehicle.washTime1Seconds != null ? `${vehicle.washTime1Seconds} Secs` : (vehicle.washTime != null ? `${vehicle.washTime} Secs` : '—')}
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Washes per week</span>
+              <p className="font-medium">{vehicle.washesPerWeek ?? '—'}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Protocol (monthly target)</span>
+              <p className="font-medium">{vehicle.protocolNumber ?? '—'}</p>
+            </div>
+          </div>
+        </div>
+
         <div className="flex-1 overflow-auto border rounded-md -mx-1 px-1">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -112,7 +133,7 @@ export default function VehicleWashHistoryModal({
                       <TableCell className="text-sm">{scan.siteName ?? '—'}</TableCell>
                       <TableCell className="text-sm">{status}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {duration != null ? (duration >= 60 ? `${Math.round(duration / 60)}m` : `${duration}s`) : '—'}
+                        {duration != null ? (duration >= 60 ? `${Math.round(duration / 60)}m` : `${duration} Secs`) : '—'}
                       </TableCell>
                     </TableRow>
                   );

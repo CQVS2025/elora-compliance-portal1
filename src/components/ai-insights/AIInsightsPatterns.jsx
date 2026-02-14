@@ -209,15 +209,15 @@ export default function AIInsightsPatterns({
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[300px]">
                       <p className="text-xs">
-                        Shows average washes per hour for each day/time combination based on historical wash data. 
-                        Darker colors indicate higher activity. Use this to identify underutilized time slots.
+                        Average washes per vehicle per hour for each day/time. Darker = higher activity. 
+                        Cell values (0–1) are normalized; hover each cell for actual wash counts.
                       </p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </CardTitle>
               <CardDescription className="mt-1.5">
-                Average washes per hour based on historical patterns
+                Average washes per vehicle per hour (values 0–1 scale). Hover for actual wash counts.
                 {!hasRealData && ' • Run Fleet Analysis to populate from your data'}
               </CardDescription>
             </div>
@@ -248,20 +248,23 @@ export default function AIInsightsPatterns({
                 {DAYS.map((day, d) => (
                   <tr key={day}>
                     <td className="p-2 bg-muted/60 font-medium text-left sticky left-0 z-[1]">
-                      {day} {d === 4 ? ' ⚠️' : ''}
+                      {day}
                     </td>
                     {HOURS.map((_, h) => {
                       const row = normalizedHeatmap[d];
                       const v = Array.isArray(row) ? (row[h] ?? 0) : 0;
+                      const rawRow = heatmap[d];
+                      const rawCount = Array.isArray(rawRow) ? (rawRow[h] ?? 0) : 0;
+                      const actualCount = typeof rawCount === 'number' ? rawCount : 0;
                       const displayVal = v >= 1 ? Math.round(v) : v > 0 ? v.toFixed(1) : 0;
                       const intensity = maxVal ? v / maxVal : 0;
                       const isDark = intensity > 0.45;
                       const delayMs = (d * HOURS.length + h) * 22;
                       
-                      // Tooltip text with context
-                      const tooltipText = v > 0 
-                        ? `${day} at ${HOURS[h]}\nAvg: ${displayVal} wash${displayVal != 1 ? 'es' : ''} per hour\nBased on historical wash patterns`
-                        : `${day} at ${HOURS[h]}\nNo historical wash activity`;
+                      // Tooltip: show actual wash counts on hover
+                      const tooltipText = actualCount > 0 
+                        ? `${day} at ${HOURS[h]}: ${actualCount} wash${actualCount !== 1 ? 'es' : ''} (avg ${displayVal}/hr)`
+                        : `${day} at ${HOURS[h]}: No wash activity`;
 
                       return (
                         <td
@@ -314,7 +317,7 @@ export default function AIInsightsPatterns({
               <span>High activity</span>
             </div>
             <p className="text-xs text-muted-foreground italic">
-              Hover over cells for detailed information
+              Hover cells for actual wash counts
             </p>
           </div>
         </CardContent>
