@@ -37,7 +37,7 @@ const PATH_TO_HEADER = {
 };
 
 function getPathHeader(pathname) {
-  if (pathname.startsWith('/vehicle/')) return { title: 'Vehicle details', description: 'Wash history and compliance' };
+  if (pathname.startsWith('/vehicle/')) return { title: 'Vehicle details', description: 'Wash history, compliance & analytics' };
   return PATH_TO_HEADER[pathname];
 }
 
