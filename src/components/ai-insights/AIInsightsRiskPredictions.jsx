@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Send, Download, Info, X, RotateCcw } from 'lucide-react';
+import { Send, Download, Info, X, RotateCcw, Loader2, Phone, Mail } from 'lucide-react';
+import { callEdgeFunction } from '@/lib/supabase';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
@@ -40,11 +41,19 @@ const RISK_LEVEL_OPTIONS = [
   { value: 'low', label: 'Low' },
 ];
 
+function maskPhone(phone) {
+  if (!phone || typeof phone !== 'string') return null;
+  const cleaned = phone.replace(/\s/g, '');
+  if (cleaned.length < 6) return cleaned;
+  return `${cleaned.slice(0, 6)}***${cleaned.slice(-2)}`;
+}
+
 export default function AIInsightsRiskPredictions({ 
   predictions, 
   isLoading, 
   isSuperAdmin, 
   canSendAlerts = false, 
+  companyId = null,
   onRefresh,
   sitesForCustomer = [],
   viewSiteFilter = 'all',
@@ -52,6 +61,8 @@ export default function AIInsightsRiskPredictions({
 }) {
   const [riskLevelFilter, setRiskLevelFilter] = useState('all');
   const [siteFilter, setSiteFilter] = useState('all');
+  const [sendingRowId, setSendingRowId] = useState(null);
+  const [sendingAll, setSendingAll] = useState(false);
 
   // Handler for clicking on chart bars to filter
   const handleChartBarClick = (data) => {
@@ -124,14 +135,72 @@ export default function AIInsightsRiskPredictions({
     low: { label: 'Low', color: 'hsl(var(--chart-low))' },
   };
 
-  const handleSendReminder = (vehicleRef) => {
+  const handleSendReminder = async (row) => {
     if (!canSendAlerts) return;
-    toast('Queued', { description: 'SMS will be enabled in Phase 2.' });
+    const phone = (row.driver_phone || '').trim();
+    if (!phone) {
+      toast.error('No phone number', { description: 'This vehicle has no driver phone in the system. Add phone in the vehicles API or run Process All Vehicles to refresh.' });
+      return;
+    }
+    setSendingRowId(row.id);
+    try {
+      const data = await callEdgeFunction('send-sms', {
+        vehicle_ref: row.vehicle_ref,
+        vehicle_name: row.vehicle_name || row.vehicle_ref,
+        driver_name: row.driver_name || null,
+        driver_phone: phone,
+        risk_level: row.risk_level || 'medium',
+        company_id: companyId,
+      });
+      if (data?.sent >= 1) {
+        toast.success('SMS sent', { description: `Reminder sent to ${maskPhone(phone)}` });
+      } else {
+        toast.error('SMS failed', { description: data.results?.[0]?.error || data.error || 'Could not send SMS' });
+      }
+    } catch (err) {
+      toast.error('SMS failed', { description: err?.message || 'Could not send SMS' });
+    } finally {
+      setSendingRowId(null);
+    }
   };
 
-  const handleSendAllReminders = () => {
+  const handleSendAllReminders = async () => {
     if (!canSendAlerts) return;
-    toast('Queued', { description: 'SMS will be enabled in Phase 2.' });
+    const withPhone = filteredPredictions.filter((p) => (p.driver_phone || '').trim());
+    const withoutPhone = filteredPredictions.filter((p) => !(p.driver_phone || '').trim());
+    if (withPhone.length === 0) {
+      toast.error('No phone numbers', {
+        description: 'None of the filtered vehicles have driver phone numbers. Run Process All Vehicles to refresh data from the API.',
+      });
+      return;
+    }
+    setSendingAll(true);
+    try {
+      const data = await callEdgeFunction('send-sms', {
+        reminders: withPhone.map((p) => ({
+          vehicle_ref: p.vehicle_ref,
+          vehicle_name: p.vehicle_name || p.vehicle_ref,
+          driver_name: p.driver_name || null,
+          driver_phone: (p.driver_phone || '').trim(),
+          risk_level: p.risk_level || 'medium',
+        })),
+        company_id: companyId,
+      });
+      const sent = data.sent ?? 0;
+      const failed = data.failed ?? 0;
+      if (sent > 0) {
+        toast.success('SMS sent', {
+          description: `Sent ${sent} reminder(s).${failed > 0 ? ` ${failed} failed.` : ''}${withoutPhone.length > 0 ? ` ${withoutPhone.length} vehicle(s) have no phone.` : ''}`,
+          duration: 4000,
+        });
+      } else {
+        toast.error('SMS failed', { description: data.results?.[0]?.error || data.error || 'Could not send SMS' });
+      }
+    } catch (err) {
+      toast.error('SMS failed', { description: err?.message || 'Could not send SMS' });
+    } finally {
+      setSendingAll(false);
+    }
   };
 
   const handleExport = () => {
@@ -140,9 +209,93 @@ export default function AIInsightsRiskPredictions({
 
   const columns = [
     { id: 'vehicle', header: 'Vehicle', accessorKey: 'vehicle_name', cell: (row) => row.vehicle_name || row.vehicle_ref || '—' },
-    { id: 'driver', header: 'Driver', accessorKey: 'driver_name', cell: (row) => row.driver_name || '—' },
+    {
+      id: 'driver',
+      header: 'Driver',
+      accessorKey: 'driver_name',
+      cell: (row) => row.driver_name || row.vehicle_name || '—',
+    },
+    {
+      id: 'phone',
+      header: (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1 cursor-help">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Phone</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[240px]">
+              <p className="text-xs">Driver/contact phone from vehicles API. Required for SMS reminders.</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ),
+      cell: (row) => {
+        const phone = (row.driver_phone || '').trim();
+        return phone ? maskPhone(phone) : <span className="text-muted-foreground">—</span>;
+      },
+    },
+    {
+      id: 'email',
+      header: (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1 cursor-help">
+                <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Email</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[240px]">
+              <p className="text-xs">Driver/contact email from vehicles API.</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ),
+      cell: (row) => {
+        const email = (row.driver_email || '').trim();
+        return email ? (
+          <span className="truncate max-w-[140px] block" title={email}>{email}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
+    },
     { id: 'site', header: 'Site', accessorKey: 'site_name', cell: (row) => row.site_name || row.site_ref || '—' },
-    { id: 'progress', header: 'Progress', cell: () => '—' },
+    {
+      id: 'customer',
+      header: 'Customer',
+      accessorKey: 'customer_name',
+      cell: (row) => row.customer_name || '—',
+    },
+    {
+      id: 'rfid',
+      header: 'RFID',
+      accessorKey: 'vehicle_rfid',
+      cell: (row) => {
+        const rfid = (row.vehicle_rfid || '').trim();
+        return rfid ? (
+          <span className="font-mono text-xs truncate max-w-[100px] block" title={rfid}>{rfid}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
+    },
+    {
+      id: 'progress',
+      header: 'Progress',
+      cell: (row) => {
+        const current = row.current_week_washes;
+        const target = row.target_washes;
+        if (current != null && target != null && target > 0) {
+          const pct = Math.min(100, Math.round((current / target) * 100));
+          return `${current}/${target} (${pct}%)`;
+        }
+        return '—';
+      },
+    },
     {
       id: 'risk_level',
       header: 'Risk Level',
@@ -175,30 +328,48 @@ export default function AIInsightsRiskPredictions({
       id: 'action',
       header: 'Action',
       cell: (row) => {
+        const hasPhone = !!(row.driver_phone || '').trim();
+        const isSending = sendingRowId === row.id;
         const btn = (
           <Button
             variant="ghost"
             size="sm"
-            disabled={!canSendAlerts}
-            onClick={() => handleSendReminder(row.vehicle_ref)}
+            disabled={!canSendAlerts || !hasPhone || isSending}
+            onClick={() => handleSendReminder(row)}
           >
+            {isSending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
             Send Reminder
           </Button>
         );
-        return canSendAlerts ? (
-          btn
-        ) : (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-block cursor-not-allowed">{btn}</span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{NO_ACCESS_MESSAGE}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        );
+        if (!canSendAlerts) {
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block cursor-not-allowed">{btn}</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{NO_ACCESS_MESSAGE}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        }
+        if (!hasPhone) {
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block">{btn}</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>No driver phone in vehicles API. Run Process All Vehicles to refresh.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        }
+        return btn;
       },
     },
   ];
@@ -396,7 +567,7 @@ export default function AIInsightsRiskPredictions({
             columns={columns}
             data={filteredPredictions}
             getRowId={(row) => row.id}
-            searchPlaceholder="Filter vehicles by name, driver, or site..."
+            searchPlaceholder="Filter by vehicle, driver, site, customer..."
             title="At-Risk Vehicle Details"
             pageSize={20}
             headerExtra={
@@ -427,8 +598,8 @@ export default function AIInsightsRiskPredictions({
                   </SelectContent>
                 </Select>
                 {canSendAlerts ? (
-                  <Button variant="outline" size="sm" onClick={handleSendAllReminders}>
-                    <Send className="h-4 w-4 mr-1" />
+                  <Button variant="outline" size="sm" onClick={handleSendAllReminders} disabled={sendingAll}>
+                    {sendingAll ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
                     Send All Reminders
                   </Button>
                 ) : (

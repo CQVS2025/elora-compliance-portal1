@@ -315,7 +315,7 @@ export default function DataTable({
       </CardHeader>
       <CardContent className="p-0 overflow-hidden">
         <div className="w-full overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
-          <Table className="min-w-max">
+          <Table className="min-w-max [&_td]:text-center [&_td]:align-middle [&_td]:px-4 [&_td]:py-3">
           <TableHeader className="sticky top-0 z-10 bg-muted/60 shadow-sm [&_th]:text-center [&_th]:align-middle [&_th]:px-4 [&_th]:py-3 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wider [&_th]:text-foreground [&_th]:border-b-2 [&_th]:border-border">
             {hasGroupHeader ? (
               <>

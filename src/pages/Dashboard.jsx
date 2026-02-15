@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { useLocation } from 'react-router-dom';
-import { Loader2, Trophy, ChevronRight, AlertTriangle, Download, History } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Loader2, Trophy, ChevronRight, AlertTriangle, Download } from 'lucide-react';
 import VehicleLikelihoodCell, { getDefaultLikelihood } from '@/components/dashboard/VehicleLikelihoodCell';
 import { motion, AnimatePresence } from 'framer-motion';
 import moment from 'moment';
@@ -68,6 +68,8 @@ const ALL_TABS = [
   { value: 'branding', label: 'Branding' }
 ];
 
+const FILTER_STORAGE_KEY = 'elora-dashboard-filters';
+
 // Default filter values - each tab gets its own copy, no mixing
 const getDefaultFilters = () => ({
   selectedCustomer: 'all',
@@ -79,6 +81,26 @@ const getDefaultFilters = () => ({
   },
   activePeriod: 'Month'
 });
+
+function getInitialFilters() {
+  try {
+    const raw = typeof sessionStorage !== 'undefined' && sessionStorage.getItem(FILTER_STORAGE_KEY);
+    if (!raw) return getDefaultFilters();
+    const parsed = JSON.parse(raw);
+    const defaults = getDefaultFilters();
+    return {
+      selectedCustomer: parsed.selectedCustomer ?? defaults.selectedCustomer,
+      selectedSite: parsed.selectedSite ?? defaults.selectedSite,
+      selectedDriverIds: Array.isArray(parsed.selectedDriverIds) ? parsed.selectedDriverIds : defaults.selectedDriverIds,
+      dateRange: parsed.dateRange && typeof parsed.dateRange === 'object' && parsed.dateRange.start && parsed.dateRange.end
+        ? { start: parsed.dateRange.start, end: parsed.dateRange.end }
+        : defaults.dateRange,
+      activePeriod: parsed.activePeriod ?? defaults.activePeriod,
+    };
+  } catch {
+    return getDefaultFilters();
+  }
+}
 
 // Date range for period preset
 const getDateRangeForPeriod = (period) => {
@@ -162,14 +184,23 @@ const PATH_TO_TAB = {
 
 export default function Dashboard() {
   const location = useLocation();
+  const navigate = useNavigate();
   const permissions = usePermissions();
   const [isMobile, setIsMobile] = useState(false);
   // Active section derived from route (sidebar navigation)
   const activeTab = PATH_TO_TAB[location.pathname] ?? 'compliance';
 
-  // Single shared filter state - same customer, site, and date range across all navigation tabs
-  const [sharedFilters, setSharedFilters] = useState(getDefaultFilters);
+  // Single shared filter state - persisted so it survives navigation to vehicle detail and back
+  const [sharedFilters, setSharedFilters] = useState(getInitialFilters);
   const { selectedCustomer, selectedSite, selectedDriverIds = [], dateRange, activePeriod } = sharedFilters;
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(sharedFilters));
+    } catch {
+      // ignore storage errors
+    }
+  }, [sharedFilters]);
 
   // Use database-driven tab visibility from permissions (for filter/access checks)
   const availableTabs = useAvailableTabs(ALL_TABS);
@@ -231,7 +262,13 @@ export default function Dashboard() {
   const [isResetting, setIsResetting] = useState(false);
   const resetAllFiltersToDefault = useCallback(() => {
     setIsResetting(true);
-    setSharedFilters(getDefaultFilters());
+    const defaults = getDefaultFilters();
+    setSharedFilters(defaults);
+    try {
+      sessionStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(defaults));
+    } catch {
+      // ignore
+    }
   }, []);
 
   useEffect(() => {
@@ -631,7 +668,8 @@ export default function Dashboard() {
   const stats = useMemo(() => {
     const vehicles = Array.isArray(filteredVehicles) ? filteredVehicles : [];
     const targetDefault = 12;
-    const onTrackCount = vehicles.filter(v => v && (v.washes_completed ?? 0) >= (v.target ?? targetDefault)).length;
+    const getTargetWashes = (v) => v?.protocolNumber ?? v?.target ?? targetDefault;
+    const onTrackCount = vehicles.filter(v => v && (v.washes_completed ?? 0) >= getTargetWashes(v)).length;
     const criticalCount = vehicles.filter(v => v && (v.washes_completed ?? 0) === 0).length;
     const atRiskCount = vehicles.length - onTrackCount - criticalCount;
     const totalWashes = vehicles.reduce((sum, v) => sum + (v?.washes_completed || 0), 0);
@@ -675,14 +713,22 @@ export default function Dashboard() {
     }
     if (complianceStatusFilter === 'all') return list;
     const targetDefault = 12;
+    const getTargetWashes = (v) => v.protocolNumber ?? v.target ?? targetDefault;
     if (complianceStatusFilter === 'compliant') {
-      return list.filter((v) => (v.washes_completed ?? 0) >= (v.target ?? targetDefault));
+      return list.filter((v) => (v.washes_completed ?? 0) >= getTargetWashes(v));
     }
     if (complianceStatusFilter === 'non-compliant') {
-      return list.filter((v) => (v.washes_completed ?? 0) < (v.target ?? targetDefault));
+      return list.filter((v) => (v.washes_completed ?? 0) < getTargetWashes(v));
     }
     return list;
   }, [filteredVehicles, complianceStatusFilter, complianceSiteFilter]);
+
+  const navigateToVehicleDetail = useCallback(
+    (vehicleRef) => {
+      if (vehicleRef) navigate(`/vehicle/${encodeURIComponent(vehicleRef)}`);
+    },
+    [navigate]
+  );
 
   const handleLikelihoodOverride = useCallback(
     (vehicleRef, value) => {
@@ -697,20 +743,26 @@ export default function Dashboard() {
   );
 
   const exportComplianceCSV = useCallback(() => {
-    const reportData = complianceFilteredVehicles.map((v) => ({
-      Vehicle: v.name ?? '—',
-      RFID: v.rfid ?? '—',
-      Site: v.site_name ?? '—',
-      Washes: v.washes_completed ?? 0,
-      Target: v.target ?? '—',
-      Status: (v.washes_completed ?? 0) >= (v.target ?? 12) ? 'Compliant' : 'Non-Compliant',
-      'Progress %': v.target ? Math.round(((v.washes_completed ?? 0) / v.target) * 100) : '—',
-      'Last Scan': v.last_scan ? moment(v.last_scan).format('YYYY-MM-DD HH:mm') : '—',
-    }));
+    const empty = '-'; // ASCII-only for CSV so Excel does not show encoding issues (e.g. â€" from em dash)
+    const getTargetWashes = (v) => v.protocolNumber ?? v.target ?? 12;
+    const reportData = complianceFilteredVehicles.map((v) => {
+      const targetWashes = getTargetWashes(v);
+      const washes = v.washes_completed ?? 0;
+      const progressPct = targetWashes ? Math.round((washes / targetWashes) * 100) : 0;
+      return {
+        Customer: v.customer_name ?? empty,
+        Site: v.site_name ?? empty,
+        Vehicle: v.name ?? empty,
+        'Target Washes': targetWashes,
+        Status: washes >= targetWashes ? 'Compliant' : 'Non-Compliant',
+        'Progress %': progressPct,
+        'Last Scan': v.last_scan ? moment(v.last_scan).format('YYYY-MM-DD HH:mm') : empty,
+      };
+    });
     const headers = Object.keys(reportData[0] || {});
     const rows = reportData.map((row) => headers.map((h) => String(row[h] ?? '')).join(','));
     const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -735,8 +787,8 @@ export default function Dashboard() {
       return 'bg-red-500';
     };
 
-    // Monthly target = weekly target × 4 (used for Target column, Progress %, and Compliant/Non-Compliant)
-    const getMonthlyTarget = (row) => (row.washesPerWeek ?? row.target ?? 12) * 4;
+    // Target Washes = protocol (monthly limit/target from scan card). Used for Progress % and Compliant/Non-Compliant.
+    const getTargetWashes = (row) => row.protocolNumber ?? row.target ?? 12;
 
     const scanCardGroup = {
       id: 'scan_card',
@@ -777,10 +829,12 @@ export default function Dashboard() {
           />
         ),
       },
-      { id: 'name', header: 'Vehicle', accessorKey: 'name' },
-      { id: 'site_name', header: 'Site', accessorKey: 'site_name' },
-      { id: 'washes_completed', header: 'Washes Total', accessorKey: 'washes_completed', cell: (row) => row.washes_completed ?? '—' },
-      { id: 'target', header: 'Target', cell: (row) => getMonthlyTarget(row) },
+      { id: 'customer_name', header: 'Customer', accessorKey: 'customer_name', cell: (row) => row.customer_name ?? '—' },
+      { id: 'site_name', header: 'Site', accessorKey: 'site_name', cell: (row) => row.site_name ?? '—' },
+      { id: 'name', header: 'Vehicle', accessorKey: 'name', cell: (row) => (
+        <span className="font-medium text-primary cursor-pointer hover:underline">{row.name ?? '—'}</span>
+      ) },
+      { id: 'target', header: 'Target Washes', cell: (row) => getTargetWashes(row) },
       {
         id: 'likelihood',
         header: 'Likelihood',
@@ -797,9 +851,9 @@ export default function Dashboard() {
         id: 'progress',
         header: 'Progress %',
         cell: (row) => {
-          const monthlyTarget = getMonthlyTarget(row);
+          const targetWashes = getTargetWashes(row);
           const washes = row.washes_completed ?? 0;
-          const pct = monthlyTarget ? Math.round((washes / monthlyTarget) * 100) : 0;
+          const pct = targetWashes ? Math.round((washes / targetWashes) * 100) : 0;
           const effective = likelihoodOverrides[row.id ?? row.rfid] ?? getDefaultLikelihood(row);
           const barColor = progressBarColor(effective);
           const barWidth = Math.min(100, pct);
@@ -818,18 +872,14 @@ export default function Dashboard() {
       },
       {
         id: 'status',
-        header: 'Status',
+        header: 'Compliance Status',
         cell: (row) => {
-          const monthlyTarget = getMonthlyTarget(row);
-          const isCompliant = (row.washes_completed ?? 0) >= monthlyTarget;
-          const statusLabel = row.status ?? 'Active';
+          const targetWashes = getTargetWashes(row);
+          const isCompliant = (row.washes_completed ?? 0) >= targetWashes;
           return (
-            <span className="inline-flex items-center gap-1.5">
-              <Badge variant="outline" className="font-normal">{statusLabel}</Badge>
-              <Badge className={isCompliant ? 'bg-primary' : 'bg-red-500 hover:bg-red-600'}>
-                {isCompliant ? 'Compliant' : 'Non-Compliant'}
-              </Badge>
-            </span>
+            <Badge className={isCompliant ? 'bg-primary' : 'bg-red-500 hover:bg-red-600'}>
+              {isCompliant ? 'Compliant' : 'Non-Compliant'}
+            </Badge>
           );
         },
       },
@@ -839,9 +889,6 @@ export default function Dashboard() {
         header: 'Last Scan',
         cell: (row) => (row.last_scan ? moment(row.last_scan).format('YYYY-MM-DD HH:mm:ss') : '—'),
       },
-      { id: 'customer_name', header: 'Customer', accessorKey: 'customer_name', cell: (row) => row.customer_name ?? '—' },
-      ...(permissions.isAdmin ? [{ id: 'rfid', header: 'Vehicle RFID', accessorKey: 'rfid' }] : []),
-      { id: 'protocol', header: 'Protocol', accessorKey: 'protocolNumber', cell: (row) => row.protocolNumber ?? '—' },
       {
         id: 'actions',
         header: 'Actions',
@@ -850,16 +897,15 @@ export default function Dashboard() {
             variant="ghost"
             size="sm"
             className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-            onClick={(e) => { e.stopPropagation(); setSelectedVehicleForWashHistory(row); }}
+            onClick={(e) => { e.stopPropagation(); navigateToVehicleDetail(row.id ?? row.rfid); }}
           >
-            <History className="w-4 h-4" />
-            Wash history
+            View details
           </Button>
         ),
       },
     ];
     return base;
-  }, [userEmail, likelihoodOverrides, handleLikelihoodOverride, effectiveCompanyIdForLikelihood, permissions.isAdmin]);
+  }, [userEmail, likelihoodOverrides, handleLikelihoodOverride, effectiveCompanyIdForLikelihood, navigateToVehicleDetail]);
 
 
   if (isMobile && permissions.isDriver) {
@@ -1025,7 +1071,8 @@ export default function Dashboard() {
                       columns={vehicleColumns}
                       data={complianceFilteredVehicles}
                       getRowId={(row) => row.id ?? row.rfid ?? ''}
-                      searchPlaceholder="Search by vehicle, RFID, or site..."
+                      onRowClick={(row) => navigateToVehicleDetail(row?.id ?? row?.rfid)}
+                      searchPlaceholder="Search by vehicle or site..."
                       title="Vehicle compliance"
                       disablePagination={complianceSiteFilter !== 'all'}
                       footerMessage={

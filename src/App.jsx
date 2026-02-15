@@ -149,6 +149,13 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        <Route path="/vehicle/:vehicleRef" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.VehicleDetail)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
         {/* Elora AI route */}
         <Route path="/ai-insights" element={
           <AuthenticatedRoute>
@@ -349,7 +356,7 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+          <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
             <NavigationTracker />
             <AuthenticatedApp />
             <Toaster />

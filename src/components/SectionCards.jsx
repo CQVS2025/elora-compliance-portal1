@@ -44,7 +44,8 @@ const STAT_CARDS = [
   },
   {
     key: 'activeDrivers',
-    label: 'Driver Scanning',
+    label: 'Vehicles with scans',
+    subtitle: 'Vehicles that received at least one wash in the selected period',
     icon: Users,
     valueKey: 'activeDrivers',
     format: (v) => (v ?? 0).toLocaleString(),
@@ -71,7 +72,7 @@ export default function SectionCards({ stats = {}, dateRange = null, className }
 
   return (
     <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4', className)}>
-      {STAT_CARDS.map(({ key, label, icon: Icon, valueKey, format: formatValue, trendLabel, accentClass, showLikelihood }) => (
+      {STAT_CARDS.map(({ key, label, subtitle, icon: Icon, valueKey, format: formatValue, trendLabel, accentClass, showLikelihood }) => (
         <Card key={key} className="overflow-hidden">
           <CardContent className="p-6">
             <div className="flex items-start justify-between gap-2">
@@ -86,6 +87,9 @@ export default function SectionCards({ stats = {}, dateRange = null, className }
             <p className="mt-2 text-2xl font-bold tracking-tight">
               {formatValue(safeStats[valueKey])}
             </p>
+            {subtitle && (
+              <p className="mt-1 text-xs text-muted-foreground max-w-[85%]">{subtitle}</p>
+            )}
             {trendLabel && (
               <p className="mt-1 text-xs text-muted-foreground">{trendLabel}</p>
             )}

@@ -838,6 +838,7 @@ export default function EloraAI() {
               isLoading={predictionsLoading}
               isSuperAdmin={isSuperAdmin}
               canSendAlerts={canRunFleetAnalysis}
+              companyId={companyId}
               onRefresh={invalidateAiQueries}
               sitesForCustomer={sitesForCustomer}
               viewSiteFilter={viewSiteFilter}

@@ -44,6 +44,7 @@ UTIL_FUNCTIONS=(
   "checkNotifications"
   "sendEmailReport"
   "sendScheduledReports"
+  "send-sms"
 )
 
 # Deploy all Elora API functions

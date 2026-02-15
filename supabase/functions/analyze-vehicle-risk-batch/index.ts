@@ -9,8 +9,16 @@ interface VehicleInput {
   vehicle_name?: string | null;
   site_ref?: string | null;
   site_name?: string | null;
-  driver_name?: string | null;
   customer_ref?: string | null;
+  customer_name?: string | null;
+  driver_name?: string | null;
+  driver_phone?: string | null;
+  driver_email?: string | null;
+  vehicle_rfid?: string | null;
+  wash_time_seconds?: number | null;
+  washes_per_day?: number | null;
+  washes_per_week?: number | null;
+  last_scan_at?: string | null;
   current_week_washes?: number;
   target_washes?: number;
   days_remaining?: number;
@@ -125,11 +133,21 @@ Respond with a single JSON object only, no markdown:
       const { error: insertError } = await supabase.from('ai_predictions').insert({
         company_id: company_id || null,
         customer_ref: input.customer_ref || customer_ref || null,
+        customer_name: input.customer_name ?? null,
         vehicle_ref: vehicleRef,
         vehicle_name: input.vehicle_name ?? null,
+        vehicle_rfid: input.vehicle_rfid ?? null,
         site_ref: input.site_ref ?? site_ref ?? null,
         site_name: input.site_name ?? null,
         driver_name: input.driver_name ?? null,
+        driver_phone: input.driver_phone ?? null,
+        driver_email: input.driver_email ?? null,
+        wash_time_seconds: input.wash_time_seconds ?? null,
+        washes_per_day: input.washes_per_day ?? null,
+        washes_per_week: input.washes_per_week ?? null,
+        last_scan_at: input.last_scan_at ?? null,
+        current_week_washes: input.current_week_washes ?? null,
+        target_washes: input.target_washes ?? null,
         prediction_date: predictionDate,
         risk_level: riskLevel,
         risk_score: riskScore,

@@ -36,6 +36,11 @@ const PATH_TO_HEADER = {
   '/admin/tank-configuration': { title: 'Tank Configuration', description: 'Manage tank capacities and calibration settings' },
 };
 
+function getPathHeader(pathname) {
+  if (pathname.startsWith('/vehicle/')) return { title: 'Vehicle details', description: 'Wash history and compliance' };
+  return PATH_TO_HEADER[pathname];
+}
+
 /** Breadcrumb items for admin section: [ { label, path } ]. path null = current page. */
 function getAdminBreadcrumbs(pathname) {
   if (!pathname.startsWith('/admin')) return null;
@@ -52,7 +57,7 @@ function getAdminBreadcrumbs(pathname) {
 export default function DashboardLayout({ children, title: titleProp, description: descriptionProp }) {
   const location = useLocation();
   const { userProfile } = useAuth();
-  const pathHeader = PATH_TO_HEADER[location.pathname];
+  const pathHeader = getPathHeader(location.pathname);
   const title = titleProp ?? pathHeader?.title ?? 'Dashboard';
   const description = descriptionProp ?? pathHeader?.description ?? null;
   const breadcrumbs = getAdminBreadcrumbs(location.pathname);

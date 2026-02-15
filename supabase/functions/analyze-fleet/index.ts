@@ -233,13 +233,25 @@ Deno.serve(async (req) => {
       const dashboardRow = byVehicleRef[vehicleRef] ?? {};
       const currentDayWashes = dashboardRow.totalScans ?? 0;
       const targetWashes = dashboardRow.washesPerWeek ?? v.washesPerWeek ?? 6;
+      const legacyName = [v.legacyFirstName, v.legacyLastName].filter(Boolean).join(' ').trim();
+      const driverPhone = (v.phone || v.mobile || '').trim() || null;
+      const driverEmail = (v.email || '').trim() || null;
+      const driverName = ((v.driverName ?? v.driver_name ?? legacyName) || (v.vehicleName ?? v.name)) ?? null;
       return {
         vehicle_ref: vehicleRef,
         vehicle_name: v.vehicleName ?? v.name,
         site_ref: v.siteId ?? v.siteRef,
         site_name: v.siteName ?? v.site_name,
-        driver_name: v.driverName ?? v.driver_name,
         customer_ref: customerRef,
+        customer_name: v.customerName ?? v.customer_name ?? null,
+        driver_name: driverName,
+        driver_phone: driverPhone,
+        driver_email: driverEmail,
+        vehicle_rfid: v.vehicleRfid ?? v.vehicle_rfid ?? null,
+        wash_time_seconds: v.washTime1Seconds ?? v.wash_time_seconds ?? null,
+        washes_per_day: v.washesPerDay ?? v.washes_per_day ?? null,
+        washes_per_week: v.washesPerWeek ?? v.washes_per_week ?? 6,
+        last_scan_at: v.lastScanAt ?? v.last_scan_at ?? null,
         company_id,
         current_week_washes: currentDayWashes,
         target_washes: targetWashes,
