@@ -106,7 +106,7 @@ export default function VehicleDetail() {
     const rows = dashboardData.rows.filter(
       (r) => r.vehicleRef === vehicle.vehicleRef && moment(`${r.year}-${String(r.month).padStart(2, '0')}-01`).isBetween(start, end, 'month', '[]')
     );
-    const totalScans = rows.reduce((sum, r) => sum + (r.totalScans || 0), 0);
+    const totalScans = rows.reduce((sum, r) => sum + (Number(r.totalScans) || 0), 0);
     const lastScan = rows.length
       ? rows.reduce((latest, r) => (!latest || (r.lastScan && r.lastScan > latest) ? r.lastScan : latest), null)
       : vehicle.lastScanAt;

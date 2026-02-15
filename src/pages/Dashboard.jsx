@@ -376,6 +376,7 @@ export default function Dashboard() {
     const endMoment = moment(dateRange.end);
 
     // Then, update wash counts from dashboard data (for the date range)
+    // API may return totalScans as string (e.g. "6") — coerce to number so we sum correctly
     if (dashboardData?.rows && Array.isArray(dashboardData.rows)) {
       dashboardData.rows.forEach(row => {
         const rowDate = moment(`${row.year}-${String(row.month).padStart(2, '0')}-01`);
@@ -383,11 +384,12 @@ export default function Dashboard() {
           return;
         }
 
+        const totalScansNum = Number(row.totalScans) || 0;
         const vehicleKey = row.vehicleRef;
 
         if (vehicleMap.has(vehicleKey)) {
           const existing = vehicleMap.get(vehicleKey);
-          existing.washes_completed += (row.totalScans || 0);
+          existing.washes_completed += totalScansNum;
           if (row.lastScan && (!existing.last_scan || row.lastScan > existing.last_scan)) {
             existing.last_scan = row.lastScan;
           }
@@ -402,7 +404,7 @@ export default function Dashboard() {
             site_name: row.siteName,
             customer_name: row.customerName,
             customer_ref: row.customerRef,
-            washes_completed: row.totalScans || 0,
+            washes_completed: totalScansNum,
             target: row.washesPerWeek || 12,
             washesPerDay: row.washesPerDay ?? null,
             washesPerWeek: row.washesPerWeek ?? 12,
@@ -412,7 +414,7 @@ export default function Dashboard() {
           });
         }
 
-        if (row.totalScans > 0) {
+        if (totalScansNum > 0) {
           scansArray.push({
             vehicleRef: row.vehicleRef,
             siteRef: row.siteRef,
@@ -584,7 +586,8 @@ export default function Dashboard() {
     const raw = [];
     if (washChartDashboardData?.rows && Array.isArray(washChartDashboardData.rows)) {
       washChartDashboardData.rows.forEach(row => {
-        if (row.totalScans > 0 && row.lastScan) {
+        const totalScansNum = Number(row.totalScans) || 0;
+        if (totalScansNum > 0 && row.lastScan) {
           raw.push({
             vehicleRef: row.vehicleRef,
             siteRef: row.siteRef,
@@ -753,6 +756,7 @@ export default function Dashboard() {
         Customer: v.customer_name ?? empty,
         Site: v.site_name ?? empty,
         Vehicle: v.name ?? empty,
+        'Washes Total': washes,
         'Target Washes': targetWashes,
         Status: washes >= targetWashes ? 'Compliant' : 'Non-Compliant',
         'Progress %': progressPct,
@@ -834,6 +838,7 @@ export default function Dashboard() {
       { id: 'name', header: 'Vehicle', accessorKey: 'name', cell: (row) => (
         <span className="font-medium text-primary cursor-pointer hover:underline">{row.name ?? '—'}</span>
       ) },
+      { id: 'washes_completed', header: 'Washes Total', accessorKey: 'washes_completed', cell: (row) => row.washes_completed ?? '—' },
       { id: 'target', header: 'Target Washes', cell: (row) => getTargetWashes(row) },
       {
         id: 'likelihood',
