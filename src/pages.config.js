@@ -17,6 +17,7 @@ import RoleTabSettings from './pages/admin/RoleTabSettings';
 import TankConfiguration from './pages/admin/TankConfiguration';
 import EloraAI from './pages/EloraAI';
 import VehicleDetail from './pages/VehicleDetail';
+import SMSAlerts from './pages/SMSAlerts';
 import __Layout from './Layout.jsx';
 
 
@@ -40,6 +41,7 @@ export const PAGES = {
     "admin/tank-configuration": TankConfiguration,
     "EloraAI": EloraAI,
     "VehicleDetail": VehicleDetail,
+    "SMSAlerts": SMSAlerts,
 }
 
 export const pagesConfig = {

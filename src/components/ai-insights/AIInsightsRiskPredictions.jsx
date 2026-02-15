@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Send, Download, Info, X, RotateCcw, Loader2, Phone, Mail, MessageSquare } from 'lucide-react';
 import { callEdgeFunction } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
 import {
   Dialog,
   DialogContent,
@@ -128,6 +130,8 @@ export default function AIInsightsRiskPredictions({
   liveVehicleDataMap = null,
   isLiveDataLoading = false,
 }) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [riskLevelFilter, setRiskLevelFilter] = useState('all');
   const [siteFilter, setSiteFilter] = useState('all');
   const [sendingRowId, setSendingRowId] = useState(null);
@@ -236,6 +240,7 @@ export default function AIInsightsRiskPredictions({
   const handleConfirmSend = async () => {
     if (!sendModalRow || !canSendAlerts) return;
     const templateId = selectedTemplateId;
+    const sentBy = user?.id ?? null;
     const payload = (r) => {
       const live = getLiveData(r);
       return {
@@ -246,6 +251,8 @@ export default function AIInsightsRiskPredictions({
         risk_level: r.risk_level || 'medium',
         site_name: r.site_name || null,
         site_ref: r.site_ref || null,
+        customer_ref: r.customer_ref ?? r.customer_id ?? null,
+        customer_name: r.customer_name ?? null,
         current_week_washes: live?.washes_completed ?? r.current_week_washes ?? null,
         target_washes: live?.target_washes ?? r.target_washes ?? 12,
         optimal_window: '6-8am',
@@ -254,10 +261,13 @@ export default function AIInsightsRiskPredictions({
     if (sendModalRow.bulk) {
       setSendingAll(true);
       try {
+        const batchId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null;
         const data = await callEdgeFunction('send-sms', {
           template_id: templateId,
           reminders: sendModalRow.rows.map(payload),
           company_id: companyId,
+          batch_id: batchId,
+          sent_by: sentBy,
         });
         const sent = data?.sent ?? 0;
         const failed = data?.failed ?? 0;
@@ -272,6 +282,9 @@ export default function AIInsightsRiskPredictions({
         } else {
           toast.error('SMS failed', { description: data?.results?.[0]?.error || data?.error || 'Could not send SMS' });
         }
+        if (companyId) {
+          queryClient.invalidateQueries({ queryKey: ['tenant', companyId, 'smsReminders'] });
+        }
       } catch (err) {
         toast.error('SMS failed', { description: err?.message || 'Could not send SMS' });
       } finally {
@@ -285,6 +298,7 @@ export default function AIInsightsRiskPredictions({
           template_id: templateId,
           ...payload(row),
           company_id: companyId,
+          sent_by: sentBy,
         });
         if (data?.sent >= 1) {
           toast.success('SMS sent', { description: `Reminder sent to ${maskPhone(row.driver_phone)}` });
@@ -292,6 +306,9 @@ export default function AIInsightsRiskPredictions({
           setSendModalRow(null);
         } else {
           toast.error('SMS failed', { description: data?.results?.[0]?.error || data?.error || 'Could not send SMS' });
+        }
+        if (companyId) {
+          queryClient.invalidateQueries({ queryKey: ['tenant', companyId, 'smsReminders'] });
         }
       } catch (err) {
         toast.error('SMS failed', { description: err?.message || 'Could not send SMS' });

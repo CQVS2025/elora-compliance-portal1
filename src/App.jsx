@@ -164,6 +164,14 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        {/* SMS Alerts (Intelligence) – org admin + super_admin only, tab visibility controlled */}
+        <Route path="/sms-alerts" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.SMSAlerts)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
 
         {/* Admin routes - same layout as app, permission-based content */}
         <Route path="/admin" element={

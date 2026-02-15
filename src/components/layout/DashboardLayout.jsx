@@ -22,6 +22,7 @@ const PATH_TO_HEADER = {
   '/email-reports': { title: 'Email Reports', description: 'Scheduled and digest emails' },
   '/branding': { title: 'Branding', description: 'Customize branding' },
   '/ai-insights': { title: 'Elora AI', description: 'Intelligent wash optimization & predictions' },
+  '/sms-alerts': { title: 'SMS Alerts', description: 'Risk prediction alert history' },
   '/Settings': { title: 'Settings', description: 'Manage your account preferences' },
   '/settings': { title: 'Settings', description: 'Manage your account preferences' },
   '/Profile': { title: 'Profile', description: 'Your account profile' },

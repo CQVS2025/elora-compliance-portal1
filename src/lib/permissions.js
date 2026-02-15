@@ -193,12 +193,12 @@ export function getAccessibleTabs(userProfile) {
 
   const role = userProfile.role;
 
-  // Super admin sees all tabs (Users tab moved to Admin console). Use 'ai-insights' to match nav.
+  // Super admin sees all tabs (Users tab moved to Admin console). SMS Alerts on by default only for super_admin.
   if (role === 'super_admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
   }
 
-  // Admin sees all tabs except users, but includes branding
+  // Admin and all other roles: SMS Alerts off by default. Super Admin can enable it per role in Tab Visibility or per user in User Management.
   if (role === 'admin') {
     return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
   }

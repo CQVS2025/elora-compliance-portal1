@@ -25,6 +25,7 @@ export * from './permissions';
 export * from './branding';
 export * from './siteOverrides';
 export * from './vehicleLikelihoodOverrides';
+export * from './smsReminders';
 
 // Admin options
 export * from './users';

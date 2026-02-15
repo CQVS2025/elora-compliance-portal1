@@ -122,9 +122,11 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level, company_id, reminders, template_id } = body;
+    const { vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level, company_id, reminders, template_id, batch_id, sent_by } = body;
 
     const templateId = [1, 2, 3].includes(Number(template_id)) ? Number(template_id) : 2;
+    const batchId = batch_id && typeof batch_id === 'string' ? batch_id : null;
+    const sentBy = sent_by && typeof sent_by === 'string' ? sent_by : null;
 
     const fromNumber = Deno.env.get('TWILIO_PHONE_NUMBER') || Deno.env.get('TWILIO_MESSAGING_SERVICE_SID');
     if (!fromNumber) {
@@ -139,7 +141,7 @@ Deno.serve(async (req) => {
     const items = Array.isArray(reminders) && reminders.length > 0
       ? reminders
       : vehicle_ref && driver_phone
-        ? [{ vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level, site_name: body.site_name, site_ref: body.site_ref, current_week_washes: body.current_week_washes, target_washes: body.target_washes, optimal_window: body.optimal_window }]
+        ? [{ vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level, site_name: body.site_name, site_ref: body.site_ref, customer_ref: body.customer_ref, customer_name: body.customer_name, current_week_washes: body.current_week_washes, target_washes: body.target_washes, optimal_window: body.optimal_window }]
         : [];
 
     if (items.length === 0) {
@@ -149,14 +151,44 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Deduplicate by (vehicle_ref, driver_phone) so we never send or insert twice in the same request
+    const seen = new Set<string>();
+    const dedupedItems: typeof items = [];
+    for (const item of items) {
+      const phone = (item.driver_phone || '').trim();
+      const key = `${item.vehicle_ref ?? ''}|${phone}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      dedupedItems.push(item);
+    }
+    const itemsToProcess = dedupedItems;
+
     const results: { vehicle_ref: string; status: string; sid?: string; error?: string }[] = [];
     const companyId = company_id || body.company_id;
 
-    for (const item of items) {
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+
+    for (const item of itemsToProcess) {
       const phone = (item.driver_phone || '').trim();
       if (!phone) {
         results.push({ vehicle_ref: item.vehicle_ref, status: 'skipped', error: 'No phone number' });
         continue;
+      }
+
+      // Avoid duplicate send+insert: same company + vehicle + phone already sent in last 2 minutes
+      if (companyId) {
+        const { data: existing } = await supabase
+          .from('sms_reminders')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('vehicle_ref', item.vehicle_ref)
+          .eq('driver_phone', phone)
+          .gte('sent_at', twoMinutesAgo)
+          .limit(1);
+        if (existing && existing.length > 0) {
+          results.push({ vehicle_ref: item.vehicle_ref, status: 'skipped', error: 'Duplicate (recent send)' });
+          continue;
+        }
       }
 
       const message = buildMessage(templateId, item);
@@ -175,6 +207,12 @@ Deno.serve(async (req) => {
           status: 'sent',
           sent_at: new Date().toISOString(),
           twilio_message_sid: twilioResult.sid,
+          batch_id: batchId,
+          sent_by: sentBy,
+          site_ref: item.site_ref || null,
+          site_name: item.site_name || null,
+          customer_ref: item.customer_ref || null,
+          customer_name: item.customer_name || null,
         });
 
         results.push({ vehicle_ref: item.vehicle_ref, status: 'sent', sid: twilioResult.sid });
@@ -191,6 +229,12 @@ Deno.serve(async (req) => {
           risk_level: item.risk_level || null,
           status: 'failed',
           error_message: errMsg,
+          batch_id: batchId,
+          sent_by: sentBy,
+          site_ref: item.site_ref || null,
+          site_name: item.site_name || null,
+          customer_ref: item.customer_ref || null,
+          customer_name: item.customer_name || null,
         });
 
         results.push({ vehicle_ref: item.vehicle_ref, status: 'failed', error: errMsg });

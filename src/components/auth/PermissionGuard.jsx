@@ -107,7 +107,7 @@ export function getEffectiveConfig(email) {
   return null;
 }
 
-const ALL_TAB_VALUES = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
+const ALL_TAB_VALUES = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
 
 /**
  * Get tabs allowed by role: Admin Console role override if set, else role default from getAccessibleTabs.

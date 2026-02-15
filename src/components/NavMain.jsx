@@ -10,6 +10,7 @@ import {
   Mail,
   Palette,
   Sparkles,
+  MessageSquare,
 } from 'lucide-react';
 import { useAvailableTabs } from '@/components/auth/PermissionGuard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -37,6 +38,7 @@ const ALL_TABS = [
 
 const INTELLIGENCE_TABS = [
   { value: 'ai-insights', label: 'Elora AI', icon: Sparkles, path: '/ai-insights', showNewBadge: false },
+  { value: 'sms-alerts', label: 'Alerts History', icon: MessageSquare, path: '/sms-alerts', showNewBadge: false },
 ];
 
 /**

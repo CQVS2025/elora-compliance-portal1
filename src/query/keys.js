@@ -154,6 +154,14 @@ export const queryKeys = {
       'company',
       targetCompanyId,
     ],
+
+    // SMS Alerts (risk prediction sends) – per-org audit
+    smsReminders: (companyId, filters = {}) => [
+      'tenant',
+      companyId,
+      'smsReminders',
+      filters,
+    ],
   },
   
   // User-scoped resources (not tenant-specific)
