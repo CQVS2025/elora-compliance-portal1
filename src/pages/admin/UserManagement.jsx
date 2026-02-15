@@ -4,11 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
+import { getAccessibleTabs } from '@/lib/permissions';
+import { roleTabSettingsOptions } from '@/query/options';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
@@ -36,7 +39,9 @@ import {
   Filter,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  LayoutGrid,
+  RotateCcw
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -70,10 +75,23 @@ const ROLES = [
   { value: 'viewer', label: 'Viewer', color: 'bg-muted text-muted-foreground' },
 ];
 
+const TAB_VISIBILITY_OPTIONS = [
+  { value: 'compliance', label: 'Compliance' },
+  { value: 'costs', label: 'Usage Costs' },
+  { value: 'refills', label: 'Tank Levels' },
+  { value: 'devices', label: 'Device Health' },
+  { value: 'sites', label: 'Sites' },
+  { value: 'reports', label: 'Reports' },
+  { value: 'email-reports', label: 'Email Reports' },
+  { value: 'branding', label: 'Branding' },
+  { value: 'leaderboard', label: 'Driver Leaderboard' },
+  { value: 'ai-insights', label: 'AI Insights' },
+];
+
 export default function UserManagement() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { userProfile, isAuthenticated } = useAuth();
+  const { userProfile, isAuthenticated, refetchProfile } = useAuth();
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +109,8 @@ export default function UserManagement() {
   const [userToAssign, setUserToAssign] = useState(null);
   const [assignToCompanyId, setAssignToCompanyId] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
+  const [userForTabVisibility, setUserForTabVisibility] = useState(null);
+  const [localTabVisibility, setLocalTabVisibility] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
   const [companyComboboxOpen, setCompanyComboboxOpen] = useState(false);
@@ -111,6 +131,34 @@ export default function UserManagement() {
 
   const isSuperAdmin = userProfile?.role === 'super_admin';
 
+  // Fetch user presence (last_seen, online) for admin display
+  const { data: presenceMap = {} } = useQuery({
+    ...userPresenceOptions(),
+    enabled: !!isAuthenticated && !!userProfile,
+  });
+
+  // Role tab settings (for Tab visibility dialog) - must be declared before getRoleDefaultTabs
+  const { data: roleTabOverrides = {} } = useQuery({
+    ...roleTabSettingsOptions(),
+    enabled: !!userForTabVisibility,
+  });
+
+  function getRoleDefaultTabs(role) {
+    const stored = roleTabOverrides[role];
+    const storedTabs = Array.isArray(stored) ? stored : stored?.visible_tabs;
+    if (storedTabs?.length > 0) return storedTabs;
+    return getAccessibleTabs({ role }) || [];
+  }
+
+  // When opening Tab visibility dialog, init local state from user override or role default (only tabs allowed by role)
+  useEffect(() => {
+    if (!userForTabVisibility) return;
+    const roleDefault = getRoleDefaultTabs(userForTabVisibility.role);
+    const current = userForTabVisibility.visible_tabs;
+    const base = Array.isArray(current) && current.length > 0 ? current : roleDefault;
+    setLocalTabVisibility(base.filter((t) => roleDefault.includes(t)));
+  }, [userForTabVisibility?.id, userForTabVisibility?.role, userForTabVisibility?.visible_tabs, roleTabOverrides]);
+
   // Update selected company tab when URL changes
   useEffect(() => {
     if (urlCompanyId) {
@@ -126,12 +174,6 @@ export default function UserManagement() {
       setFormData(prev => ({ ...prev, company_id: '' }));
     }
   }, [showCreateModal, selectedCompanyTab]);
-
-  // Fetch user presence (last_seen, online) for admin display
-  const { data: presenceMap = {} } = useQuery({
-    ...userPresenceOptions(),
-    enabled: !!isAuthenticated && !!userProfile,
-  });
 
   // Fetch users
   const { data: users = [], isLoading: loadingUsers } = useQuery({
@@ -359,6 +401,41 @@ export default function UserManagement() {
     },
     onError: (error) => {
       toastError(error, 'resetting password');
+    },
+  });
+
+  // Save user tab visibility override
+  const saveUserTabVisibilityMutation = useMutation({
+    mutationFn: async ({ userId, visibleTabs }) => {
+      const payload = { updated_at: new Date().toISOString() };
+      if (visibleTabs === null) {
+        payload.visible_tabs = null;
+      } else {
+        payload.visible_tabs = visibleTabs;
+      }
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update(payload)
+        .eq('id', userId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries(['adminUsers']);
+      setUserForTabVisibility(null);
+      if (variables.userId === userProfile?.id && typeof refetchProfile === 'function') {
+        refetchProfile();
+      }
+      toast.success(
+        variables.visibleTabs === null
+          ? 'Tab visibility reset to role default'
+          : 'Tab visibility saved'
+      );
+    },
+    onError: (error) => {
+      toast.error(error?.message || 'Failed to save tab visibility');
     },
   });
 
@@ -809,6 +886,10 @@ export default function UserManagement() {
                               <DropdownMenuItem onClick={() => handleEdit(user)}>
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setUserForTabVisibility(user)}>
+                                <LayoutGrid className="w-4 h-4 mr-2" />
+                                Tab visibility
                               </DropdownMenuItem>
                               {isSuperAdmin && !user.company_id && (
                                 <DropdownMenuItem onClick={() => { setUserToAssign(user); setAssignToCompanyId(''); }}>
@@ -1271,6 +1352,101 @@ export default function UserManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Tab visibility per user */}
+      <Dialog open={!!userForTabVisibility} onOpenChange={(open) => { if (!open) setUserForTabVisibility(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Tab visibility</DialogTitle>
+            {userForTabVisibility && (
+              <p className="text-sm text-muted-foreground">
+                Restrict which tabs <span className="font-medium text-foreground">{userForTabVisibility.full_name || userForTabVisibility.email}</span> can see (within their role). Role: {ROLES.find(r => r.value === userForTabVisibility.role)?.label ?? userForTabVisibility.role}.
+              </p>
+            )}
+          </DialogHeader>
+          {userForTabVisibility && (() => {
+            const roleDefaultTabs = getRoleDefaultTabs(userForTabVisibility.role);
+            const tabsToShow = TAB_VISIBILITY_OPTIONS.filter((tab) => roleDefaultTabs.includes(tab.value));
+            return (
+            <div className="space-y-4 py-4">
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-3">Tab Visibility</h4>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Only tabs allowed by this role are shown. Toggle off to hide a tab from this user.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {tabsToShow.map((tab) => (
+                    <div
+                      key={tab.value}
+                      className="flex items-center justify-between p-3 rounded-lg border border-border"
+                    >
+                      <span className="text-sm font-medium text-foreground">{tab.label}</span>
+                      <Switch
+                        checked={localTabVisibility.includes(tab.value)}
+                        onCheckedChange={(checked) => {
+                          setLocalTabVisibility((prev) =>
+                            checked
+                              ? [...prev, tab.value]
+                              : prev.filter((t) => t !== tab.value)
+                          );
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Role allows: {roleDefaultTabs.join(', ') || 'none'}
+              </p>
+            </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setUserForTabVisibility(null)}
+            >
+              Cancel
+            </Button>
+            {userForTabVisibility && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    saveUserTabVisibilityMutation.mutate({
+                      userId: userForTabVisibility.id,
+                      visibleTabs: null,
+                    })
+                  }
+                  disabled={saveUserTabVisibilityMutation.isPending}
+                >
+                  {saveUserTabVisibilityMutation.isPending && saveUserTabVisibilityMutation.variables?.visibleTabs === null ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4 mr-1" />
+                  )}
+                  Reset to role default
+                </Button>
+                <Button
+                  onClick={() =>
+                    saveUserTabVisibilityMutation.mutate({
+                      userId: userForTabVisibility.id,
+                      visibleTabs: localTabVisibility,
+                    })
+                  }
+                  disabled={saveUserTabVisibilityMutation.isPending || localTabVisibility.length === 0}
+                >
+                  {saveUserTabVisibilityMutation.isPending && saveUserTabVisibilityMutation.variables?.visibleTabs !== null ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    'Save'
+                  )}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

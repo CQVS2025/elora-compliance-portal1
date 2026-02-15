@@ -107,25 +107,37 @@ export function getEffectiveConfig(email) {
   return null;
 }
 
+const ALL_TAB_VALUES = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
+
+/**
+ * Get tabs allowed by role: Admin Console role override if set, else role default from getAccessibleTabs.
+ */
+function getRoleTabs(userProfile, roleTabOverrides) {
+  const role = userProfile?.role;
+  if (!role) return ALL_TAB_VALUES;
+  const roleData = roleTabOverrides?.[role];
+  const overrideTabs = Array.isArray(roleData) ? roleData : roleData?.visible_tabs;
+  if (overrideTabs && overrideTabs.length > 0) return overrideTabs;
+  return getAccessibleTabs(userProfile) || ALL_TAB_VALUES;
+}
+
 /**
  * Compute effective visible tab values for the current user.
- * Priority: user visible_tabs > user hidden_tabs > role override (Super Admin config) > role defaults.
+ * 1) User profile first: if user has visible_tabs set, use that (user override wins).
+ * 2) Role then: otherwise use tabs allowed by role (Admin Console Tab Visibility or role default).
  */
 function getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides) {
+  if (userProfile?.visible_tabs && userProfile.visible_tabs.length > 0) {
+    return userProfile.visible_tabs;
+  }
+  const roleTabs = getRoleTabs(userProfile, roleTabOverrides);
   if (perms.visible_tabs && perms.visible_tabs.length > 0) {
-    return perms.visible_tabs;
+    return perms.visible_tabs.filter((t) => roleTabs.includes(t));
   }
   if (perms.hidden_tabs && perms.hidden_tabs.length > 0) {
-    const allTabValues = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
-    return allTabValues.filter((v) => !perms.hidden_tabs.includes(v));
+    return roleTabs.filter((v) => !perms.hidden_tabs.includes(v));
   }
-  const role = userProfile?.role;
-  const roleData = role && roleTabOverrides?.[role];
-  const roleTabs = Array.isArray(roleData) ? roleData : roleData?.visible_tabs;
-  if (role && roleTabs && roleTabs.length > 0) {
-    return roleTabs;
-  }
-  return getAccessibleTabs(userProfile) || [];
+  return roleTabs;
 }
 
 /**
@@ -337,8 +349,9 @@ export function useFilteredData(vehicles, sites, customers = []) {
 }
 
 /**
- * Hook to get available tabs based on permissions
- * Priority: user-specific visible_tabs > role override (Super Admin config) > role-based defaults
+ * Hook to get available tabs based on permissions.
+ * 1) User profile first: if user has visible_tabs set, use that (user override wins).
+ * 2) Role then: otherwise use tabs allowed by role (Admin Console Tab Visibility or role default).
  */
 export function useAvailableTabs(allTabs) {
   const permissions = usePermissions();
@@ -346,32 +359,17 @@ export function useAvailableTabs(allTabs) {
   const { data: roleTabOverrides = {} } = useQuery(roleTabSettingsOptions());
 
   return useMemo(() => {
-    // First, check user-specific permissions (user_permissions table)
+    if (userProfile?.visible_tabs && userProfile.visible_tabs.length > 0) {
+      return allTabs.filter((tab) => userProfile.visible_tabs.includes(tab.value));
+    }
+    const roleTabs = getRoleTabs(userProfile, roleTabOverrides);
+    let effectiveTabValues = roleTabs;
     if (permissions.visibleTabs && permissions.visibleTabs.length > 0) {
-      return allTabs.filter(tab => permissions.visibleTabs.includes(tab.value));
+      effectiveTabValues = permissions.visibleTabs.filter((t) => roleTabs.includes(t));
+    } else if (permissions.hiddenTabs && permissions.hiddenTabs.length > 0) {
+      effectiveTabValues = roleTabs.filter((t) => !permissions.hiddenTabs.includes(t));
     }
-
-    if (permissions.hiddenTabs && permissions.hiddenTabs.length > 0) {
-      return allTabs.filter(tab => !permissions.hiddenTabs.includes(tab.value));
-    }
-
-    // Second, check role-based tab overrides (Super Admin config)
-    const role = userProfile?.role;
-    const roleData = role && roleTabOverrides[role];
-    const visibleTabs = Array.isArray(roleData) ? roleData : roleData?.visible_tabs;
-    if (role && visibleTabs && visibleTabs.length > 0) {
-      return allTabs.filter(tab => visibleTabs.includes(tab.value));
-    }
-
-    // Fallback to default role-based tabs from permissions.js
-    if (userProfile) {
-      const roleBasedTabs = getAccessibleTabs(userProfile);
-      if (roleBasedTabs && roleBasedTabs.length > 0) {
-        return allTabs.filter(tab => roleBasedTabs.includes(tab.value));
-      }
-    }
-
-    return allTabs;
+    return allTabs.filter((tab) => effectiveTabValues.includes(tab.value));
   }, [allTabs, permissions.visibleTabs, permissions.hiddenTabs, userProfile, roleTabOverrides]);
 }
 

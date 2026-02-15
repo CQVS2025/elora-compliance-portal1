@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabase';
 import { performCompleteLogout } from '@/utils/storageCleanup';
 import { queryClientInstance, clearAllCache } from '@/lib/query-client';
@@ -19,6 +19,7 @@ export const AuthProvider = ({ children }) => {
   
   // Use ref to track current profile without causing re-renders
   const userProfileRef = useRef(null);
+  const loadUserProfileRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -170,7 +171,7 @@ export const AuthProvider = ({ children }) => {
         .single();
 
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Profile load timeout')), 15000)
+        setTimeout(() => reject(new Error('Profile load timeout')), 30000)
       );
 
       const { data: profile, error } = await Promise.race([profilePromise, timeoutPromise]);
@@ -308,6 +309,38 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  loadUserProfileRef.current = loadUserProfile;
+
+  const refetchProfile = useCallback(async () => {
+    const { data: { user: u } } = await supabase.auth.getUser();
+    if (u?.id && loadUserProfileRef.current) await loadUserProfileRef.current(u, false);
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`user_profile:${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `id=eq.${user.id}` },
+        () => {
+          refetchProfile();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, refetchProfile]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user?.id) refetchProfile();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [user?.id, refetchProfile]);
+
   const login = async (email, password) => {
     try {
       setAuthError(null);
@@ -440,6 +473,7 @@ export const AuthProvider = ({ children }) => {
         resetPassword,
         checkAuth,
         navigateToLogin,
+        refetchProfile,
       }}
     >
       {children}

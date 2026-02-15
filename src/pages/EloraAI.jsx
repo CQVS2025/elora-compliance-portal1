@@ -15,6 +15,8 @@ import { usePermissions, useFilteredData } from '@/components/auth/PermissionGua
 import {
   customersOptions,
   sitesOptions,
+  vehiclesOptions,
+  dashboardOptions,
 } from '@/query/options';
 import {
   aiSettingsOptions,
@@ -242,6 +244,61 @@ export default function EloraAI() {
     ? (selectedCompanyData?.id || null) 
     : companyId;
   
+  // Fetch vehicles + dashboard for live compliance data (same logic as Compliance page)
+  const { data: allVehicles = [], isLoading: vehiclesLoading } = useQuery({
+    ...vehiclesOptions(selectedCompanyId, {
+      customerId: selectedCustomerRef ?? undefined,
+    }),
+    enabled: !!selectedCustomerRef && !!selectedCompanyId,
+  });
+
+  const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
+    ...dashboardOptions(selectedCompanyId, {
+      customerId: selectedCustomerRef ?? undefined,
+      startDate: dateRange.start,
+      endDate: dateRange.end,
+    }),
+    enabled: !!selectedCustomerRef && !!selectedCompanyId,
+  });
+
+  // Same merge logic as Compliance page — washes_completed and target for each vehicle
+  const liveVehicleDataMap = useMemo(() => {
+    const vehicleMap = new Map();
+    const startMoment = moment(dateRange.start);
+    const endMoment = moment(dateRange.end);
+
+    allVehicles.forEach((vehicle) => {
+      const ref = vehicle.vehicleRef || vehicle.internalVehicleId;
+      const protocol = vehicle.protocolNumber ?? vehicle.protocol ?? vehicle.protocol_number ?? null;
+      const target = (protocol != null && protocol > 0) ? protocol : (vehicle.washesPerWeek || 12);
+      vehicleMap.set(ref, {
+        washes_completed: 0,
+        target_washes: target,
+      });
+    });
+
+    if (dashboardData?.rows && Array.isArray(dashboardData.rows)) {
+      dashboardData.rows.forEach((row) => {
+        const rowDate = moment(`${row.year}-${String(row.month).padStart(2, '0')}-01`);
+        if (!rowDate.isBetween(startMoment, endMoment, 'month', '[]')) return;
+
+        const totalScansNum = Number(row.totalScans) || 0;
+        const vehicleKey = row.vehicleRef ?? row.vehicle_ref;
+
+        if (vehicleMap.has(vehicleKey)) {
+          const existing = vehicleMap.get(vehicleKey);
+          existing.washes_completed += totalScansNum;
+        } else {
+          const protocol = row.protocolNumber ?? row.protocol ?? null;
+          const target = (protocol != null && protocol > 0) ? protocol : (row.washesPerWeek || 12);
+          vehicleMap.set(vehicleKey, { washes_completed: totalScansNum, target_washes: target });
+        }
+      });
+    }
+
+    return vehicleMap;
+  }, [allVehicles, dashboardData, dateRange.start, dateRange.end]);
+
   // Fetch predictions: Use date range instead of single date
   console.log('🔍 [EloraAI] Query Parameters:', {
     selectedCompanyId,
@@ -321,7 +378,8 @@ export default function EloraAI() {
     return allPredictions.filter(p => p.site_ref === viewSiteFilter);
   }, [allPredictions, viewSiteFilter]);
 
-  // Deduplicate predictions: one row per vehicle_ref, keep highest confidence (or highest risk on tie)
+  // Deduplicate predictions: one row per vehicle_ref, prefer MOST RECENT (by prediction_date then created_at)
+  // so updated vehicle data (phone, email from old portal) appears after running AI analysis
   const RISK_ORDER = { critical: 4, high: 3, medium: 2, low: 1 };
   const predictions = useMemo(() => {
     const byVehicle = new Map();
@@ -329,15 +387,21 @@ export default function EloraAI() {
       const ref = p.vehicle_ref || p.vehicleRef;
       if (!ref) continue;
       const existing = byVehicle.get(ref);
-      const conf = Number(p.confidence_score ?? 0);
-      const riskVal = RISK_ORDER[p.risk_level] ?? 0;
-      const existingConf = existing ? Number(existing.confidence_score ?? 0) : -1;
-      const existingRisk = existing ? (RISK_ORDER[existing.risk_level] ?? 0) : -1;
-      if (!existing || conf > existingConf || (conf === existingConf && riskVal > existingRisk)) {
+      const pDate = p.prediction_date || '';
+      const pCreated = p.created_at || '';
+      const existingDate = existing?.prediction_date || '';
+      const existingCreated = existing?.created_at || '';
+      const isNewer = !existing || pDate > existingDate || (pDate === existingDate && pCreated > existingCreated);
+      if (isNewer) {
         byVehicle.set(ref, p);
       }
     }
-    return Array.from(byVehicle.values());
+    return Array.from(byVehicle.values()).sort((a, b) => {
+      const riskA = RISK_ORDER[a.risk_level] ?? 0;
+      const riskB = RISK_ORDER[b.risk_level] ?? 0;
+      if (riskB !== riskA) return riskB - riskA;
+      return (Number(b.confidence_score ?? 0) - Number(a.confidence_score ?? 0));
+    });
   }, [siteFilteredPredictions]);
 
   const recommendations = useMemo(() => {
@@ -843,6 +907,8 @@ export default function EloraAI() {
               sitesForCustomer={sitesForCustomer}
               viewSiteFilter={viewSiteFilter}
               onSiteFilterChange={setViewSiteFilter}
+              liveVehicleDataMap={liveVehicleDataMap}
+              isLiveDataLoading={vehiclesLoading || dashboardLoading}
             />
           </TabsContent>
 

@@ -1,6 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { Send, Download, Info, X, RotateCcw, Loader2, Phone, Mail } from 'lucide-react';
+import { Send, Download, Info, X, RotateCcw, Loader2, Phone, Mail, MessageSquare } from 'lucide-react';
 import { callEdgeFunction } from '@/lib/supabase';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Cell } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
@@ -48,6 +56,65 @@ function maskPhone(phone) {
   return `${cleaned.slice(0, 6)}***${cleaned.slice(-2)}`;
 }
 
+const SMS_TEMPLATES = {
+  1: {
+    id: 1,
+    label: 'Friendly Reminder',
+    template: `Hi, your vehicle {{VEHICLE_ID}} at {{SITE}} has not hit its wash target yet. A quick wash before end of day keeps you on track. Wash bays are quietest between {{OPTIMAL_WINDOW}}. - ELORA`,
+  },
+  2: {
+    id: 2,
+    label: 'Direct Performance Reminder',
+    template: `Wash reminder: {{VEHICLE_ID}} is due at {{SITE}}.
+You're {{WASHES_REMAINING}} wash(es) short of your target.
+Best time to go: {{OPTIMAL_WINDOW}}.
+Let's get it done today — ELORA`,
+  },
+  3: {
+    id: 3,
+    label: 'Data-Focused',
+    template: `{{VEHICLE_ID}} wash due at {{SITE}}.
+Target: {{WEEKLY_TARGET}} | Done: {{WASHES_COMPLETED}}.
+Recommended window: {{OPTIMAL_WINDOW}}.
+— ELORA`,
+  },
+};
+
+// Same target logic as Compliance page: protocolNumber ?? washesPerWeek ?? 12
+// When liveVehicleDataMap is provided, use live data (matches Compliance page)
+function buildPreview(row, templateId, liveData = null) {
+  const t = SMS_TEMPLATES[templateId] || SMS_TEMPLATES[2];
+  const target = Number(liveData?.target_washes ?? row.target_washes ?? 12);
+  const completed = Number(liveData?.washes_completed ?? row.current_week_washes ?? 0);
+  const remaining = Math.max(0, target - completed);
+  const data = {
+    VEHICLE_ID: row.vehicle_name || row.vehicle_ref || 'Your vehicle',
+    SITE: row.site_name || row.site_ref || 'your site',
+    WASHES_REMAINING: String(remaining),
+    WEEKLY_TARGET: String(target),
+    WASHES_COMPLETED: String(completed),
+    OPTIMAL_WINDOW: '6-8am',
+  };
+  return t.template
+    .replace(/\{\{VEHICLE_ID\}\}/g, data.VEHICLE_ID)
+    .replace(/\{\{SITE\}\}/g, data.SITE)
+    .replace(/\{\{WASHES_REMAINING\}\}/g, data.WASHES_REMAINING)
+    .replace(/\{\{WEEKLY_TARGET\}\}/g, data.WEEKLY_TARGET)
+    .replace(/\{\{WASHES_COMPLETED\}\}/g, data.WASHES_COMPLETED)
+    .replace(/\{\{OPTIMAL_WINDOW\}\}/g, data.OPTIMAL_WINDOW);
+}
+
+// Jumping dots loader for Progress column while live data computes
+function JumpingDots() {
+  return (
+    <span className="inline-flex items-center gap-1 py-1" aria-label="Calculating...">
+      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms', animationDuration: '0.6s' }} />
+      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0.15s', animationDuration: '0.6s' }} />
+      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0.3s', animationDuration: '0.6s' }} />
+    </span>
+  );
+}
+
 export default function AIInsightsRiskPredictions({ 
   predictions, 
   isLoading, 
@@ -58,11 +125,17 @@ export default function AIInsightsRiskPredictions({
   sitesForCustomer = [],
   viewSiteFilter = 'all',
   onSiteFilterChange,
+  liveVehicleDataMap = null,
+  isLiveDataLoading = false,
 }) {
   const [riskLevelFilter, setRiskLevelFilter] = useState('all');
   const [siteFilter, setSiteFilter] = useState('all');
   const [sendingRowId, setSendingRowId] = useState(null);
   const [sendingAll, setSendingAll] = useState(false);
+  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [sendModalRow, setSendModalRow] = useState(null);
+  const [sendModalBulk, setSendModalBulk] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(2);
 
   // Handler for clicking on chart bars to filter
   const handleChartBarClick = (data) => {
@@ -135,73 +208,101 @@ export default function AIInsightsRiskPredictions({
     low: { label: 'Low', color: 'hsl(var(--chart-low))' },
   };
 
-  const handleSendReminder = async (row) => {
+  const openSendModal = (row, bulk = false) => {
     if (!canSendAlerts) return;
-    const phone = (row.driver_phone || '').trim();
-    if (!phone) {
-      toast.error('No phone number', { description: 'This vehicle has no driver phone in the system. Add phone in the vehicles API or run Process All Vehicles to refresh.' });
-      return;
-    }
-    setSendingRowId(row.id);
-    try {
-      const data = await callEdgeFunction('send-sms', {
-        vehicle_ref: row.vehicle_ref,
-        vehicle_name: row.vehicle_name || row.vehicle_ref,
-        driver_name: row.driver_name || null,
-        driver_phone: phone,
-        risk_level: row.risk_level || 'medium',
-        company_id: companyId,
-      });
-      if (data?.sent >= 1) {
-        toast.success('SMS sent', { description: `Reminder sent to ${maskPhone(phone)}` });
-      } else {
-        toast.error('SMS failed', { description: data.results?.[0]?.error || data.error || 'Could not send SMS' });
+    if (bulk) {
+      const withPhone = filteredPredictions.filter((p) => (p.driver_phone || '').trim());
+      if (withPhone.length === 0) {
+        toast.error('No phone numbers', { description: 'None of the filtered vehicles have driver phone numbers.' });
+        return;
       }
-    } catch (err) {
-      toast.error('SMS failed', { description: err?.message || 'Could not send SMS' });
-    } finally {
-      setSendingRowId(null);
+      setSendModalRow({ bulk: true, rows: withPhone });
+      setSendModalBulk(true);
+    } else {
+      const phone = (row.driver_phone || '').trim();
+      if (!phone) {
+        toast.error('No phone number', { description: 'This vehicle has no driver phone. Add phone in the vehicles API or run Process All Vehicles.' });
+        return;
+      }
+      setSendModalRow({ bulk: false, row });
+      setSendModalBulk(false);
+    }
+    setSelectedTemplateId(2);
+    setSendModalOpen(true);
+  };
+
+  const getLiveData = (r) => (liveVehicleDataMap && r?.vehicle_ref ? liveVehicleDataMap.get(r.vehicle_ref) : null);
+
+  const handleConfirmSend = async () => {
+    if (!sendModalRow || !canSendAlerts) return;
+    const templateId = selectedTemplateId;
+    const payload = (r) => {
+      const live = getLiveData(r);
+      return {
+        vehicle_ref: r.vehicle_ref,
+        vehicle_name: r.vehicle_name || r.vehicle_ref,
+        driver_name: r.driver_name || null,
+        driver_phone: (r.driver_phone || '').trim(),
+        risk_level: r.risk_level || 'medium',
+        site_name: r.site_name || null,
+        site_ref: r.site_ref || null,
+        current_week_washes: live?.washes_completed ?? r.current_week_washes ?? null,
+        target_washes: live?.target_washes ?? r.target_washes ?? 12,
+        optimal_window: '6-8am',
+      };
+    };
+    if (sendModalRow.bulk) {
+      setSendingAll(true);
+      try {
+        const data = await callEdgeFunction('send-sms', {
+          template_id: templateId,
+          reminders: sendModalRow.rows.map(payload),
+          company_id: companyId,
+        });
+        const sent = data?.sent ?? 0;
+        const failed = data?.failed ?? 0;
+        const withoutPhone = filteredPredictions.filter((p) => !(p.driver_phone || '').trim()).length;
+        if (sent > 0) {
+          toast.success('SMS sent', {
+            description: `Sent ${sent} reminder(s).${failed > 0 ? ` ${failed} failed.` : ''}${withoutPhone > 0 ? ` ${withoutPhone} vehicle(s) have no phone.` : ''}`,
+            duration: 4000,
+          });
+          setSendModalOpen(false);
+          setSendModalRow(null);
+        } else {
+          toast.error('SMS failed', { description: data?.results?.[0]?.error || data?.error || 'Could not send SMS' });
+        }
+      } catch (err) {
+        toast.error('SMS failed', { description: err?.message || 'Could not send SMS' });
+      } finally {
+        setSendingAll(false);
+      }
+    } else {
+      const row = sendModalRow.row;
+      setSendingRowId(row.id);
+      try {
+        const data = await callEdgeFunction('send-sms', {
+          template_id: templateId,
+          ...payload(row),
+          company_id: companyId,
+        });
+        if (data?.sent >= 1) {
+          toast.success('SMS sent', { description: `Reminder sent to ${maskPhone(row.driver_phone)}` });
+          setSendModalOpen(false);
+          setSendModalRow(null);
+        } else {
+          toast.error('SMS failed', { description: data?.results?.[0]?.error || data?.error || 'Could not send SMS' });
+        }
+      } catch (err) {
+        toast.error('SMS failed', { description: err?.message || 'Could not send SMS' });
+      } finally {
+        setSendingRowId(null);
+      }
     }
   };
 
-  const handleSendAllReminders = async () => {
-    if (!canSendAlerts) return;
-    const withPhone = filteredPredictions.filter((p) => (p.driver_phone || '').trim());
-    const withoutPhone = filteredPredictions.filter((p) => !(p.driver_phone || '').trim());
-    if (withPhone.length === 0) {
-      toast.error('No phone numbers', {
-        description: 'None of the filtered vehicles have driver phone numbers. Run Process All Vehicles to refresh data from the API.',
-      });
-      return;
-    }
-    setSendingAll(true);
-    try {
-      const data = await callEdgeFunction('send-sms', {
-        reminders: withPhone.map((p) => ({
-          vehicle_ref: p.vehicle_ref,
-          vehicle_name: p.vehicle_name || p.vehicle_ref,
-          driver_name: p.driver_name || null,
-          driver_phone: (p.driver_phone || '').trim(),
-          risk_level: p.risk_level || 'medium',
-        })),
-        company_id: companyId,
-      });
-      const sent = data.sent ?? 0;
-      const failed = data.failed ?? 0;
-      if (sent > 0) {
-        toast.success('SMS sent', {
-          description: `Sent ${sent} reminder(s).${failed > 0 ? ` ${failed} failed.` : ''}${withoutPhone.length > 0 ? ` ${withoutPhone.length} vehicle(s) have no phone.` : ''}`,
-          duration: 4000,
-        });
-      } else {
-        toast.error('SMS failed', { description: data.results?.[0]?.error || data.error || 'Could not send SMS' });
-      }
-    } catch (err) {
-      toast.error('SMS failed', { description: err?.message || 'Could not send SMS' });
-    } finally {
-      setSendingAll(false);
-    }
-  };
+  const previewRow = sendModalRow?.bulk ? sendModalRow.rows[0] : sendModalRow?.row;
+  const previewText = previewRow ? buildPreview(previewRow, selectedTemplateId, getLiveData(previewRow)) : '';
 
   const handleExport = () => {
     toast('Export', { description: 'Export will be available in a future update.' });
@@ -287,8 +388,10 @@ export default function AIInsightsRiskPredictions({
       id: 'progress',
       header: 'Progress',
       cell: (row) => {
-        const current = row.current_week_washes;
-        const target = row.target_washes;
+        if (isLiveDataLoading) return <JumpingDots />;
+        const live = getLiveData(row);
+        const current = live?.washes_completed ?? row.current_week_washes;
+        const target = live?.target_washes ?? row.target_washes;
         if (current != null && target != null && target > 0) {
           const pct = Math.min(100, Math.round((current / target) * 100));
           return `${current}/${target} (${pct}%)`;
@@ -334,11 +437,11 @@ export default function AIInsightsRiskPredictions({
           <Button
             variant="ghost"
             size="sm"
-            disabled={!canSendAlerts || !hasPhone || isSending}
-            onClick={() => handleSendReminder(row)}
+            disabled={!canSendAlerts || !hasPhone || isSending || isLiveDataLoading}
+            onClick={() => openSendModal(row, false)}
           >
-            {isSending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
-            Send Reminder
+            {(isSending || isLiveDataLoading) ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+            Send Message
           </Button>
         );
         if (!canSendAlerts) {
@@ -364,6 +467,20 @@ export default function AIInsightsRiskPredictions({
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>No driver phone in vehicles API. Run Process All Vehicles to refresh.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        }
+        if (isLiveDataLoading) {
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block">{btn}</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Calculating live wash data…</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -598,9 +715,9 @@ export default function AIInsightsRiskPredictions({
                   </SelectContent>
                 </Select>
                 {canSendAlerts ? (
-                  <Button variant="outline" size="sm" onClick={handleSendAllReminders} disabled={sendingAll}>
-                    {sendingAll ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-                    Send All Reminders
+                  <Button variant="outline" size="sm" onClick={() => openSendModal(null, true)} disabled={sendingAll || isLiveDataLoading} title={isLiveDataLoading ? 'Calculating live data…' : undefined}>
+                    {(sendingAll || isLiveDataLoading) ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+                    Send All Messages
                   </Button>
                 ) : (
                   <TooltipProvider>
@@ -609,7 +726,7 @@ export default function AIInsightsRiskPredictions({
                         <span className="inline-block cursor-not-allowed">
                           <Button variant="outline" size="sm" disabled>
                             <Send className="h-4 w-4 mr-1" />
-                            Send All Reminders
+                            Send All Messages
                           </Button>
                         </span>
                       </TooltipTrigger>
@@ -639,6 +756,49 @@ export default function AIInsightsRiskPredictions({
           />
         </div>
       )}
+
+      <Dialog open={sendModalOpen} onOpenChange={(open) => { setSendModalOpen(open); if (!open) setSendModalRow(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Message</DialogTitle>
+            <DialogDescription>
+              {sendModalBulk
+                ? `Choose a message template to send to ${sendModalRow?.rows?.length ?? 0} driver(s). Each will receive the message with their vehicle data.`
+                : `Choose a message template. Preview uses ${previewRow?.vehicle_name || 'vehicle'} as example.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Template</label>
+              <Select value={String(selectedTemplateId)} onValueChange={(v) => setSelectedTemplateId(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3].map((id) => (
+                    <SelectItem key={id} value={String(id)}>
+                      {SMS_TEMPLATES[id].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Preview</label>
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm whitespace-pre-wrap font-sans">
+                {previewText || 'Select a template to see preview.'}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSendModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleConfirmSend} disabled={sendingAll || sendingRowId}>
+              {sendingAll || sendingRowId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MessageSquare className="h-4 w-4 mr-2" />}
+              Send Message
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

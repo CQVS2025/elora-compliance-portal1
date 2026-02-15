@@ -199,10 +199,20 @@ Deno.serve(async (req) => {
     if (siteRef) dashboardParams.site = siteRef;
     const dashboardData = await callEloraAPI('/dashboard', dashboardParams);
     const rows = Array.isArray(dashboardData?.rows) ? dashboardData.rows : (dashboardData?.data?.rows ?? []);
+    // Parse analysis date range (same logic as Compliance page)
+    const [startY, startM] = analysisFromDate.split('-').map(Number);
+    const [endY, endM] = analysisToDate.split('-').map(Number);
+    const startMonthVal = (startY || 0) * 12 + (startM || 1);
+    const endMonthVal = (endY || 0) * 12 + (endM || 12);
     const byVehicleRef: Record<string, { totalScans: number; lastScan?: string; washesPerWeek?: number; vehicleName?: string; siteName?: string }> = {};
     for (const row of rows) {
       const ref = row.vehicleRef ?? row.vehicle_ref;
       if (!ref) continue;
+      // Filter by date range — only include months within analysis period (match Compliance)
+      const rowY = Number(row.year) || 0;
+      const rowM = Number(row.month) || 1;
+      const rowMonthVal = rowY * 12 + rowM;
+      if (rowMonthVal < startMonthVal || rowMonthVal > endMonthVal) continue;
       const existing = byVehicleRef[ref];
       const total = (row.totalScans ?? row.total_scans ?? 0) + (existing?.totalScans ?? 0);
       byVehicleRef[ref] = {
@@ -232,7 +242,12 @@ Deno.serve(async (req) => {
       const vehicleRef = v.vehicleRef ?? v.vehicleRfid ?? v.id ?? v.internalVehicleId;
       const dashboardRow = byVehicleRef[vehicleRef] ?? {};
       const currentDayWashes = dashboardRow.totalScans ?? 0;
-      const targetWashes = dashboardRow.washesPerWeek ?? v.washesPerWeek ?? 6;
+      // Target: match Compliance page — protocolNumber (monthly) primary, else washesPerWeek, default 12
+      const protocol = v.protocolNumber ?? v.protocol ?? v.protocol_number ?? null;
+      const weeklyTarget = dashboardRow.washesPerWeek ?? v.washesPerWeek ?? v.washes_per_week ?? null;
+      const targetWashes = (protocol != null && protocol > 0)
+        ? protocol
+        : (weeklyTarget || 12);
       const legacyName = [v.legacyFirstName, v.legacyLastName].filter(Boolean).join(' ').trim();
       const driverPhone = (v.phone || v.mobile || '').trim() || null;
       const driverEmail = (v.email || '').trim() || null;
@@ -250,13 +265,13 @@ Deno.serve(async (req) => {
         vehicle_rfid: v.vehicleRfid ?? v.vehicle_rfid ?? null,
         wash_time_seconds: v.washTime1Seconds ?? v.wash_time_seconds ?? null,
         washes_per_day: v.washesPerDay ?? v.washes_per_day ?? null,
-        washes_per_week: v.washesPerWeek ?? v.washes_per_week ?? 6,
+        washes_per_week: v.washesPerWeek ?? v.washes_per_week ?? 12,
         last_scan_at: v.lastScanAt ?? v.last_scan_at ?? null,
         company_id,
         current_week_washes: currentDayWashes,
         target_washes: targetWashes,
         days_remaining: daysRemaining,
-        wash_history_summary: `${dateRangeDescription}: ${currentDayWashes}. Target: ${targetWashes}/week.`,
+        wash_history_summary: `${dateRangeDescription}: ${currentDayWashes}. Target: ${targetWashes}.`,
       };
     });
 
@@ -309,7 +324,9 @@ Deno.serve(async (req) => {
         const vehicleRef = v.vehicleRef ?? v.vehicleRfid ?? v.id ?? v.internalVehicleId;
         const dashboardRow = byVehicleRef[vehicleRef] ?? {};
         const currentWeekWashes = dashboardRow.totalScans ?? 0;
-        const targetWashes = dashboardRow.washesPerWeek ?? v.washesPerWeek ?? 6;
+        const recProtocol = v.protocolNumber ?? v.protocol ?? v.protocol_number ?? null;
+        const recWeeklyTarget = dashboardRow.washesPerWeek ?? v.washesPerWeek ?? v.washes_per_week ?? null;
+        const targetWashes = (recProtocol != null && recProtocol > 0) ? recProtocol : (recWeeklyTarget || 12);
         try {
           await invokeFunction('generate-wash-recommendations', {
             vehicle_ref: vehicleRef,

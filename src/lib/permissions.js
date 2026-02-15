@@ -193,29 +193,29 @@ export function getAccessibleTabs(userProfile) {
 
   const role = userProfile.role;
 
-  // Super admin sees all tabs (Users tab moved to Admin console)
+  // Super admin sees all tabs (Users tab moved to Admin console). Use 'ai-insights' to match nav.
   if (role === 'super_admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'elora-ai'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
   }
 
   // Admin sees all tabs except users, but includes branding
   if (role === 'admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'elora-ai'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
   }
 
   // Manager sees most tabs (limited to assigned sites)
   if (role === 'manager') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'elora-ai'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // User (demo) sees same as admin but limited to assigned company/companies
   if (role === 'user') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'elora-ai'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // Batcher sees same as admin but locked to a single assigned site
   if (role === 'batcher') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'elora-ai'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // Driver sees only compliance and leaderboard (assigned vehicles only)
@@ -225,7 +225,7 @@ export function getAccessibleTabs(userProfile) {
 
   // Viewer sees read-only tabs
   if (role === 'viewer') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'elora-ai'];
+    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   return ['compliance', 'leaderboard'];

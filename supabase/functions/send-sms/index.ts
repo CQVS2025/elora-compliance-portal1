@@ -10,16 +10,71 @@ import { createSupabaseAdminClient } from '../_shared/supabase.ts';
  * - TWILIO_PHONE_NUMBER (or MESSAGING_SERVICE_SID)
  *
  * Request body:
- * - Single: { vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level, company_id }
- * - Bulk: { reminders: [{ vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level }], company_id }
+ * - template_id: 1 | 2 | 3 (Friendly / Direct / Data-Focused)
+ * - Single: { vehicle_ref, vehicle_name, driver_phone, site_name, washes_remaining, weekly_target, washes_completed, optimal_window, company_id }
+ * - Bulk: { reminders: [...], company_id, template_id }
  */
 
 const TWILIO_API_BASE = 'https://api.twilio.com/2010-04-01';
 
-function buildMessage(vehicleName: string, riskLevel: string): string {
-  const name = vehicleName || 'Your vehicle';
-  const urgency = riskLevel === 'critical' ? 'URGENT: ' : riskLevel === 'high' ? 'Reminder: ' : '';
-  return `${urgency}ELORA Fleet Compliance: ${name} needs a wash to meet compliance targets. Please complete your wash.`;
+const SMS_TEMPLATES: Record<number, string> = {
+  1: `Hi, your vehicle {{VEHICLE_ID}} at {{SITE}} has not hit its wash target yet. A quick wash before end of day keeps you on track. Wash bays are quietest between {{OPTIMAL_WINDOW}}. - ELORA`,
+  2: `Wash reminder: {{VEHICLE_ID}} is due at {{SITE}}.
+You're {{WASHES_REMAINING}} wash(es) short of your target.
+Best time to go: {{OPTIMAL_WINDOW}}.
+Let's get it done today — ELORA`,
+  3: `{{VEHICLE_ID}} wash due at {{SITE}}.
+Target: {{WEEKLY_TARGET}} | Done: {{WASHES_COMPLETED}}.
+Recommended window: {{OPTIMAL_WINDOW}}.
+— ELORA`,
+};
+
+function replacePlaceholders(
+  template: string,
+  data: {
+    vehicle_id: string;
+    site: string;
+    washes_remaining: number;
+    weekly_target: number;
+    washes_completed: number;
+    optimal_window: string;
+  }
+): string {
+  return template
+    .replace(/\{\{VEHICLE_ID\}\}/g, data.vehicle_id || 'Your vehicle')
+    .replace(/\{\{SITE\}\}/g, data.site || 'your site')
+    .replace(/\{\{WASHES_REMAINING\}\}/g, String(data.washes_remaining ?? 0))
+    .replace(/\{\{WEEKLY_TARGET\}\}/g, String(data.weekly_target ?? 0))
+    .replace(/\{\{WASHES_COMPLETED\}\}/g, String(data.washes_completed ?? 0))
+    .replace(/\{\{OPTIMAL_WINDOW\}\}/g, data.optimal_window || '6-8am');
+}
+
+function buildMessage(
+  templateId: number,
+  item: {
+    vehicle_name?: string | null;
+    vehicle_ref?: string;
+    site_name?: string | null;
+    site_ref?: string | null;
+    current_week_washes?: number | null;
+    target_washes?: number | null;
+    optimal_window?: string | null;
+  }
+): string {
+  // Same target logic as Compliance page: protocolNumber ?? washesPerWeek ?? 12
+  const template = SMS_TEMPLATES[templateId] ?? SMS_TEMPLATES[2];
+  const target = Number(item.target_washes ?? 12);
+  const completed = Number(item.current_week_washes ?? 0);
+  const remaining = Math.max(0, target - completed);
+  const data = {
+    vehicle_id: item.vehicle_name || item.vehicle_ref || 'Your vehicle',
+    site: item.site_name || item.site_ref || 'your site',
+    washes_remaining: remaining,
+    weekly_target: target,
+    washes_completed: completed,
+    optimal_window: (item.optimal_window || '6-8am').trim(),
+  };
+  return replacePlaceholders(template, data);
 }
 
 async function sendTwilioSms(to: string, body: string, fromOrMessagingSid: string): Promise<{ sid: string; status: string }> {
@@ -67,7 +122,9 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level, company_id, reminders } = body;
+    const { vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level, company_id, reminders, template_id } = body;
+
+    const templateId = [1, 2, 3].includes(Number(template_id)) ? Number(template_id) : 2;
 
     const fromNumber = Deno.env.get('TWILIO_PHONE_NUMBER') || Deno.env.get('TWILIO_MESSAGING_SERVICE_SID');
     if (!fromNumber) {
@@ -82,7 +139,7 @@ Deno.serve(async (req) => {
     const items = Array.isArray(reminders) && reminders.length > 0
       ? reminders
       : vehicle_ref && driver_phone
-        ? [{ vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level }]
+        ? [{ vehicle_ref, vehicle_name, driver_name, driver_phone, risk_level, site_name: body.site_name, site_ref: body.site_ref, current_week_washes: body.current_week_washes, target_washes: body.target_washes, optimal_window: body.optimal_window }]
         : [];
 
     if (items.length === 0) {
@@ -102,7 +159,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const message = buildMessage(item.vehicle_name || item.vehicle_ref, item.risk_level || 'medium');
+      const message = buildMessage(templateId, item);
 
       try {
         const twilioResult = await sendTwilioSms(phone, message, fromNumber);

@@ -2,7 +2,7 @@ import { createSupabaseAdminClient } from '../_shared/supabase.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.32.1';
 
-const SYSTEM_PROMPT = `You are an AI assistant for ELORA Fleet Compliance Portal, a vehicle wash compliance monitoring system for concrete mixer trucks. Your role is to analyze wash data and provide actionable risk insights. Each vehicle has a weekly wash target (typically 6 washes/week). Respond only in valid JSON.`;
+const SYSTEM_PROMPT = `You are an AI assistant for ELORA Fleet Compliance Portal, a vehicle wash compliance monitoring system for concrete mixer trucks. Your role is to analyze wash data and provide actionable risk insights. Each vehicle has a wash target (protocol/monthly or weekly; default 12). Respond only in valid JSON.`;
 
 interface VehicleInput {
   vehicle_ref: string;
@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
   Name: ${v.vehicle_name || v.vehicle_ref}
   Driver: ${v.driver_name || 'Unknown'}
   Site: ${v.site_name || v.site_ref || 'Unknown'}
-  Weekly Target: ${v.target_washes ?? 6} washes
+  Weekly Target: ${v.target_washes ?? 12} washes
   Current Week Washes: ${v.current_week_washes ?? 0}
   Days Remaining in Week: ${v.days_remaining ?? 0}
   ${v.wash_history_summary ? `Summary: ${v.wash_history_summary}` : ''}`
