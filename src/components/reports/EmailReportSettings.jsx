@@ -6,16 +6,24 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { roleTabSettingsOptions } from '@/query/options';
-import { getDefaultEmailReportTypes } from '@/lib/permissions';
+import { getDefaultEmailReportTypes, isAdmin } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
-import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, Calendar } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -80,6 +88,36 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     selectedReportSites: [],
     selectedReportVehicles: [],
   });
+
+  // Schedule automation state (admin/super_admin only)
+  const [scheduleForm, setScheduleForm] = useState({
+    automationEnabled: false,
+    scheduledDay: 1,
+    scheduledTime: '09:00',
+    timezone: 'Australia/Sydney',
+  });
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const canManageSchedule = isAdmin(userProfile) || userProfile?.role === 'super_admin';
+
+  const AUSTRALIA_TIMEZONES = [
+    { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
+    { value: 'Australia/Melbourne', label: 'Melbourne (AEST/AEDT)' },
+    { value: 'Australia/Brisbane', label: 'Brisbane (AEST)' },
+    { value: 'Australia/Adelaide', label: 'Adelaide (ACST/ACDT)' },
+    { value: 'Australia/Perth', label: 'Perth (AWST)' },
+    { value: 'Australia/Darwin', label: 'Darwin (ACST)' },
+    { value: 'Australia/Hobart', label: 'Hobart (AEST/AEDT)' },
+  ];
+
+  const DAYS_OF_WEEK = [
+    { value: 0, label: 'Sunday' },
+    { value: 1, label: 'Monday' },
+    { value: 2, label: 'Tuesday' },
+    { value: 3, label: 'Wednesday' },
+    { value: 4, label: 'Thursday' },
+    { value: 5, label: 'Friday' },
+    { value: 6, label: 'Saturday' },
+  ];
 
   // All report types (filtered by role's allowed types)
   const ALL_REPORT_TYPES = [
@@ -155,8 +193,53 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         report_types: filtered,
         include_charts: preferences.include_charts !== false
       }));
+      setScheduleForm({
+        automationEnabled: preferences.enabled === true,
+        scheduledDay: preferences.scheduled_day_of_week ?? 1,
+        scheduledTime: (preferences.scheduled_time && String(preferences.scheduled_time).slice(0, 5)) || '09:00',
+        timezone: preferences.timezone || 'Australia/Sydney',
+      });
     }
   }, [preferences, allowedEmailReportTypeIds]);
+
+  const saveSchedule = async () => {
+    if (!userEmail || !currentUser?.id) return;
+    setSavingSchedule(true);
+    try {
+      const payload = {
+        user_email: userEmail,
+        enabled: scheduleForm.automationEnabled,
+        frequency: 'weekly',
+        report_types: scheduleForm.automationEnabled ? formData.report_types.filter(id => allowedEmailReportTypeIds.includes(id)) : [],
+        include_charts: formData.include_charts,
+        scheduled_time: scheduleForm.scheduledTime,
+        scheduled_day_of_week: scheduleForm.scheduledDay,
+        scheduled_day_of_month: 1,
+        timezone: scheduleForm.timezone,
+        filters_json: reportData ? {
+          selectedCustomer: reportData.selectedCustomer,
+          selectedSite: reportData.selectedSite,
+          selectedDriverIds: reportData.selectedDriverIds || [],
+        } : {},
+      };
+      if (preferences?.id) {
+        await supabaseClient.tables.emailReportPreferences
+          .update(payload)
+          .eq('id', preferences.id);
+      } else {
+        await supabaseClient.tables.emailReportPreferences
+          .insert([{ ...payload, user_id: currentUser.id, company_id: userProfile?.company_id }]);
+      }
+      queryClient.invalidateQueries(['emailReportPreferences', userEmail]);
+      setSuccessMessage(scheduleForm.automationEnabled ? 'Schedule saved. Weekly reports will be sent automatically.' : 'Automation disabled.');
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (e) {
+      console.error('Save schedule error:', e);
+      toast.error('Failed to save schedule. Please try again.');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
 
   // Compute date range from duration and apply to dashboard filters
   const getDateRangeFromDuration = (type, count) => {
@@ -1456,6 +1539,88 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           </span>
         </AlertDescription>
       </Alert>
+
+      {/* Email Schedule - admin/super_admin only */}
+      {canManageSchedule && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-base">Email Schedule</CardTitle>
+            </div>
+            <CardDescription>
+              Enable automatic weekly email reports. Reports use last week&apos;s data and are sent on your chosen day and time (Australia timezone).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="automation-toggle" className="text-sm font-medium">Enable automatic weekly reports</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">When on, reports are sent automatically based on your schedule below.</p>
+              </div>
+              <Switch
+                id="automation-toggle"
+                checked={scheduleForm.automationEnabled}
+                onCheckedChange={(v) => setScheduleForm(prev => ({ ...prev, automationEnabled: v }))}
+              />
+            </div>
+            {scheduleForm.automationEnabled && (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Day of week</Label>
+                    <Select
+                      value={String(scheduleForm.scheduledDay)}
+                      onValueChange={(v) => setScheduleForm(prev => ({ ...prev, scheduledDay: parseInt(v, 10) }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DAYS_OF_WEEK.map((d) => (
+                          <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Time</Label>
+                    <Input
+                      type="time"
+                      value={scheduleForm.scheduledTime}
+                      onChange={(e) => setScheduleForm(prev => ({ ...prev, scheduledTime: e.target.value || '09:00' }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Timezone</Label>
+                  <Select
+                    value={scheduleForm.timezone}
+                    onValueChange={(v) => setScheduleForm(prev => ({ ...prev, timezone: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select your timezone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AUSTRALIA_TIMEZONES.map((tz) => (
+                        <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Select your Australian timezone so reports are sent at the correct local time.</p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Report types and filters are taken from the sections below. The automated report will include data from the <strong>previous week</strong> (last 7 days).
+                </p>
+                <Button onClick={saveSchedule} disabled={savingSchedule} className="gap-2">
+                  {savingSchedule && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {savingSchedule ? 'Saving...' : 'Save Schedule'}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Report duration */}
       <Card>

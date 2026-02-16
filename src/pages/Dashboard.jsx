@@ -32,6 +32,7 @@ import SectionCards from '@/components/SectionCards';
 import ChartAreaInteractive from '@/components/ChartAreaInteractive';
 import DataTable from '@/components/DataTable';
 import FilterSection from '@/components/dashboard/FilterSection';
+import DashboardHomeExecutive from '@/components/dashboard/DashboardHomeExecutive';
 import FavoriteVehicles, { FavoriteButton } from '@/components/dashboard/FavoriteVehicles';
 import VehiclePerformanceChart from '@/components/dashboard/VehiclePerformanceChart';
 import VehicleWashHistoryModal from '@/components/dashboard/VehicleWashHistoryModal';
@@ -55,6 +56,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { usePermissions, useFilteredData, useAvailableTabs } from '@/components/auth/PermissionGuard';
+
+// Tabs for sidebar; intelligence tabs used for quick-link visibility
+const INTELLIGENCE_TABS = [
+  { value: 'ai-insights', label: 'Elora AI' },
+  { value: 'sms-alerts', label: 'SMS Alerts' },
+];
 
 // All available tabs (maintenance removed)
 const ALL_TABS = [
@@ -204,6 +211,7 @@ export default function Dashboard() {
 
   // Use database-driven tab visibility from permissions (for filter/access checks)
   const availableTabs = useAvailableTabs(ALL_TABS);
+  const availableIntelligenceTabs = useAvailableTabs(INTELLIGENCE_TABS);
   const [searchQuery, setSearchQuery] = useState('');
   const [complianceStatusFilter, setComplianceStatusFilter] = useState('all');
   const [complianceSiteFilter, setComplianceSiteFilter] = useState('all');
@@ -997,7 +1005,7 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Stats cards (dashboard-01 SectionCards) or skeletons when syncing */}
+        {/* Stats cards (SectionCards) — same for all tabs, reflects user filters and tab visibility */}
         {showContentSkeletons ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
@@ -1071,7 +1079,20 @@ export default function Dashboard() {
                   </>
                 ) : (
                   <>
-                    {/* Vehicle Compliance Table - immediately after KPI cards */}
+                    {/* Executive summary: Action Required, AI Insight, Quick Links, Recent Activity */}
+                    <DashboardHomeExecutive
+                      userName={permissions.userProfile?.full_name ?? permissions.user?.email?.split('@')[0]}
+                      companyName={permissions.userProfile?.company_name ?? restrictedCustomerName}
+                      lastUpdatedAt={lastSyncedAt}
+                      filteredVehicles={filteredVehicles}
+                      filteredScans={filteredScans}
+                      hasAIInsights={availableIntelligenceTabs.some((t) => t.value === 'ai-insights')}
+                      hasSMSAlerts={availableIntelligenceTabs.some((t) => t.value === 'sms-alerts')}
+                      hasDeviceHealth={availableTabs.some((t) => t.value === 'devices')}
+                      hasEmailReports={availableTabs.some((t) => t.value === 'email-reports')}
+                    />
+                    {/* Vehicle Compliance Table */}
+                    <div id="vehicle-compliance-table">
                     <DataTable
                       columns={vehicleColumns}
                       data={complianceFilteredVehicles}
@@ -1121,6 +1142,7 @@ export default function Dashboard() {
                         </>
                       }
                     />
+                    </div>
                     {/* Vehicle Performance Chart + Wash Frequency Chart */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       <ChartAreaInteractive data={washTrendsData} />

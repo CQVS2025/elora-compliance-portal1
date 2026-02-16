@@ -39,6 +39,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Switch } from '@/components/ui/switch';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -75,6 +76,7 @@ export default function CompanyManagement() {
     slug: '',
     email_domain: '',
     elora_customer_ref: '',
+    scheduled_email_reports_enabled: true,
   });
 
   // Quick Setup form state
@@ -194,6 +196,7 @@ export default function CompanyManagement() {
           logo_url: companyData.logo_url || null,
           primary_color: companyData.primary_color,
           secondary_color: companyData.secondary_color,
+          scheduled_email_reports_enabled: companyData.scheduled_email_reports_enabled !== false,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -398,6 +401,7 @@ export default function CompanyManagement() {
       logo_url: company.logo_url || '',
       primary_color: company.primary_color || '#1e3a5f',
       secondary_color: company.secondary_color || '#3b82f6',
+      scheduled_email_reports_enabled: company.scheduled_email_reports_enabled !== false,
     });
     setShowEditModal(true);
   };
@@ -789,6 +793,17 @@ export default function CompanyManagement() {
                   </div>
                 )}
               </div>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-border p-4">
+              <div>
+                <Label htmlFor="scheduled-emails" className="text-sm font-medium">Scheduled email reports</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">When disabled, no weekly automated emails are sent for this organization.</p>
+              </div>
+              <Switch
+                id="scheduled-emails"
+                checked={formData.scheduled_email_reports_enabled !== false}
+                onCheckedChange={(v) => setFormData((prev) => ({ ...prev, scheduled_email_reports_enabled: v }))}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

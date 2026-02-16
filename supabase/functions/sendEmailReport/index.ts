@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     const supabase = createSupabaseAdminClient();
 
     const body = await req.json();
-    const { userEmail, reportTypes, includeCharts, previewOnly, reportData, branding: clientBranding, pdfBase64, pdfFilename, excelBase64, excelFilename } = body;
+    const { userEmail, companyId: cronCompanyId, reportTypes, includeCharts, previewOnly, reportData, branding: clientBranding, pdfBase64, pdfFilename, excelBase64, excelFilename, cronMode, dateRange: cronDateRange } = body;
 
     console.log('sendEmailReport invoked with:', {
       userEmail,
@@ -167,11 +167,15 @@ Deno.serve(async (req) => {
     let reports: Record<string, unknown> = {};
     const wantsCompliance = filteredReportTypes.includes('compliance');
     const wantsCosts = filteredReportTypes.includes('costs');
+    let vehiclesForEmail: Array<Record<string, unknown>> = [];
+    let dateRangeForEmail: { start?: string; end?: string } = {};
 
     if (reportData?.stats && reportData?.filteredVehicles) {
       const stats = reportData.stats;
       const vehicles = reportData.filteredVehicles || [];
-      const dateRange = reportData.dateRange || { start: '', end: '' };
+      vehiclesForEmail = vehicles;
+      dateRangeForEmail = reportData.dateRange || { start: '', end: '' };
+      const dateRange = dateRangeForEmail;
       const dateLabel = dateRange.start && dateRange.end
         ? `${dateRange.start} - ${dateRange.end}`
         : `${now.toLocaleDateString()}`;
@@ -220,19 +224,30 @@ Deno.serve(async (req) => {
         };
       }
     } else {
+      // Cron mode: use companyId from body when provided (e.g. super_admin scheduling for an org).
+      // Manual mode: use user's company_id from profile.
+      const effectiveCompanyId = (cronMode && cronCompanyId) ? cronCompanyId : (user.company_id ?? null);
       let eloraCustomerRef: string | undefined;
-      if (user.company_id) {
+      if (effectiveCompanyId) {
         const { data: company } = await supabase
           .from('companies')
           .select('elora_customer_ref')
-          .eq('id', user.company_id)
+          .eq('id', effectiveCompanyId)
           .single();
         eloraCustomerRef = company?.elora_customer_ref;
       }
 
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const startStr = thirtyDaysAgo.toISOString().slice(0, 10);
-      const endStr = now.toISOString().slice(0, 10);
+      // Cron mode: use provided dateRange (last week). Manual: last 30 days.
+      let startStr: string;
+      let endStr: string;
+      if (cronMode && cronDateRange?.start && cronDateRange?.end) {
+        startStr = cronDateRange.start;
+        endStr = cronDateRange.end;
+      } else {
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        startStr = thirtyDaysAgo.toISOString().slice(0, 10);
+        endStr = now.toISOString().slice(0, 10);
+      }
 
       let vehicles: Array<Record<string, unknown>> = [];
       let dashboardRows: Array<{ vehicleRef?: string; totalScans?: number; year?: number; month?: number }> = [];
@@ -260,9 +275,10 @@ Deno.serve(async (req) => {
 
       const scansByVehicle = new Map<string, number>();
       const startDate = new Date(startStr);
+      const endDate = new Date(endStr + 'T23:59:59.999Z');
       dashboardRows.forEach((row) => {
         const rowDate = new Date(row.year ?? 2000, (row.month ?? 1) - 1);
-        if (rowDate < startDate || rowDate > now) return;
+        if (rowDate < startDate || rowDate > endDate) return;
         const ref = row.vehicleRef || '';
         scansByVehicle.set(ref, (scansByVehicle.get(ref) || 0) + (row.totalScans || 0));
       });
@@ -296,7 +312,7 @@ Deno.serve(async (req) => {
       }
 
       if (wantsCompliance) {
-        reports.compliance = generateComplianceData(userVehicles, thirtyDaysAgo);
+        reports.compliance = generateComplianceData(userVehicles, startDate);
       }
       if (wantsCosts) {
         const totalWashes = userVehicles.reduce((s: number, v: Record<string, unknown>) =>
@@ -310,12 +326,14 @@ Deno.serve(async (req) => {
             totalWashes,
             washSummary: `Total washes in period: ${totalWashes}`
           },
-          dateRange: `${thirtyDaysAgo.toLocaleDateString()} - ${now.toLocaleDateString()}`
+          dateRange: `${new Date(startStr).toLocaleDateString()} - ${new Date(endStr).toLocaleDateString()}`
         };
       }
+      vehiclesForEmail = userVehicles;
+      dateRangeForEmail = { start: startStr, end: endStr };
     }
 
-    const hasCsv = !!(reportData?.filteredVehicles?.length);
+    const hasCsv = !!(vehiclesForEmail?.length && !excelBase64);
     const hasPdf = !!pdfBase64;
     const hasExcel = !!excelBase64;
     const emailHTML = generateEmailHTML(reports, branding, userEmail, { hasCsv, hasPdf, hasExcel });
@@ -337,9 +355,9 @@ Deno.serve(async (req) => {
 
     const attachments: Attachment[] = [];
     // Only attach CSV when client does not send Excel (e.g. scheduled reports); "Email me now" sends Excel instead
-    const vehiclesForCsv = (reportData?.filteredVehicles || []).slice(0, 500);
-    const csvContent = !excelBase64 && reportData?.filteredVehicles?.length
-      ? buildVehicleCsv(vehiclesForCsv, reportData.dateRange)
+    const vehiclesForCsv = (vehiclesForEmail || []).slice(0, 500);
+    const csvContent = !excelBase64 && vehiclesForCsv.length
+      ? buildVehicleCsv(vehiclesForCsv, dateRangeForEmail)
       : null;
     if (csvContent) {
       attachments.push({ filename: `fleet_compliance_${now.toISOString().slice(0, 10)}.csv`, content: csvContent, type: 'text', contentType: 'text/csv' });
