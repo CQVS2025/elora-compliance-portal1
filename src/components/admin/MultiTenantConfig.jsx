@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from '@/lib/toast';
 
 export default function MultiTenantConfig() {
   const queryClient = useQueryClient();
@@ -99,8 +100,7 @@ export default function MultiTenantConfig() {
 
     setModalOpen(false);
 
-    // Show success message
-    alert('Configuration saved! See console for generated code snippet.');
+    toast.success('Configuration saved', { description: 'See console for generated code snippet.' });
   };
 
   const generateConfigCode = (data) => {

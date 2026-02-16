@@ -295,11 +295,13 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         }));
       }
       queryClient.invalidateQueries(['emailReportPreferences', userEmail]);
-      setSuccessMessage(scheduleForm.automationEnabled ? 'Schedule saved. Weekly reports will be sent automatically.' : 'Automation disabled.');
+      const savedMsg = scheduleForm.automationEnabled ? 'Schedule saved. Weekly reports will be sent automatically.' : 'Automation disabled.';
+      setSuccessMessage(savedMsg);
+      toast.success('Schedule saved', { description: savedMsg });
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (e) {
       console.error('Save schedule error:', e);
-      toast.error('Failed to save schedule. Please try again.');
+      toast.error('Failed to save schedule', { description: e?.message || 'Please try again.' });
     } finally {
       setSavingSchedule(false);
     }
@@ -439,7 +441,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
       console.error('Error saving preferences:', error);
-      alert('Failed to save settings. Please try again.');
+      toast.error('Failed to save settings', { description: error?.message || 'Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -456,18 +458,18 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     });
 
     if (!userEmail) {
-      alert('User email not found. Please refresh the page and try again.');
+      toast.error('User email not found', { description: 'Please refresh the page and try again.' });
       return;
     }
 
     const effectiveReportTypes = formData.report_types.filter(id => allowedEmailReportTypeIds.includes(id));
     if (effectiveReportTypes.length === 0) {
-      console.warn('[handleSendNow] No report types selected or allowed for role');
-      alert('Please select at least one report type to send');
+      toast.error('No report types selected', { description: 'Please select at least one report type to send.' });
       return;
     }
 
     setSendingNow(true);
+    toast.info('Sending report…', { description: 'Building and sending your email. This may take a moment.' });
     try {
       // Build report data with site/vehicle filters applied (for email body and CSV)
       let dataToSend = reportData;
@@ -523,7 +525,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       }
 
       // Manual "Email me now" sends only to the logged-in user. Additional recipients are for scheduled automation only.
-      await supabaseClient.reports.send({
+      const result = await supabaseClient.reports.send({
         userEmail,
         reportTypes: effectiveReportTypes,
         includeCharts: formData.include_charts,
@@ -536,30 +538,32 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         recipients: [],
       });
 
-      setSuccessMessage(`Report sent successfully to ${userEmail}! Check your email inbox.`);
+      const successMsg = result?.message || `Report sent successfully to ${userEmail}. Check your email inbox.`;
+      setSuccessMessage(successMsg);
+      if (result?.skipped?.length) {
+        toast.success('Report sent', {
+          description: `Sent to you. ${result.skipped.length} recipient(s) were skipped (not in Mailgun authorized list).`,
+        });
+      } else {
+        toast.success('Report sent', { description: `Delivered to ${userEmail}. Check your inbox.` });
+      }
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error) {
       console.error('[handleSendNow] Error sending email report:', error);
-      console.error('[handleSendNow] Error details:', {
-        message: error.message,
-        stack: error.stack,
-        response: error.response,
-        name: error.name
-      });
 
-      let errorMessage = 'Failed to send email. ';
-      const msg = (error.message || '').toLowerCase();
+      let errorTitle = 'Failed to send email';
+      let errorDesc = 'Please try again or contact support.';
+      const msg = (error?.message || '').toLowerCase();
       if (msg.includes('user not found')) {
-        errorMessage = 'Your user account was not found in the system. Please contact support.';
+        errorTitle = 'User not found';
+        errorDesc = 'Your account was not found in the system. Please contact support.';
       } else if (msg.includes('authorized recipients') || msg.includes('free accounts') || msg.includes('sandbox')) {
-        errorMessage = 'Email service is in sandbox mode. Add your email address as an authorized recipient in the Mailgun dashboard (Sending > Authorized Recipients), or upgrade your Mailgun plan to send to any address.';
-      } else if (error.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += 'Please try again or contact support.';
+        errorTitle = 'Email service limit';
+        errorDesc = 'Add your email as an authorized recipient in Mailgun (Sending → Authorized Recipients), or upgrade the plan to send to any address.';
+      } else if (error?.message) {
+        errorDesc = error.message;
       }
-
-      alert(errorMessage);
+      toast.error(errorTitle, { description: errorDesc });
     } finally {
       setSendingNow(false);
       setPdfHtml('');
@@ -1460,45 +1464,42 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
   };
 
   const handleExportPdf = async () => {
-    console.log('[handleExportPdf] Starting PDF export...');
-
     if (!currentUser) {
-      alert('User not loaded. Please wait a moment and try again.');
+      toast.error('User not loaded', { description: 'Please wait a moment and try again.' });
       return;
     }
 
     if (!currentUser.email) {
-      alert('User email not found. Please refresh the page and try again.');
+      toast.error('User email not found', { description: 'Please refresh the page and try again.' });
       return;
     }
 
     if (formData.report_types.length === 0) {
-      alert('Please select at least one report type to export');
+      toast.error('No report types selected', { description: 'Please select at least one report type to export.' });
       return;
     }
 
     setExportingPdf(true);
+    toast.info('Exporting PDF…', { description: 'Building your report. This may take a moment.' });
 
     try {
       const branding = await resolveBrandingForReport();
       const reportDataForPdf = buildReportDataForPdf(reportData, reportVehicles);
       if (!reportDataForPdf) {
-        alert('No report data available. Set dashboard filters and ensure there is vehicle data.');
+        toast.error('No report data', { description: 'Set dashboard filters and ensure there is vehicle data, then try again.' });
+        setExportingPdf(false);
         return;
       }
 
       const { pdf, filename } = await buildReportPdf(reportDataForPdf, branding);
-      console.log('[handleExportPdf] Saving PDF as:', filename);
       pdf.save(filename);
 
       setSuccessMessage('PDF exported successfully!');
+      toast.success('PDF exported', { description: 'Your report has been downloaded.' });
       setTimeout(() => setSuccessMessage(''), 5000);
-
-      console.log('[handleExportPdf] PDF export completed successfully');
     } catch (error) {
       console.error('[handleExportPdf] Error exporting PDF:', error);
-      console.error('[handleExportPdf] Error stack:', error.stack);
-      alert(`Failed to export PDF: ${error.message || 'Unknown error'}. Check the console for details.`);
+      toast.error('Failed to export PDF', { description: error?.message || 'Please try again.' });
     } finally {
       setExportingPdf(false);
       // Clear the PDF HTML to free up memory
