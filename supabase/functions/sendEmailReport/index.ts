@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     const supabase = createSupabaseAdminClient();
 
     const body = await req.json();
-    const { userEmail, companyId: cronCompanyId, reportTypes, includeCharts, previewOnly, reportData, branding: clientBranding, pdfBase64, pdfFilename, excelBase64, excelFilename, cronMode, dateRange: cronDateRange } = body;
+    const { userEmail, companyId: cronCompanyId, reportTypes, includeCharts, previewOnly, reportData, branding: clientBranding, pdfBase64, pdfFilename, excelBase64, excelFilename, cronMode, dateRange: cronDateRange, recipients: additionalRecipients } = body;
 
     console.log('sendEmailReport invoked with:', {
       userEmail,
@@ -89,6 +89,10 @@ Deno.serve(async (req) => {
       hasPdf: !!pdfBase64,
       hasExcel: !!excelBase64
     });
+    console.log('sendEmailReport RECIPIENTS DEBUG – raw body.recipients:', body.recipients, 'type:', Array.isArray(body.recipients) ? 'array' : typeof body.recipients);
+    console.log('sendEmailReport RECIPIENTS DEBUG – additionalRecipients (parsed):', additionalRecipients, 'length:', Array.isArray(additionalRecipients) ? additionalRecipients.length : 0);
+    const _allRecipientsPreview = [userEmail, ...(Array.isArray(additionalRecipients) ? additionalRecipients.filter((e: string) => typeof e === 'string' && e.includes('@')) : [])];
+    console.log('sendEmailReport RECIPIENTS DEBUG – allRecipients (to field):', _allRecipientsPreview, 'length:', _allRecipientsPreview.length);
 
     if (!userEmail) {
       return new Response(JSON.stringify({ error: 'User email is required' }), {
@@ -353,6 +357,9 @@ Deno.serve(async (req) => {
     const mailgunDomain = Deno.env.get('MAILGUN_DOMAIN') || 'sandbox.mailgun.org';
     const fromAddr = `ELORA Compliance <postmaster@${mailgunDomain}>`;
 
+    const allRecipients = [userEmail, ...(Array.isArray(additionalRecipients) ? additionalRecipients.filter((e: string) => typeof e === 'string' && e.includes('@')) : [])];
+    const toAddresses = [...new Set(allRecipients)].join(', ');
+
     const attachments: Attachment[] = [];
     // Only attach CSV when client does not send Excel (e.g. scheduled reports); "Email me now" sends Excel instead
     const vehiclesForCsv = (vehiclesForEmail || []).slice(0, 500);
@@ -370,7 +377,7 @@ Deno.serve(async (req) => {
     }
 
     const emailResult = await sendViaEmailgun(
-      userEmail,
+      toAddresses,
       `${branding.company_name || 'ELORA'} - Fleet Compliance Report`,
       emailHTML,
       fromAddr,
@@ -396,6 +403,7 @@ Deno.serve(async (req) => {
       success: true,
       message: 'Email report sent successfully',
       recipient: userEmail,
+      recipients: allRecipients,
       id: emailResult.id
     }), {
       status: 200,

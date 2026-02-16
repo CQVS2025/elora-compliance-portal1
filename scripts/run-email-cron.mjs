@@ -98,7 +98,7 @@ async function run() {
   try {
     const { data: prefs, error } = await supabase
       .from('email_report_preferences')
-      .select('id, user_email, company_id, enabled, frequency, scheduled_time, scheduled_day_of_week, timezone, report_types, include_charts, last_sent')
+      .select('id, user_email, company_id, enabled, frequency, scheduled_time, scheduled_day_of_week, timezone, report_types, include_charts, last_sent, recipients')
       .eq('enabled', true);
 
     if (error) {
@@ -148,10 +148,11 @@ async function run() {
           body: JSON.stringify({
             userEmail: pref.user_email,
             companyId: pref.company_id || undefined,
-            reportTypes: pref.report_types || ['compliance', 'costs'],
+            reportTypes: pref.report_types?.length ? pref.report_types : ['compliance', 'costs'],
             includeCharts: pref.include_charts !== false,
             cronMode: true,
             dateRange: { start, end },
+            recipients: Array.isArray(pref.recipients) ? pref.recipients.filter(Boolean) : [],
           }),
         });
 

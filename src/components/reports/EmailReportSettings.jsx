@@ -8,11 +8,12 @@ import { useAuth } from '@/lib/AuthContext';
 import { roleTabSettingsOptions } from '@/query/options';
 import { getDefaultEmailReportTypes, isAdmin } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
-import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, Calendar } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, Calendar, Plus, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
@@ -95,9 +96,28 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     scheduledDay: 1,
     scheduledTime: '09:00',
     timezone: 'Australia/Sydney',
+    recipientEmailsText: '', // one email per line; single source of truth for additional recipients
+    reportTypes: [],
   });
   const [savingSchedule, setSavingSchedule] = useState(false);
   const canManageSchedule = isAdmin(userProfile) || userProfile?.role === 'super_admin';
+
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim().toLowerCase());
+
+  /** Parse text (one email per line or comma-separated) into sanitized array for API/DB. Excludes account holder. */
+  const parseRecipientsFromText = (text, accountHolderEmail) => {
+    if (!text || typeof text !== 'string') return [];
+    const raw = text
+      .split(/[\n,;]+/)
+      .map((e) => String(e).trim().toLowerCase())
+      .filter(Boolean);
+    const account = (accountHolderEmail || '').toLowerCase();
+    return Array.from(
+      new Set(
+        raw.filter((e) => isValidEmail(e) && e !== account)
+      )
+    );
+  };
 
   const AUSTRALIA_TIMEZONES = [
     { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
@@ -183,7 +203,12 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     return list;
   }, [reportData?.filteredVehicles, formData.selectedReportSites, formData.selectedReportVehicles]);
 
-  // Update form when preferences load (filter report_types to allowed for this role)
+  // Track which preference row we last inited from so we only overwrite when it actually changes
+  // (e.g. different user). Stops refetches / effect re-runs from wiping the user's added recipients.
+  const lastInitedPreferenceIdRef = useRef(null);
+
+  // Update form when preferences load. Only overwrite schedule form when the preference row changed
+  // (new id) so refetches and effect re-runs don't overwrite the user's unsaved recipient edits.
   useEffect(() => {
     if (preferences) {
       const prefsTypes = preferences.report_types || [];
@@ -193,12 +218,23 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         report_types: filtered,
         include_charts: preferences.include_charts !== false
       }));
-      setScheduleForm({
-        automationEnabled: preferences.enabled === true,
-        scheduledDay: preferences.scheduled_day_of_week ?? 1,
-        scheduledTime: (preferences.scheduled_time && String(preferences.scheduled_time).slice(0, 5)) || '09:00',
-        timezone: preferences.timezone || 'Australia/Sydney',
-      });
+      const prefId = preferences.id ?? preferences.user_email;
+      const alreadyInitedForThisRow = lastInitedPreferenceIdRef.current === prefId;
+      if (!alreadyInitedForThisRow) {
+        lastInitedPreferenceIdRef.current = prefId;
+        const prefsReportTypes = preferences.report_types || [];
+        const filteredScheduleTypes = prefsReportTypes.filter(id => allowedEmailReportTypeIds.includes(id));
+        const prefsRecipients = Array.isArray(preferences.recipients) ? preferences.recipients : [];
+        const recipientEmailsText = prefsRecipients.join('\n');
+        setScheduleForm({
+          automationEnabled: preferences.enabled === true,
+          scheduledDay: preferences.scheduled_day_of_week ?? 1,
+          scheduledTime: (preferences.scheduled_time && String(preferences.scheduled_time).slice(0, 5)) || '09:00',
+          timezone: preferences.timezone || 'Australia/Sydney',
+          recipientEmailsText,
+          reportTypes: filteredScheduleTypes,
+        });
+      }
     }
   }, [preferences, allowedEmailReportTypeIds]);
 
@@ -206,11 +242,19 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     if (!userEmail || !currentUser?.id) return;
     setSavingSchedule(true);
     try {
+      // Single source of truth: parse from textarea (one email per line)
+      const recipientsListDeduped = scheduleForm.automationEnabled
+        ? parseRecipientsFromText(scheduleForm.recipientEmailsText, userEmail)
+        : [];
+
+      const scheduleReportTypes = scheduleForm.automationEnabled
+        ? (scheduleForm.reportTypes || []).filter(id => allowedEmailReportTypeIds.includes(id))
+        : [];
       const payload = {
         user_email: userEmail,
         enabled: scheduleForm.automationEnabled,
         frequency: 'weekly',
-        report_types: scheduleForm.automationEnabled ? formData.report_types.filter(id => allowedEmailReportTypeIds.includes(id)) : [],
+        report_types: scheduleReportTypes,
         include_charts: formData.include_charts,
         scheduled_time: scheduleForm.scheduledTime,
         scheduled_day_of_week: scheduleForm.scheduledDay,
@@ -221,14 +265,34 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           selectedSite: reportData.selectedSite,
           selectedDriverIds: reportData.selectedDriverIds || [],
         } : {},
+        recipients: recipientsListDeduped,
       };
+
       if (preferences?.id) {
-        await supabaseClient.tables.emailReportPreferences
+        const { data, error } = await supabase
+          .from('email_report_preferences')
           .update(payload)
-          .eq('id', preferences.id);
+          .eq('id', preferences.id)
+          .select()
+          .single();
+        if (error) throw error;
+        if (data) {
+          const savedRecipients = Array.isArray(data.recipients) ? data.recipients : [];
+          setScheduleForm(prev => ({
+            ...prev,
+            recipientEmailsText: savedRecipients.join('\n'),
+            reportTypes: Array.isArray(data.report_types) ? [...data.report_types] : [],
+          }));
+        }
       } else {
-        await supabaseClient.tables.emailReportPreferences
+        const { error } = await supabase
+          .from('email_report_preferences')
           .insert([{ ...payload, user_id: currentUser.id, company_id: userProfile?.company_id }]);
+        if (error) throw error;
+        setScheduleForm(prev => ({
+          ...prev,
+          recipientEmailsText: recipientsListDeduped.join('\n'),
+        }));
       }
       queryClient.invalidateQueries(['emailReportPreferences', userEmail]);
       setSuccessMessage(scheduleForm.automationEnabled ? 'Schedule saved. Weekly reports will be sent automatically.' : 'Automation disabled.');
@@ -458,6 +522,8 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         excelFilename = excelResult.filename;
       }
 
+      const sendNowRecipients = parseRecipientsFromText(scheduleForm.recipientEmailsText, userEmail);
+
       await supabaseClient.reports.send({
         userEmail,
         reportTypes: effectiveReportTypes,
@@ -468,6 +534,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         pdfFilename: pdfFilename || undefined,
         excelBase64: excelBase64 || undefined,
         excelFilename: excelFilename || undefined,
+        recipients: sendNowRecipients,
       });
 
       setSuccessMessage(`Report sent successfully to ${userEmail}! Check your email inbox.`);
@@ -1609,8 +1676,54 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
                   </Select>
                   <p className="text-xs text-muted-foreground">Select your Australian timezone so reports are sent at the correct local time.</p>
                 </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Additional recipients</Label>
+                  <p className="text-xs text-muted-foreground">Add email addresses to also receive the weekly report. Separate with commas or new lines. You (the account holder) always receive it.</p>
+                  <Textarea
+                    placeholder="email1@example.com, email2@example.com"
+                    className="min-h-[88px] font-mono text-sm"
+                    value={scheduleForm.recipientEmailsText ?? ''}
+                    onChange={(e) => setScheduleForm((prev) => ({ ...prev, recipientEmailsText: e.target.value }))}
+                    aria-label="Additional recipient emails, comma or newline separated"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{parseRecipientsFromText(scheduleForm.recipientEmailsText, userEmail).length}</span> valid recipient(s) will receive the report.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Report types to include</Label>
+                  <p className="text-xs text-muted-foreground">Choose which sections appear in the weekly automated report.</p>
+                  {reportTypes.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-2">No report types available for your role.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      {reportTypes.map((report) => (
+                        <div
+                          key={report.id}
+                          className="flex items-center space-x-2"
+                        >
+                          <Checkbox
+                            id={`schedule-${report.id}`}
+                            checked={(scheduleForm.reportTypes || []).includes(report.id)}
+                            onCheckedChange={(checked) => {
+                              setScheduleForm(prev => ({
+                                ...prev,
+                                reportTypes: checked
+                                  ? [...(prev.reportTypes || []), report.id]
+                                  : (prev.reportTypes || []).filter((id) => id !== report.id),
+                              }));
+                            }}
+                          />
+                          <Label htmlFor={`schedule-${report.id}`} className="text-sm font-normal cursor-pointer">
+                            {report.label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
-                  Report types and filters are taken from the sections below. The automated report will include data from the <strong>previous week</strong> (last 7 days).
+                  Filters use the dashboard selection above. The automated report will include data from the <strong>previous week</strong> (last 7 days).
                 </p>
                 <Button onClick={saveSchedule} disabled={savingSchedule} className="gap-2">
                   {savingSchedule && <Loader2 className="h-4 w-4 animate-spin" />}
