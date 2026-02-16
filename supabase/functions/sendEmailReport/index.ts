@@ -12,12 +12,14 @@ import { callEloraAPI } from '../_shared/elora-api.ts';
  * - MAILGUN_BASE_URL: (optional) Base URL, default https://api.mailgun.net (use https://api.eu.mailgun.net for EU)
  */
 
+type Attachment = { filename: string; content: string; type?: 'text' | 'base64'; contentType?: string };
+
 async function sendViaEmailgun(
   to: string,
   subject: string,
   html: string,
   from: string,
-  attachment?: { filename: string; content: string }
+  attachments?: Attachment[]
 ): Promise<{ id?: string; message?: string }> {
   const apiKey = Deno.env.get('MAILGUN_API_KEY');
   const domain = Deno.env.get('MAILGUN_DOMAIN');
@@ -34,9 +36,14 @@ async function sendViaEmailgun(
   formData.append('to', to);
   formData.append('subject', subject);
   formData.append('html', html);
-  if (attachment) {
-    const blob = new Blob([attachment.content], { type: 'text/csv' });
-    formData.append('attachment', blob, attachment.filename);
+  if (attachments?.length) {
+    for (const a of attachments) {
+      const contentType = a.contentType || (a.type === 'base64' ? 'application/octet-stream' : 'text/plain');
+      const blob = a.type === 'base64'
+        ? new Blob([Uint8Array.from(atob(a.content), (c) => c.charCodeAt(0))], { type: contentType })
+        : new Blob([a.content], { type: contentType });
+      formData.append('attachment', blob, a.filename);
+    }
   }
 
   const auth = btoa(`api:${apiKey}`);
@@ -72,12 +79,15 @@ Deno.serve(async (req) => {
     const supabase = createSupabaseAdminClient();
 
     const body = await req.json();
-    const { userEmail, reportTypes, includeCharts, previewOnly, reportData } = body;
+    const { userEmail, reportTypes, includeCharts, previewOnly, reportData, branding: clientBranding, pdfBase64, pdfFilename, excelBase64, excelFilename } = body;
 
     console.log('sendEmailReport invoked with:', {
       userEmail,
       reportTypes,
-      hasReportData: !!reportData
+      hasReportData: !!reportData,
+      hasBranding: !!clientBranding,
+      hasPdf: !!pdfBase64,
+      hasExcel: !!excelBase64
     });
 
     if (!userEmail) {
@@ -87,24 +97,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    const emailDomain = userEmail.split('@')[1];
     let branding: { company_name?: string; logo_url?: string; primary_color?: string; secondary_color?: string } = {
       company_name: 'ELORA Solutions',
-      logo_url: null,
+      logo_url: undefined,
       primary_color: '#003DA5',
       secondary_color: '#00A3E0'
     };
-
-    try {
-      const { data: brandingResults } = await supabase
-        .from('client_branding')
-        .select('*')
-        .eq('client_email_domain', emailDomain);
-      if (brandingResults && brandingResults.length > 0) {
-        branding = brandingResults[0];
+    if (clientBranding && typeof clientBranding === 'object') {
+      branding = {
+        company_name: clientBranding.company_name || 'ELORA Solutions',
+        logo_url: clientBranding.logo_url ?? undefined,
+        primary_color: clientBranding.primary_color || '#003DA5',
+        secondary_color: clientBranding.secondary_color || '#00A3E0'
+      };
+    } else {
+      const emailDomain = userEmail.split('@')[1];
+      try {
+        const { data: brandingResults } = await supabase
+          .from('client_branding')
+          .select('*')
+          .eq('client_email_domain', emailDomain);
+        if (brandingResults && brandingResults.length > 0) branding = brandingResults[0];
+      } catch (e) {
+        console.warn('Branding fetch error:', e);
       }
-    } catch (e) {
-      console.warn('Branding fetch error:', e);
     }
 
     const { data: users } = await supabase
@@ -300,7 +316,9 @@ Deno.serve(async (req) => {
     }
 
     const hasCsv = !!(reportData?.filteredVehicles?.length);
-    const emailHTML = generateEmailHTML(reports, branding, userEmail, hasCsv);
+    const hasPdf = !!pdfBase64;
+    const hasExcel = !!excelBase64;
+    const emailHTML = generateEmailHTML(reports, branding, userEmail, { hasCsv, hasPdf, hasExcel });
 
     if (previewOnly) {
       return new Response(JSON.stringify({
@@ -317,17 +335,28 @@ Deno.serve(async (req) => {
     const mailgunDomain = Deno.env.get('MAILGUN_DOMAIN') || 'sandbox.mailgun.org';
     const fromAddr = `ELORA Compliance <postmaster@${mailgunDomain}>`;
 
+    const attachments: Attachment[] = [];
+    // Only attach CSV when client does not send Excel (e.g. scheduled reports); "Email me now" sends Excel instead
     const vehiclesForCsv = (reportData?.filteredVehicles || []).slice(0, 500);
-    const csvContent = reportData?.filteredVehicles?.length
+    const csvContent = !excelBase64 && reportData?.filteredVehicles?.length
       ? buildVehicleCsv(vehiclesForCsv, reportData.dateRange)
       : null;
+    if (csvContent) {
+      attachments.push({ filename: `fleet_compliance_${now.toISOString().slice(0, 10)}.csv`, content: csvContent, type: 'text', contentType: 'text/csv' });
+    }
+    if (pdfBase64 && pdfFilename) {
+      attachments.push({ filename: pdfFilename, content: pdfBase64, type: 'base64', contentType: 'application/pdf' });
+    }
+    if (excelBase64 && excelFilename) {
+      attachments.push({ filename: excelFilename, content: excelBase64, type: 'base64', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    }
 
     const emailResult = await sendViaEmailgun(
       userEmail,
       `${branding.company_name || 'ELORA'} - Fleet Compliance Report`,
       emailHTML,
       fromAddr,
-      csvContent ? { filename: `fleet_compliance_${now.toISOString().slice(0, 10)}.csv`, content: csvContent } : undefined
+      attachments.length ? attachments : undefined
     );
 
     try {
@@ -437,17 +466,24 @@ function generateEmailHTML(
   reports: Record<string, unknown>,
   branding: { company_name?: string; logo_url?: string; primary_color?: string; secondary_color?: string },
   _userEmail: string,
-  hasCsvAttachment = false
+  attachments: { hasCsv?: boolean; hasPdf?: boolean; hasExcel?: boolean } = {}
 ) {
   const primaryColor = branding?.primary_color || '#003DA5';
   const secondaryColor = branding?.secondary_color || '#00A3E0';
   const companyName = branding?.company_name || 'ELORA Solutions';
   const logoUrl = branding?.logo_url;
+  const hasCsv = attachments?.hasCsv ?? false;
+  const hasPdf = attachments?.hasPdf ?? false;
+  const hasExcel = attachments?.hasExcel ?? false;
+  const parts: string[] = [];
+  if (hasPdf) parts.push('PDF report');
+  if (hasExcel) parts.push('Excel file');
+  if (hasCsv && !hasExcel) parts.push('CSV file');
+  const attachmentLine = parts.length ? ` ${parts.join(' and ')} with vehicle details ${parts.length === 1 ? 'is' : 'are'} attached to this email.` : '';
 
   let content = `
     <p style="color: #475569; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      Here is your fleet compliance report. Below you'll find insights into your fleet's performance.
-      ${hasCsvAttachment ? ' A CSV file with vehicle details is attached to this email.' : ''}
+      Here is your fleet compliance report. Below you'll find insights into your fleet's performance.${attachmentLine}
     </p>
   `;
 
@@ -506,17 +542,38 @@ function generateEmailHTML(
     </head>
     <body style="margin: 0; padding: 0; background: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
       <div style="max-width: 680px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,61,165,0.08);">
-        <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%); padding: 40px 20px; text-align: center;">
-          ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" style="max-height: 60px; margin-bottom: 16px;" />` : ''}
-          <h1 style="color: white; margin: 0; font-size: 28px;">${companyName}</h1>
-          <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">Compliance Portal Report</p>
+        <div style="background: linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%); padding: 24px 20px;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+            <tr>
+              <td style="width: 28%; vertical-align: middle; text-align: left;">
+                <div style="display: inline-flex; align-items: center; gap: 12px;">
+                  ${logoUrl ? `<img src="${logoUrl}" alt="" style="max-height: 36px; max-width: 120px; object-fit: contain; filter: brightness(0) invert(1);" />` : ''}
+                  <span style="color: rgba(255,255,255,0.98); font-size: 14px; font-weight: 600;">${companyName}</span>
+                </div>
+              </td>
+              <td style="width: 44%; vertical-align: middle; text-align: center;">
+                <h1 style="color: rgba(255,255,255,0.98); margin: 0; font-size: 24px; font-weight: 700;">Fleet Compliance Report</h1>
+                <p style="color: rgba(255,255,255,0.75); margin: 4px 0 0 0; font-size: 12px;">${companyName}</p>
+              </td>
+              <td style="width: 28%; vertical-align: middle; text-align: center;">
+                <div style="display: inline-block; text-align: center;">
+                  <div style="margin-bottom: 6px;"><img src="https://yyqspdpk0yebvddv.public.blob.vercel-storage.com/233633501.png" alt="" style="height: 32px; width: auto; object-fit: contain; display: block; margin: 0 auto;" /></div>
+                  <span style="color: rgba(255,255,255,0.85); font-size: 11px; font-weight: 600;">Powered by Elora Solutions</span>
+                </div>
+              </td>
+            </tr>
+          </table>
+          <div style="height: 3px; background: linear-gradient(90deg, rgba(0,221,57,0.6), #7cc43e); margin-top: 12px;"></div>
         </div>
         <div style="padding: 40px 30px;">
           ${content}
         </div>
         <div style="background: #f8fafc; padding: 30px 20px; text-align: center; border-top: 2px solid #e2e8f0;">
           <p style="color: #475569; font-size: 14px; margin: 0;">Report from ${companyName} Compliance Portal</p>
-          <p style="color: #64748b; font-size: 12px; margin: 10px 0 0 0;">© ${new Date().getFullYear()} ${companyName}</p>
+          <p style="color: #64748b; font-size: 12px; margin: 10px 0 0 0; display: inline-flex; align-items: center; flex-wrap: nowrap; justify-content: center; gap: 8px;">
+            <img src="https://yyqspdpk0yebvddv.public.blob.vercel-storage.com/233633501.png" alt="" style="height: 22px; width: auto; object-fit: contain; flex-shrink: 0; display: inline-block; vertical-align: middle;" />
+            <span style="white-space: nowrap;">Powered by ELORA · © ${new Date().getFullYear()}</span>
+          </p>
         </div>
       </div>
     </body>

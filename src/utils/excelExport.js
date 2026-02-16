@@ -72,9 +72,9 @@ function calculateColumnWidths(data) {
   });
 }
 
-// Export vehicle compliance report
-export function exportVehicleComplianceReport(vehicles, dateRange) {
-  const data = vehicles.map(vehicle => ({
+// Build vehicle compliance data for Excel/CSV (shared by export and email)
+function vehicleComplianceData(vehicles) {
+  return vehicles.map(vehicle => ({
     'Vehicle Name': vehicle.name || 'Unknown',
     'Site': vehicle.site_name || 'N/A',
     'RFID': vehicle.rfid || 'N/A',
@@ -84,8 +84,33 @@ export function exportVehicleComplianceReport(vehicles, dateRange) {
     'Status': (vehicle.washes_completed || 0) >= (vehicle.target || 0) ? 'Compliant' : 'At Risk',
     'Last Wash': vehicle.last_scan ? moment(vehicle.last_scan).format('YYYY-MM-DD HH:mm') : 'Never',
   }));
+}
 
+// Export vehicle compliance report (writes file)
+export function exportVehicleComplianceReport(vehicles, dateRange) {
+  const data = vehicleComplianceData(vehicles);
   return exportToExcel(data, 'vehicle_compliance_report', 'Compliance');
+}
+
+/**
+ * Return vehicle compliance report as base64 for email attachment.
+ * @returns {{ base64: string, filename: string } | { error: string }}
+ */
+export function exportVehicleComplianceReportAsBase64(vehicles, companyName = 'ELORA') {
+  try {
+    const data = vehicleComplianceData(vehicles || []);
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+    if (data.length > 0) ws['!cols'] = calculateColumnWidths(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Compliance');
+    const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+    const safeName = (companyName || 'ELORA').replace(/\s+/g, '-');
+    const filename = `${safeName}-fleet-report-${moment().format('YYYY-MM-DD')}.xlsx`;
+    return { base64, filename };
+  } catch (error) {
+    console.error('Excel base64 export error:', error);
+    return { error: error.message };
+  }
 }
 
 
