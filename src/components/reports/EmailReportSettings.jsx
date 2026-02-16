@@ -522,8 +522,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         excelFilename = excelResult.filename;
       }
 
-      const sendNowRecipients = parseRecipientsFromText(scheduleForm.recipientEmailsText, userEmail);
-
+      // Manual "Email me now" sends only to the logged-in user. Additional recipients are for scheduled automation only.
       await supabaseClient.reports.send({
         userEmail,
         reportTypes: effectiveReportTypes,
@@ -534,7 +533,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         pdfFilename: pdfFilename || undefined,
         excelBase64: excelBase64 || undefined,
         excelFilename: excelFilename || undefined,
-        recipients: sendNowRecipients,
+        recipients: [],
       });
 
       setSuccessMessage(`Report sent successfully to ${userEmail}! Check your email inbox.`);
@@ -1609,17 +1608,17 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
 
       {/* Email Schedule - admin/super_admin only */}
       {canManageSchedule && (
-        <Card>
+        <Card className="border border-border bg-card">
           <CardHeader>
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-muted-foreground" />
-              <CardTitle className="text-base">Email Schedule</CardTitle>
+              <CardTitle className="text-base text-foreground">Email Schedule</CardTitle>
             </div>
-            <CardDescription>
+            <CardDescription className="text-muted-foreground">
               Enable automatic weekly email reports. Reports use last week&apos;s data and are sent on your chosen day and time (Australia timezone).
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-6 text-foreground">
             <div className="flex items-center justify-between">
               <div>
                 <Label htmlFor="automation-toggle" className="text-sm font-medium">Enable automatic weekly reports</Label>
@@ -1635,12 +1634,12 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
               <>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Day of week</Label>
+                    <Label className="text-foreground">Day of week</Label>
                     <Select
                       value={String(scheduleForm.scheduledDay)}
                       onValueChange={(v) => setScheduleForm(prev => ({ ...prev, scheduledDay: parseInt(v, 10) }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="border-input bg-background text-foreground">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1651,21 +1650,22 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Time</Label>
+                    <Label className="text-foreground">Time</Label>
                     <Input
                       type="time"
+                      className="border-input bg-background text-foreground"
                       value={scheduleForm.scheduledTime}
                       onChange={(e) => setScheduleForm(prev => ({ ...prev, scheduledTime: e.target.value || '09:00' }))}
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Timezone</Label>
+                  <Label className="text-foreground">Timezone</Label>
                   <Select
                     value={scheduleForm.timezone}
                     onValueChange={(v) => setScheduleForm(prev => ({ ...prev, timezone: v }))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="border-input bg-background text-foreground">
                       <SelectValue placeholder="Select your timezone" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1681,7 +1681,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
                   <p className="text-xs text-muted-foreground">Add email addresses to also receive the weekly report. Separate with commas or new lines. You (the account holder) always receive it.</p>
                   <Textarea
                     placeholder="email1@example.com, email2@example.com"
-                    className="min-h-[88px] font-mono text-sm"
+                    className="min-h-[88px] font-mono text-sm border-input bg-background text-foreground placeholder:text-muted-foreground"
                     value={scheduleForm.recipientEmailsText ?? ''}
                     onChange={(e) => setScheduleForm((prev) => ({ ...prev, recipientEmailsText: e.target.value }))}
                     aria-label="Additional recipient emails, comma or newline separated"
@@ -1736,17 +1736,17 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       )}
 
       {/* Report duration */}
-      <Card>
+      <Card className="border border-border bg-card">
         <CardHeader>
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-base">Report duration</CardTitle>
+            <CardTitle className="text-base text-foreground">Report duration</CardTitle>
           </div>
-          <CardDescription>
+          <CardDescription className="text-muted-foreground">
             Choose the date range for the report. The dashboard filters above will update to match.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 text-foreground">
           <RadioGroup
             value={formData.duration_type}
             onValueChange={handleDurationChange}
@@ -1806,11 +1806,11 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       </Card>
 
       {/* Report types */}
-      <Card>
+      <Card className="border border-border bg-card">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <div className="space-y-1.5">
-            <CardTitle className="text-base">Reports to include</CardTitle>
-            <CardDescription>Select which sections appear in the email and PDF report.</CardDescription>
+            <CardTitle className="text-base text-foreground">Reports to include</CardTitle>
+            <CardDescription className="text-muted-foreground">Select which sections appear in the email and PDF report.</CardDescription>
           </div>
           {reportTypes.length > 0 && (
             <Button variant="ghost" size="sm" onClick={handleAllReportsToggle}>
@@ -1862,8 +1862,8 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
 
       {/* Data updating notice */}
       {isReportDataUpdating && (
-        <Alert className="border-amber-500/50 bg-amber-500/10">
-          <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-500" />
+        <Alert className="border-amber-500/50 bg-amber-500/10 dark:bg-amber-500/15 dark:border-amber-500/40">
+          <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400" />
           <AlertDescription>
             <span className="font-medium text-foreground">Data is Syncing.</span> Wait for the report data above to finish loading before sending or exporting.
           </AlertDescription>
@@ -1871,7 +1871,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       )}
 
       {/* Actions */}
-      <Card>
+      <Card className="border border-border bg-card">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-3">
             <Button

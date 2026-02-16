@@ -71,6 +71,18 @@ async function sendViaEmailgun(
   return json;
 }
 
+/** True if the error is Mailgun sandbox/free-account "add to authorized recipients" (recipient not allowed). */
+function isMailgunUnauthorizedRecipientError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes('authorized recipients') ||
+    lower.includes('free accounts') ||
+    lower.includes('sandbox') ||
+    lower.includes('add the address to your authorized')
+  );
+}
+
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -358,7 +370,7 @@ Deno.serve(async (req) => {
     const fromAddr = `ELORA Compliance <postmaster@${mailgunDomain}>`;
 
     const allRecipients = [userEmail, ...(Array.isArray(additionalRecipients) ? additionalRecipients.filter((e: string) => typeof e === 'string' && e.includes('@')) : [])];
-    const toAddresses = [...new Set(allRecipients)].join(', ');
+    const uniqueRecipients = [...new Set(allRecipients)];
 
     const attachments: Attachment[] = [];
     // Only attach CSV when client does not send Excel (e.g. scheduled reports); "Email me now" sends Excel instead
@@ -376,13 +388,33 @@ Deno.serve(async (req) => {
       attachments.push({ filename: excelFilename, content: excelBase64, type: 'base64', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
 
-    const emailResult = await sendViaEmailgun(
-      toAddresses,
-      `${branding.company_name || 'ELORA'} - Fleet Compliance Report`,
-      emailHTML,
-      fromAddr,
-      attachments.length ? attachments : undefined
-    );
+    const subject = `${branding.company_name || 'ELORA'} - Fleet Compliance Report`;
+    const sentTo: string[] = [];
+    const skipped: string[] = [];
+
+    for (const to of uniqueRecipients) {
+      try {
+        await sendViaEmailgun(to, subject, emailHTML, fromAddr, attachments.length ? attachments : undefined);
+        sentTo.push(to);
+      } catch (err) {
+        if (isMailgunUnauthorizedRecipientError(err)) {
+          console.warn(`Skipping recipient ${to} (not in Mailgun authorized list / sandbox):`, err instanceof Error ? err.message : err);
+          skipped.push(to);
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (sentTo.length === 0) {
+      return new Response(JSON.stringify({
+        error: 'Could not send to any recipient. All may be outside Mailgun authorized list (sandbox).',
+        skipped: skipped
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     try {
       const { data: prefs } = await supabase
@@ -401,10 +433,11 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Email report sent successfully',
+      message: sentTo.length === uniqueRecipients.length ? 'Email report sent successfully' : `Sent to ${sentTo.length} recipient(s); ${skipped.length} skipped (not in Mailgun authorized list).`,
       recipient: userEmail,
-      recipients: allRecipients,
-      id: emailResult.id
+      sentTo,
+      skipped: skipped.length ? skipped : undefined,
+      recipients: uniqueRecipients
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
