@@ -423,7 +423,7 @@ export default function VehicleDetail() {
   };
 
   if (!vehicle && (vehiclesLoading || (vehicleRef && !vehiclesError))) {
-    return <VehicleDetailSkeleton onBack={() => navigate('/')} />;
+    return <VehicleDetailSkeleton onBack={() => navigate('/compliance')} />;
   }
 
   if (!vehicle) {
@@ -442,7 +442,7 @@ export default function VehicleDetail() {
   }
 
   if (isDetailLoading) {
-    return <VehicleDetailSkeleton onBack={() => navigate('/')} />;
+    return <VehicleDetailSkeleton onBack={() => navigate('/compliance')} />;
   }
 
   const displayName = vehicle.vehicleName ?? vehicle.vehicleRef ?? vehicleRef;
@@ -454,7 +454,7 @@ export default function VehicleDetail() {
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      <Button variant="ghost" onClick={() => navigate('/')} className="gap-2 -ml-2 mb-1">
+      <Button variant="ghost" onClick={() => navigate('/compliance')} className="gap-2 -ml-2 mb-1">
         <ArrowLeft className="h-4 w-4" /> Back to Compliance
       </Button>
 
