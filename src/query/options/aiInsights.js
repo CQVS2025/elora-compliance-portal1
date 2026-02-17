@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { queryKeys } from '../keys';
 
 /**
- * AI Settings (default model: Sonnet vs Opus) - readable by all, writable by super_admin only.
+ * AI Settings (default model: Haiku 4.5 / Sonnet / Opus) - readable by all, writable by super_admin only.
  */
 export const aiSettingsOptions = () =>
   queryOptions({

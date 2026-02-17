@@ -31,4 +31,5 @@ export * from './smsReminders';
 export * from './users';
 export * from './companies';
 export * from './roleTabSettings';
+export * from './companyTabSettings';
 export * from './userPresence';

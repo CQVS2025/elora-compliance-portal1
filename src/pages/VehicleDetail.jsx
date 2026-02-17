@@ -461,7 +461,7 @@ export default function VehicleDetail() {
       {/* Breadcrumb + Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link to="/" className="hover:text-foreground transition-colors">Compliance</Link>
+          <Link to="/compliance" className="hover:text-foreground transition-colors">Compliance</Link>
           <span aria-hidden>/</span>
           <span className="font-medium text-foreground truncate">{customerName}</span>
           <span aria-hidden>/</span>

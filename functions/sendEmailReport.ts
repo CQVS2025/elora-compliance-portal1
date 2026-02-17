@@ -391,7 +391,7 @@ Focus on practical, actionable insights for fleet management.`;
 
   try {
     const response = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-3-5-haiku-20241022',
       messages: [
         {
           role: 'user',

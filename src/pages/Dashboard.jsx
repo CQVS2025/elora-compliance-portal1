@@ -33,6 +33,7 @@ import ChartAreaInteractive from '@/components/ChartAreaInteractive';
 import DataTable from '@/components/DataTable';
 import FilterSection from '@/components/dashboard/FilterSection';
 import DashboardHomeExecutive from '@/components/dashboard/DashboardHomeExecutive';
+import DashboardHero from '@/components/dashboard/DashboardHero';
 import FavoriteVehicles, { FavoriteButton } from '@/components/dashboard/FavoriteVehicles';
 import VehiclePerformanceChart from '@/components/dashboard/VehiclePerformanceChart';
 import VehicleWashHistoryModal from '@/components/dashboard/VehicleWashHistoryModal';
@@ -65,6 +66,7 @@ const INTELLIGENCE_TABS = [
 
 // All available tabs (maintenance removed)
 const ALL_TABS = [
+  { value: 'dashboard', label: 'Dashboard' },
   { value: 'compliance', label: 'Compliance' },
   { value: 'costs', label: 'Usage Costs' },
   { value: 'refills', label: 'Tank Levels' },
@@ -177,9 +179,10 @@ const REPORT_FILTER_SOURCE = 'compliance';
 
 // Route path -> tab value (sidebar nav drives content)
 const PATH_TO_TAB = {
-  '/': 'compliance',
-  '/Dashboard': 'compliance',
-  '/dashboard': 'compliance',
+  '/': 'dashboard',
+  '/Dashboard': 'dashboard',
+  '/dashboard': 'dashboard',
+  '/compliance': 'compliance',
   '/usage-costs': 'costs',
   '/refills': 'refills',
   '/device-health': 'devices',
@@ -195,7 +198,7 @@ export default function Dashboard() {
   const permissions = usePermissions();
   const [isMobile, setIsMobile] = useState(false);
   // Active section derived from route (sidebar navigation)
-  const activeTab = PATH_TO_TAB[location.pathname] ?? 'compliance';
+  const activeTab = PATH_TO_TAB[location.pathname] ?? 'dashboard';
 
   // Single shared filter state - persisted so it survives navigation to vehicle detail and back
   const [sharedFilters, setSharedFilters] = useState(getInitialFilters);
@@ -589,6 +592,32 @@ export default function Dashboard() {
     return result;
   }, [scans, selectedCustomer, selectedSite, selectedDriverIds, permissionFilteredSites, vehiclesAfterCustomerSite]);
 
+  // Dashboard tab only: data scoped to user's company (no customer/site/date filter)
+  const companyRef = permissions.userProfile?.company_elora_customer_ref?.trim() || null;
+  const dashboardCompanyVehicles = useMemo(() => {
+    if (!companyRef) return permissionFilteredVehicles || [];
+    return (permissionFilteredVehicles || []).filter(v => v.customer_ref === companyRef);
+  }, [companyRef, permissionFilteredVehicles]);
+  const dashboardCompanyScans = useMemo(() => {
+    let result = scans || [];
+    if (permissionFilteredSites.length === 0 && dashboardCompanyVehicles.length > 0) {
+      const refs = new Set(dashboardCompanyVehicles.map(v => v.id || v.rfid).filter(Boolean));
+      return result.filter(s => refs.has(s.vehicleRef));
+    }
+    if (permissionFilteredSites.length > 0) {
+      if (companyRef) {
+        const siteIds = permissionFilteredSites
+          .filter(s => s.customer_ref === companyRef)
+          .map(s => s.id);
+        result = result.filter(s => siteIds.includes(s.siteRef));
+      } else {
+        const siteIds = permissionFilteredSites.map(s => s.id);
+        result = result.filter(s => siteIds.includes(s.siteRef));
+      }
+    }
+    return result;
+  }, [scans, companyRef, permissionFilteredSites, dashboardCompanyVehicles]);
+
   // Scans from extended 90-day dashboard for Wash Frequency chart (so 7d–90d period filter has data)
   const washChartScans = useMemo(() => {
     const raw = [];
@@ -973,7 +1002,8 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen min-w-0 w-full overflow-x-hidden bg-muted/40">
       <main className="flex-1 min-w-0 w-full p-4 md:p-6 space-y-6 overflow-x-hidden">
-        {/* Filters */}
+        {/* Filters — hidden on Dashboard tab; dashboard shows company data only */}
+        {activeTab !== 'dashboard' && (
         <div>
           <FilterSection
             customers={customersForDropdown}
@@ -1004,22 +1034,6 @@ export default function Dashboard() {
             lastSyncedAt={lastSyncedAt}
           />
         </div>
-
-        {/* Stats cards (SectionCards) — same for all tabs, reflects user filters and tab visibility */}
-        {showContentSkeletons ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <Card key={i} className="overflow-hidden">
-                <CardContent className="p-6">
-                  <Skeleton className="h-4 w-24 mb-2" />
-                  <Skeleton className="h-8 w-16 mb-3" />
-                  <Skeleton className="h-3 w-full" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <SectionCards stats={stats} dateRange={dateRange} />
         )}
 
         {/* Content by route (sidebar-driven) */}
@@ -1031,6 +1045,42 @@ export default function Dashboard() {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
           >
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6 min-w-0 w-full overflow-hidden">
+                {showContentSkeletons ? (
+                  <div className="space-y-4">
+                    <Skeleton className="h-36 w-full rounded-2xl" />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <Skeleton className="h-48 rounded-lg" />
+                      <Skeleton className="h-48 rounded-lg" />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <DashboardHero
+                      userName={permissions.userProfile?.full_name ?? permissions.user?.email?.split('@')[0]}
+                      companyName={permissions.userProfile?.company_name ?? restrictedCustomerName}
+                      companyLogoUrl={permissions.userProfile?.company_logo_url ?? null}
+                      lastUpdatedAt={lastSyncedAt}
+                    />
+                    <DashboardHomeExecutive
+                      userName={permissions.userProfile?.full_name ?? permissions.user?.email?.split('@')[0]}
+                      companyName={permissions.userProfile?.company_name ?? restrictedCustomerName}
+                      lastUpdatedAt={lastSyncedAt}
+                      filteredVehicles={dashboardCompanyVehicles}
+                      filteredScans={dashboardCompanyScans}
+                      hasAIInsights={availableIntelligenceTabs.some((t) => t.value === 'ai-insights')}
+                      hasSMSAlerts={availableIntelligenceTabs.some((t) => t.value === 'sms-alerts')}
+                      hasDeviceHealth={availableTabs.some((t) => t.value === 'devices')}
+                      hasEmailReports={availableTabs.some((t) => t.value === 'email-reports')}
+                      showWelcome={false}
+                      onViewBelow50Click={() => navigate('/compliance')}
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
             {activeTab === 'compliance' && (
               <div className="space-y-6 min-w-0 w-full overflow-hidden">
                 {showContentSkeletons ? (
@@ -1079,18 +1129,6 @@ export default function Dashboard() {
                   </>
                 ) : (
                   <>
-                    {/* Executive summary: Action Required, AI Insight, Quick Links, Recent Activity */}
-                    <DashboardHomeExecutive
-                      userName={permissions.userProfile?.full_name ?? permissions.user?.email?.split('@')[0]}
-                      companyName={permissions.userProfile?.company_name ?? restrictedCustomerName}
-                      lastUpdatedAt={lastSyncedAt}
-                      filteredVehicles={filteredVehicles}
-                      filteredScans={filteredScans}
-                      hasAIInsights={availableIntelligenceTabs.some((t) => t.value === 'ai-insights')}
-                      hasSMSAlerts={availableIntelligenceTabs.some((t) => t.value === 'sms-alerts')}
-                      hasDeviceHealth={availableTabs.some((t) => t.value === 'devices')}
-                      hasEmailReports={availableTabs.some((t) => t.value === 'email-reports')}
-                    />
                     {/* Vehicle Compliance Table */}
                     <div id="vehicle-compliance-table">
                     <DataTable

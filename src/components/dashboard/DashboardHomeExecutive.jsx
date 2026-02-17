@@ -23,11 +23,13 @@ import {
 import { motion } from 'framer-motion';
 import moment from 'moment';
 
+/** Greeting based on user's local time (from their device/PC). */
 function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  const hour = new Date().getHours(); // 0–23 in user's local timezone
+  if (hour >= 5 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 && hour < 21) return 'Good evening';
+  return 'Good night'; // 21:00–04:59 local
 }
 
 /**
@@ -45,6 +47,7 @@ export default function DashboardHomeExecutive({
   hasDeviceHealth = false,
   hasEmailReports = false,
   onViewBelow50Click,
+  showWelcome = true,
 }) {
   const firstName = (userName || '').split(/\s+/)[0] || 'there';
   const greeting = getGreeting();
@@ -162,33 +165,34 @@ export default function DashboardHomeExecutive({
   return (
     <TooltipProvider>
       <div className="space-y-5">
-        {/* Header - minimal */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="rounded-lg border border-border/60 bg-card/50 px-4 py-3"
-        >
-          <h2 className="text-base font-semibold text-foreground">
-            {greeting}, {firstName}
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {format(new Date(), 'EEEE d MMM yyyy')}
-            {companyName && ` · ${companyName}`}
-            {lastUpdatedStr && ` · Updated ${lastUpdatedStr} ago`}
-          </p>
-        </motion.div>
+        {showWelcome && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="rounded-lg border border-border/60 bg-card/50 px-4 py-3"
+          >
+            <h2 className="text-base font-semibold text-foreground">
+              {greeting}, {firstName}
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {format(new Date(), 'EEEE d MMM yyyy')}
+              {companyName && ` · ${companyName}`}
+              {lastUpdatedStr && ` · Updated ${lastUpdatedStr} ago`}
+            </p>
+          </motion.div>
+        )}
 
-        {/* Action Required + AI Insight side by side */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-            <Card className="overflow-hidden border-border/60 bg-card">
-              <CardContent className="p-4">
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        {/* Four equal-size cards: Action Required, AI Insight, Quick Links, Recent Activity */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:grid-rows-2 lg:auto-rows-fr">
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="min-h-[280px] lg:min-h-0 lg:h-full">
+            <Card className="h-full overflow-hidden border-border/60 bg-card flex flex-col">
+              <CardContent className="p-4 flex-1 flex flex-col min-h-0 overflow-y-auto">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground shrink-0">
                   <AlertTriangle className="h-4 w-4 text-amber-500" />
                   Action Required
                 </h3>
                 {actionItems.length > 0 ? (
-                  <ul className="mt-3 space-y-2">
+                  <ul className="mt-3 space-y-2 flex-1 min-h-0">
                     {actionItems.map((item) => {
                       const Icon = item.icon;
                       return (
@@ -228,31 +232,31 @@ export default function DashboardHomeExecutive({
                     })}
                   </ul>
                 ) : (
-                  <p className="mt-3 text-xs text-muted-foreground">No actions required right now.</p>
+                  <p className="mt-3 text-xs text-muted-foreground flex-1">No actions required right now.</p>
                 )}
               </CardContent>
             </Card>
           </motion.div>
 
           {hasAIInsights && (
-            <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.05 }}>
-              <Card className="overflow-hidden border-border/60 bg-card">
-                <CardContent className="p-4">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.05 }} className="min-h-[280px] lg:min-h-0 lg:h-full">
+              <Card className="h-full overflow-hidden border-border/60 bg-card flex flex-col">
+                <CardContent className="p-4 flex-1 flex flex-col min-h-0 overflow-y-auto">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground shrink-0">
                     <Bot className="h-4 w-4 text-primary" />
                     AI Insight of the Day
                   </h3>
                   <p className="mt-2 text-xs text-muted-foreground">{aiInsight.text}</p>
-                  <p className="mt-1.5 text-xs text-foreground">
+                  <p className="mt-1.5 text-xs text-foreground flex-1 min-h-0">
                     <span className="font-medium">Recommendation: </span>
                     {aiInsight.recommendation}
                   </p>
-                  <p className="mt-2 text-[11px] text-muted-foreground">
+                  <p className="mt-2 text-[11px] text-muted-foreground shrink-0">
                     Confidence: {aiInsight.confidence}% · {aiInsight.dataWeeks} weeks of data
                   </p>
                   <Link
                     to="/ai-insights"
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0"
                   >
                     View AI Insights
                     <ChevronRight className="h-3.5 w-3.5" />
@@ -261,16 +265,13 @@ export default function DashboardHomeExecutive({
               </Card>
             </motion.div>
           )}
-        </div>
 
-        {/* Quick Links + Recent Activity */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.08 }}>
-            <Card className="overflow-hidden border-border/60 bg-card">
-              <CardContent className="p-4">
-                <h3 className="text-sm font-semibold text-foreground">Quick Links</h3>
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.08 }} className="min-h-[280px] lg:min-h-0 lg:h-full">
+            <Card className="h-full overflow-hidden border-border/60 bg-card flex flex-col">
+              <CardContent className="p-4 flex-1 flex flex-col min-h-0 overflow-y-auto">
+                <h3 className="text-sm font-semibold text-foreground shrink-0">Quick Links</h3>
                 {quickLinks.length > 0 ? (
-                  <ul className="mt-2 space-y-1.5">
+                  <ul className="mt-2 space-y-1.5 flex-1 min-h-0">
                     {quickLinks.map((link) => (
                       <li key={link.path + link.label} className="flex items-center gap-2">
                         <Link
@@ -297,21 +298,21 @@ export default function DashboardHomeExecutive({
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">No quick links available.</p>
+                  <p className="mt-2 text-xs text-muted-foreground flex-1">No quick links available.</p>
                 )}
               </CardContent>
             </Card>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.1 }}>
-            <Card className="overflow-hidden border-border/60 bg-card">
-              <CardContent className="p-4">
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.1 }} className="min-h-[280px] lg:min-h-0 lg:h-full">
+            <Card className="h-full overflow-hidden border-border/60 bg-card flex flex-col">
+              <CardContent className="p-4 flex-1 flex flex-col min-h-0 overflow-y-auto">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground shrink-0">
                   <Activity className="h-4 w-4 text-primary" />
                   Recent Activity
                 </h3>
                 {recentActivity.length > 0 ? (
-                  <ul className="mt-2 space-y-1.5">
+                  <ul className="mt-2 space-y-1.5 flex-1 min-h-0">
                     {recentActivity.map((a) => (
                       <li key={a.id} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Droplets className="h-3.5 w-3.5 shrink-0 text-primary/70" />
@@ -323,7 +324,7 @@ export default function DashboardHomeExecutive({
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">
+                  <p className="mt-2 text-xs text-muted-foreground flex-1">
                     No recent activity to display.
                   </p>
                 )}

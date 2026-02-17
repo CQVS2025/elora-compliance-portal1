@@ -3,7 +3,7 @@
 -- Vehicles/wash data come from Elora API; we store vehicle_ref (TEXT) for linking.
 
 -- ============================================================================
--- AI SETTINGS (Super Admin: default model Sonnet vs Opus)
+-- AI SETTINGS (Super Admin: default model Haiku 4.5 / Sonnet / Opus)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_settings (
     key TEXT PRIMARY KEY,
@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS ai_settings (
     updated_by UUID REFERENCES auth.users(id)
 );
 
--- Only one row: default_ai_model = 'claude-sonnet-4-20250514' | 'claude-opus-4-20250514'
-INSERT INTO ai_settings (key, value) VALUES ('default_ai_model', 'claude-sonnet-4-20250514')
+-- Only one row: default_ai_model = 'claude-haiku-4-5-20251001' | 'claude-sonnet-4-20250514' | 'claude-opus-4-20250514'
+INSERT INTO ai_settings (key, value) VALUES ('default_ai_model', 'claude-haiku-4-5-20251001')
 ON CONFLICT (key) DO NOTHING;
 
 ALTER TABLE ai_settings ENABLE ROW LEVEL SECURITY;

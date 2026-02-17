@@ -195,40 +195,40 @@ export function getAccessibleTabs(userProfile) {
 
   // Super admin sees all tabs (Users tab moved to Admin console). SMS Alerts on by default only for super_admin.
   if (role === 'super_admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+    return ['dashboard', 'compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
   }
 
   // Admin and all other roles: SMS Alerts off by default. Super Admin can enable it per role in Tab Visibility or per user in User Management.
   if (role === 'admin') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
   }
 
   // Manager sees most tabs (limited to assigned sites)
   if (role === 'manager') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // User (demo) sees same as admin but limited to assigned company/companies
   if (role === 'user') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // Batcher sees same as admin but locked to a single assigned site
   if (role === 'batcher') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // Driver sees only compliance and leaderboard (assigned vehicles only)
   if (role === 'driver') {
-    return ['compliance', 'leaderboard'];
+    return ['dashboard', 'compliance', 'leaderboard'];
   }
 
   // Viewer sees read-only tabs
   if (role === 'viewer') {
-    return ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
-  return ['compliance', 'leaderboard'];
+  return ['dashboard', 'compliance', 'leaderboard'];
 }
 
 /**

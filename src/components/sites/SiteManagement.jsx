@@ -241,7 +241,6 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
-              <SelectItem value="maintenance">Maintenance</SelectItem>
             </SelectContent>
           </Select>
           <Select value={customerFilter} onValueChange={setCustomerFilter}>
@@ -264,7 +263,7 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -272,7 +271,7 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
                 <Building2 className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{sites?.length || 0}</p>
+                <p className="text-2xl font-bold text-foreground">{filteredByCustomer?.length ?? 0}</p>
                 <p className="text-sm text-primary font-semibold">Total Sites</p>
               </div>
             </div>
@@ -287,25 +286,9 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
               </div>
               <div>
                 <p className="text-2xl font-bold text-foreground">
-                  {(sites || []).filter(s => s.status === 'active').length}
+                  {(filteredByCustomer || []).filter(s => (s.status || 'active') === 'active').length}
                 </p>
                 <p className="text-sm text-primary font-semibold">Active Sites</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">
-                  {(sites || []).filter(s => s.status === 'maintenance').length}
-                </p>
-                <p className="text-sm text-primary font-semibold">In Maintenance</p>
               </div>
             </div>
           </CardContent>

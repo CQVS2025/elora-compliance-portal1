@@ -104,9 +104,7 @@ export default function FilterSection({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Viewing data for
-            </p>
+            
             <p className="truncate text-lg font-semibold text-foreground">
               {displayName}
             </p>

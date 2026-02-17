@@ -1,18 +1,20 @@
 import React from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Navigate } from 'react-router-dom';
 import { SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, Sidebar } from '@/components/ui/sidebar';
 import { Home, Building2 } from 'lucide-react';
 import NavMain from '@/components/NavMain';
 import NavUser from '@/components/NavUser';
 import SiteHeader from '@/components/SiteHeader';
 import { useAuth } from '@/lib/AuthContext';
+import { usePermissions } from '@/components/auth/PermissionGuard';
 
 const ELORA_LOGO_URL = 'https://mtjfypwrtvzhnzgatoim.supabase.co/storage/v1/object/public/EloraBucket/company-logos/89d845f5-e06f-4d47-8137-b58c79245a6c/1770066973198-3tv73wrjy56.jpg';
 
 const PATH_TO_HEADER = {
-  '/': { title: 'Compliance', description: 'Fleet compliance overview' },
-  '/Dashboard': { title: 'Compliance', description: 'Fleet compliance overview' },
-  '/dashboard': { title: 'Compliance', description: 'Fleet compliance overview' },
+  '/': { title: 'Dashboard', description: 'Welcome and overview' },
+  '/Dashboard': { title: 'Dashboard', description: 'Welcome and overview' },
+  '/dashboard': { title: 'Dashboard', description: 'Welcome and overview' },
+  '/compliance': { title: 'Compliance', description: 'Fleet compliance overview' },
   '/usage-costs': { title: 'Usage Costs', description: 'Cost and usage analytics' },
   '/tank-levels': { title: 'Tank Levels', description: 'Real-time chemical inventory monitoring' },
   '/refills': { title: 'Tank Levels', description: 'Real-time chemical inventory monitoring' }, // Legacy redirect
@@ -37,6 +39,26 @@ const PATH_TO_HEADER = {
   '/admin/tank-configuration': { title: 'Tank Configuration', description: 'Manage tank capacities and calibration settings' },
 };
 
+/** Paths that map to a nav tab (for tab visibility guard). Admin/settings/profile/vehicle are not restricted by tab visibility. */
+const PATH_TO_TAB = {
+  '/': 'dashboard',
+  '/Dashboard': 'dashboard',
+  '/dashboard': 'dashboard',
+  '/compliance': 'compliance',
+  '/usage-costs': 'costs',
+  '/tank-levels': 'refills',
+  '/refills': 'refills',
+  '/device-health': 'devices',
+  '/sites': 'sites',
+  '/reports': 'reports',
+  '/email-reports': 'email-reports',
+  '/branding': 'branding',
+  '/Leaderboard': 'leaderboard',
+  '/leaderboard': 'leaderboard',
+  '/ai-insights': 'ai-insights',
+  '/sms-alerts': 'sms-alerts',
+};
+
 function getPathHeader(pathname) {
   if (pathname.startsWith('/vehicle/')) return { title: 'Vehicle details', description: 'Wash history, compliance & analytics' };
   return PATH_TO_HEADER[pathname];
@@ -58,6 +80,7 @@ function getAdminBreadcrumbs(pathname) {
 export default function DashboardLayout({ children, title: titleProp, description: descriptionProp }) {
   const location = useLocation();
   const { userProfile } = useAuth();
+  const { effectiveTabValues = [] } = usePermissions();
   const pathHeader = getPathHeader(location.pathname);
   const title = titleProp ?? pathHeader?.title ?? 'Dashboard';
   const description = descriptionProp ?? pathHeader?.description ?? null;
@@ -65,6 +88,12 @@ export default function DashboardLayout({ children, title: titleProp, descriptio
   const companyName = userProfile?.company_name;
   const companyLogoUrl = userProfile?.company_logo_url;
   const isSuperAdmin = userProfile?.role === 'super_admin';
+
+  const tabForPath = PATH_TO_TAB[location.pathname];
+  const isDashboardTab = tabForPath === 'dashboard';
+  if (tabForPath != null && !isDashboardTab && effectiveTabValues.length > 0 && !effectiveTabValues.includes(tabForPath)) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <SidebarProvider>

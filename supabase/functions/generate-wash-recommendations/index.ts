@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
 
     const supabase = createSupabaseAdminClient();
     const { data: settingsRows } = await supabase.from('ai_settings').select('value').eq('key', 'default_ai_model');
-    const model = settingsRows?.[0]?.value ?? 'claude-sonnet-4-20250514';
+    const model = settingsRows?.[0]?.value ?? 'claude-haiku-4-5-20251001';
 
     const anthropic = new Anthropic({ apiKey });
     const prompt = `Generate wash recommendations for this vehicle.

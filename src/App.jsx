@@ -83,8 +83,22 @@ const AuthenticatedApp = () => {
           </PublicRoute>
         } />
 
-        {/* Protected route - Main Dashboard (requires authentication) */}
+        {/* Protected route - Main Dashboard (requires authentication). / = Dashboard home; /compliance = Compliance tab. */}
         <Route path="/" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/compliance" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/dashboard" element={
           <AuthenticatedRoute>
             <DashboardLayout>
               <MainPage />

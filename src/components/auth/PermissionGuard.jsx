@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabaseClient } from "@/api/supabaseClient";
 import { useAuth } from '@/lib/AuthContext';
 import { getAccessibleTabs } from '@/lib/permissions';
-import { roleTabSettingsOptions } from '@/query/options';
+import { roleTabSettingsOptions, companyTabSettingsOptions } from '@/query/options';
 
 /**
  * Database-Driven Permission System
@@ -107,7 +107,7 @@ export function getEffectiveConfig(email) {
   return null;
 }
 
-const ALL_TAB_VALUES = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+const ALL_TAB_VALUES = ['dashboard', 'compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
 
 /**
  * Get tabs allowed by role: Admin Console role override if set, else role default from getAccessibleTabs.
@@ -123,21 +123,26 @@ function getRoleTabs(userProfile, roleTabOverrides) {
 
 /**
  * Compute effective visible tab values for the current user.
- * 1) User profile first: if user has visible_tabs set, use that (user override wins).
- * 2) Role then: otherwise use tabs allowed by role (Admin Console Tab Visibility or role default).
+ * Priority: Role (ceiling) → Company (restrict) → User (restrict).
+ * 1) Role: tabs allowed by role (Tab Visibility or role default).
+ * 2) Company: if company has visible_tabs, intersect with role (company restricts).
+ * 3) User: if user has visible_tabs, intersect with result (user restricts further).
  */
-function getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides) {
-  if (userProfile?.visible_tabs && userProfile.visible_tabs.length > 0) {
-    return userProfile.visible_tabs;
-  }
+function getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides, companyTabs) {
   const roleTabs = getRoleTabs(userProfile, roleTabOverrides);
+  const baseTabs = companyTabs && companyTabs.length > 0
+    ? roleTabs.filter((t) => companyTabs.includes(t))
+    : roleTabs;
+  if (userProfile?.visible_tabs && userProfile.visible_tabs.length > 0) {
+    return userProfile.visible_tabs.filter((t) => baseTabs.includes(t));
+  }
   if (perms.visible_tabs && perms.visible_tabs.length > 0) {
-    return perms.visible_tabs.filter((t) => roleTabs.includes(t));
+    return perms.visible_tabs.filter((t) => baseTabs.includes(t));
   }
   if (perms.hidden_tabs && perms.hidden_tabs.length > 0) {
-    return roleTabs.filter((v) => !perms.hidden_tabs.includes(v));
+    return baseTabs.filter((v) => !perms.hidden_tabs.includes(v));
   }
-  return roleTabs;
+  return baseTabs;
 }
 
 /**
@@ -149,10 +154,11 @@ export function usePermissions() {
 
   const { permissions: dbPermissions, isLoading: permissionsLoading } = useUserPermissions(userEmail);
   const { data: roleTabOverrides = {} } = useQuery(roleTabSettingsOptions());
+  const { data: companyTabs = null } = useQuery(companyTabSettingsOptions(userProfile?.company_id));
 
   const permissions = useMemo(() => {
     const perms = dbPermissions || DEFAULT_PERMISSIONS;
-    const effectiveTabs = getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides);
+    const effectiveTabs = getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides, companyTabs);
     // Driver Leaderboard visibility is controlled only by tab visibility (same as other tabs).
     // Default: visible for all roles; Super Admin can turn off per role in Admin Console.
     const hideLeaderboard = !effectiveTabs.includes('leaderboard');
@@ -191,7 +197,8 @@ export function usePermissions() {
       showAllData: perms.show_all_data ?? true,
       defaultSite: perms.default_site ?? 'all',
 
-      // Tab visibility from database
+      // Tab visibility: effective set after Role → Company → User
+      effectiveTabValues: effectiveTabs,
       visibleTabs: perms.visible_tabs,
       hiddenTabs: perms.hidden_tabs,
 
@@ -208,7 +215,7 @@ export function usePermissions() {
       // Raw permissions data
       _raw: perms,
     };
-  }, [dbPermissions, authUser, userProfile, permissionsLoading, roleTabOverrides]);
+  }, [dbPermissions, authUser, userProfile, permissionsLoading, roleTabOverrides, companyTabs]);
 
   return permissions;
 }
@@ -350,27 +357,15 @@ export function useFilteredData(vehicles, sites, customers = []) {
 
 /**
  * Hook to get available tabs based on permissions.
- * 1) User profile first: if user has visible_tabs set, use that (user override wins).
- * 2) Role then: otherwise use tabs allowed by role (Admin Console Tab Visibility or role default).
+ * Uses effective tab values (Role → Company → User priority).
  */
 export function useAvailableTabs(allTabs) {
   const permissions = usePermissions();
-  const { userProfile } = useAuth();
-  const { data: roleTabOverrides = {} } = useQuery(roleTabSettingsOptions());
+  const effectiveTabValues = permissions.effectiveTabValues || [];
 
   return useMemo(() => {
-    if (userProfile?.visible_tabs && userProfile.visible_tabs.length > 0) {
-      return allTabs.filter((tab) => userProfile.visible_tabs.includes(tab.value));
-    }
-    const roleTabs = getRoleTabs(userProfile, roleTabOverrides);
-    let effectiveTabValues = roleTabs;
-    if (permissions.visibleTabs && permissions.visibleTabs.length > 0) {
-      effectiveTabValues = permissions.visibleTabs.filter((t) => roleTabs.includes(t));
-    } else if (permissions.hiddenTabs && permissions.hiddenTabs.length > 0) {
-      effectiveTabValues = roleTabs.filter((t) => !permissions.hiddenTabs.includes(t));
-    }
     return allTabs.filter((tab) => effectiveTabValues.includes(tab.value));
-  }, [allTabs, permissions.visibleTabs, permissions.hiddenTabs, userProfile, roleTabOverrides]);
+  }, [allTabs, effectiveTabValues]);
 }
 
 export default PermissionGuard;

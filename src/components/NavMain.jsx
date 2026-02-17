@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
+  LayoutDashboard,
   Home,
   DollarSign,
   Droplets,
@@ -25,8 +26,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
+const DASHBOARD_NAV_ITEM = { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' };
+
 const ALL_TABS = [
-  { value: 'compliance', label: 'Compliance', icon: Home, path: '/' },
+  DASHBOARD_NAV_ITEM,
+  { value: 'compliance', label: 'Compliance', icon: Home, path: '/compliance' },
   { value: 'costs', label: 'Usage Costs', icon: DollarSign, path: '/usage-costs' },
   { value: 'refills', label: 'Tank Levels', icon: Droplets, path: '/tank-levels' },
   { value: 'devices', label: 'Device Health', icon: Activity, path: '/device-health' },
@@ -35,6 +39,8 @@ const ALL_TABS = [
   { value: 'email-reports', label: 'Email Reports', icon: Mail, path: '/email-reports' },
   { value: 'branding', label: 'Branding', icon: Palette, path: '/branding' },
 ];
+
+const MAIN_TABS = ALL_TABS.filter((t) => t.value !== 'dashboard');
 
 const INTELLIGENCE_TABS = [
   { value: 'ai-insights', label: 'Elora AI', icon: Sparkles, path: '/ai-insights', showNewBadge: false },
@@ -84,9 +90,10 @@ function NavItem({ item, isActive, onNavigate }) {
 export default function NavMain() {
   const navigate = useNavigate();
   const location = useLocation();
-  const availableTabs = useAvailableTabs(ALL_TABS);
+  const availableTabs = useAvailableTabs(MAIN_TABS);
   const availableIntelligenceTabs = useAvailableTabs(INTELLIGENCE_TABS);
   const currentPath = location.pathname;
+  const isDashboardActive = currentPath === '/' || currentPath === '/dashboard' || currentPath === '/Dashboard';
 
   return (
     <>
@@ -94,6 +101,7 @@ export default function NavMain() {
         <SidebarGroupLabel>Navigation</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
+            <NavItem item={DASHBOARD_NAV_ITEM} isActive={isDashboardActive} onNavigate={navigate} />
             {availableTabs.map((item) => {
               const isActive = currentPath === item.path;
               return <NavItem key={item.value} item={item} isActive={isActive} onNavigate={navigate} />;
