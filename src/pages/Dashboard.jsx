@@ -1036,6 +1036,25 @@ export default function Dashboard() {
         </div>
         )}
 
+        {/* Stats cards (SectionCards) — below filter for compliance and all nav except Intelligence */}
+        {activeTab !== 'dashboard' && activeTab !== 'ai-insights' && activeTab !== 'sms-alerts' && (
+          showContentSkeletons ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <Card key={i} className="overflow-hidden">
+                  <CardContent className="p-6">
+                    <Skeleton className="h-4 w-24 mb-2" />
+                    <Skeleton className="h-8 w-16 mb-3" />
+                    <Skeleton className="h-3 w-full" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <SectionCards stats={stats} dateRange={dateRange} />
+          )
+        )}
+
         {/* Content by route (sidebar-driven) */}
         <AnimatePresence mode="wait">
           <motion.div
