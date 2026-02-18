@@ -18,6 +18,11 @@ import TankConfiguration from './pages/admin/TankConfiguration';
 import EloraAI from './pages/EloraAI';
 import VehicleDetail from './pages/VehicleDetail';
 import SMSAlerts from './pages/SMSAlerts';
+import WashoutDashboard from './pages/washout-compliance/WashoutDashboard';
+import WESScoring from './pages/washout-compliance/WESScoring';
+import DedaggingRisk from './pages/washout-compliance/DedaggingRisk';
+import SensorData from './pages/washout-compliance/SensorData';
+import Economics from './pages/washout-compliance/Economics';
 import __Layout from './Layout.jsx';
 
 
@@ -42,6 +47,11 @@ export const PAGES = {
     "EloraAI": EloraAI,
     "VehicleDetail": VehicleDetail,
     "SMSAlerts": SMSAlerts,
+    "WashoutDashboard": WashoutDashboard,
+    "WESScoring": WESScoring,
+    "DedaggingRisk": DedaggingRisk,
+    "SensorData": SensorData,
+    "Economics": Economics,
 }
 
 export const pagesConfig = {

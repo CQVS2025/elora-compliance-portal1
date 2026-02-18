@@ -89,7 +89,11 @@ module.exports = {
   				'2': 'hsl(var(--chart-2))',
   				'3': 'hsl(var(--chart-3))',
   				'4': 'hsl(var(--chart-4))',
-  				'5': 'hsl(var(--chart-5))'
+  				'5': 'hsl(var(--chart-5))',
+  				critical: 'hsl(var(--chart-critical))',
+  				high: 'hsl(var(--chart-high))',
+  				medium: 'hsl(var(--chart-medium))',
+  				low: 'hsl(var(--chart-low))'
   			},
   			sidebar: {
   				DEFAULT: 'hsl(var(--sidebar-background))',

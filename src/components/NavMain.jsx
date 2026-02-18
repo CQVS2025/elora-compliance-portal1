@@ -12,6 +12,10 @@ import {
   Palette,
   Sparkles,
   MessageSquare,
+  Droplet,
+  TrendingDown,
+  Database,
+  DollarSign as EconomicsIcon,
 } from 'lucide-react';
 import { useAvailableTabs } from '@/components/auth/PermissionGuard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -42,13 +46,21 @@ const ALL_TABS = [
 
 const MAIN_TABS = ALL_TABS.filter((t) => t.value !== 'dashboard');
 
+const WASHOUT_COMPLIANCE_TABS = [
+  { value: 'washout-dashboard', label: 'Dashboard', icon: Droplet, path: '/washout-compliance', badge: 12 },
+  { value: 'wes-scoring', label: 'WES Scoring', icon: Activity, path: '/washout-compliance/wes-scoring' },
+  { value: 'dedagging-risk', label: 'Dedagging Risk', icon: TrendingDown, path: '/washout-compliance/dedagging-risk' },
+  { value: 'sensor-data', label: 'Sensor Data', icon: Database, path: '/washout-compliance/sensor-data' },
+  { value: 'economics', label: 'Economics', icon: EconomicsIcon, path: '/washout-compliance/economics' },
+];
+
 const INTELLIGENCE_TABS = [
   { value: 'ai-insights', label: 'Elora AI', icon: Sparkles, path: '/ai-insights', showNewBadge: false },
   { value: 'sms-alerts', label: 'Alerts History', icon: MessageSquare, path: '/sms-alerts', showNewBadge: false },
 ];
 
 /**
- * Renders a single nav item with optional "New" badge.
+ * Renders a single nav item with optional "New" badge or numeric badge.
  */
 function NavItem({ item, isActive, onNavigate }) {
   const Icon = item.icon;
@@ -71,6 +83,9 @@ function NavItem({ item, isActive, onNavigate }) {
                 {item.showNewBadge && (
                   <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">New</Badge>
                 )}
+                {/* {item.badge && (
+                  <Badge variant="destructive" className="ml-auto text-[10px] px-1.5 py-0">{item.badge}</Badge>
+                )} */}
               </a>
             </SidebarMenuButton>
           </TooltipTrigger>
@@ -84,7 +99,7 @@ function NavItem({ item, isActive, onNavigate }) {
 }
 
 /**
- * Main sidebar navigation: Navigation group + Intelligence (AI Insights).
+ * Main sidebar navigation: Navigation group + Washout Compliance + Intelligence (AI Insights).
  * Filtered by role using useAvailableTabs.
  */
 export default function NavMain() {
@@ -109,6 +124,22 @@ export default function NavMain() {
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
+      
+      {/* Washout Compliance Section — active only for the matching item (Dashboard exact path; WES Scoring matches sub-route /wes-scoring/:vehicleId) */}
+      <SidebarGroup>
+        <SidebarGroupLabel>Washout Compliance</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {WASHOUT_COMPLIANCE_TABS.map((item) => {
+              const isActive =
+                currentPath === item.path ||
+                (item.path !== '/washout-compliance' && currentPath.startsWith(item.path + '/'));
+              return <NavItem key={item.value} item={item} isActive={isActive} onNavigate={navigate} />;
+            })}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
       {availableIntelligenceTabs.length > 0 && (
         <SidebarGroup>
           <SidebarGroupLabel>Intelligence</SidebarGroupLabel>

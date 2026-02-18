@@ -1,4 +1,5 @@
 import React from 'react';
+import '@/lib/gsap';
 import './App.css'
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -183,6 +184,50 @@ const AuthenticatedApp = () => {
           <AuthenticatedRoute>
             <DashboardLayout>
               {React.createElement(Pages.SMSAlerts)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+
+        {/* Washout Compliance routes */}
+        <Route path="/washout-compliance" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.WashoutDashboard)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/washout-compliance/wes-scoring" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.WESScoring)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/washout-compliance/wes-scoring/:vehicleId" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.WESScoring)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/washout-compliance/dedagging-risk" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.DedaggingRisk)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/washout-compliance/sensor-data" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.SensorData)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/washout-compliance/economics" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.Economics)}
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
