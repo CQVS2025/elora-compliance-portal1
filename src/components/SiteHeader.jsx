@@ -27,7 +27,7 @@ export default function SiteHeader({ title, description, breadcrumbs, showBackBu
   return (
     <header
       className={cn(
-        'sticky top-0 z-50 flex h-16 shrink-0 items-center gap-2 border-b border-border bg-background px-4 isolate',
+        'sticky top-0 z-50 flex h-14 sm:h-16 shrink-0 items-center gap-2 border-b border-border bg-background px-3 sm:px-4 isolate min-w-0',
         className
       )}
     >

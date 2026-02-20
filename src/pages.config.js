@@ -15,9 +15,14 @@ import CompanyManagement from './pages/admin/CompanyManagement';
 import RoleManagementInfo from './pages/admin/RoleManagementInfo';
 import RoleTabSettings from './pages/admin/RoleTabSettings';
 import TankConfiguration from './pages/admin/TankConfiguration';
+import ProductsManagement from './pages/admin/ProductsManagement';
+import OperationsLogCategoriesManagement from './pages/admin/OperationsLogCategoriesManagement';
 import EloraAI from './pages/EloraAI';
 import VehicleDetail from './pages/VehicleDetail';
 import SMSAlerts from './pages/SMSAlerts';
+import OperationsLog from './pages/OperationsLog';
+import OperationsLogEntryPage from './pages/OperationsLogEntryPage';
+import OperationsLogAttachmentPage from './pages/OperationsLogAttachmentPage';
 import __Layout from './Layout.jsx';
 
 
@@ -39,9 +44,14 @@ export const PAGES = {
     "admin/role-management": RoleManagementInfo,
     "admin/tab-visibility": RoleTabSettings,
     "admin/tank-configuration": TankConfiguration,
+    "admin/products": ProductsManagement,
+    "admin/operations-log-categories": OperationsLogCategoriesManagement,
     "EloraAI": EloraAI,
     "VehicleDetail": VehicleDetail,
     "SMSAlerts": SMSAlerts,
+    "OperationsLog": OperationsLog,
+    "OperationsLogEntry": OperationsLogEntryPage,
+    "OperationsLogAttachment": OperationsLogAttachmentPage,
 }
 
 export const pagesConfig = {

@@ -12,6 +12,7 @@ import {
   Palette,
   Sparkles,
   MessageSquare,
+  ClipboardList,
 } from 'lucide-react';
 import { useAvailableTabs } from '@/components/auth/PermissionGuard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -31,6 +32,7 @@ const DASHBOARD_NAV_ITEM = { value: 'dashboard', label: 'Dashboard', icon: Layou
 const ALL_TABS = [
   DASHBOARD_NAV_ITEM,
   { value: 'compliance', label: 'Compliance', icon: Home, path: '/compliance' },
+  { value: 'operations-log', label: 'Operations Log', icon: ClipboardList, path: '/operations-log' },
   { value: 'costs', label: 'Usage Costs', icon: DollarSign, path: '/usage-costs' },
   { value: 'refills', label: 'Tank Levels', icon: Droplets, path: '/tank-levels' },
   { value: 'devices', label: 'Device Health', icon: Activity, path: '/device-health' },

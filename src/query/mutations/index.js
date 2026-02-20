@@ -19,3 +19,6 @@ export * from './branding';
 
 // Admin mutations
 export * from './admin';
+
+// Operations log
+export * from './operationsLog';

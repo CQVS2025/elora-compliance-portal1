@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { Mosaic } from 'react-loading-indicators';
 import './App.css'
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -16,6 +17,31 @@ import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import ProtectedRoute, { AdminRoute, SuperAdminRoute, AuthenticatedRoute, PublicRoute } from '@/components/auth/ProtectedRoute';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
+const LOADING_MESSAGE_INTERVAL_MS = 5 * 1000;
+
+const GLOBAL_LOADING_MESSAGES = [
+  'Loading your fleet and wash compliance data…',
+  'Preparing your dashboard and analytics…',
+  'Syncing vehicle and site information…',
+  'Getting your operations log and activity feed ready…',
+  'Loading tank levels and device health…',
+  'Fetching reports and wash history…',
+  'Setting up your workspace and preferences…',
+  'Syncing compliance status across sites…',
+  'Loading leaderboard and performance data…',
+  'Preparing AI insights and recommendations…',
+  'Getting the latest refill and usage data…',
+  'Loading your notifications and alerts…',
+  'Syncing operations log and activity entries…',
+  'Preparing site analytics and vehicle details…',
+  'Loading company and fleet information…',
+  'Fetching email report settings and schedules…',
+  'Getting wash compliance and target data…',
+  'Almost there — loading your data…',
+  'One moment — we\'re getting everything ready…',
+  'Preparing your view…',
+];
+
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
@@ -26,12 +52,24 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
 
-  // Show loading spinner while checking app public settings or auth
+  useEffect(() => {
+    if (!(isLoadingPublicSettings || isLoadingAuth)) return;
+    const id = setInterval(() => {
+      setLoadingMessageIndex((i) => (i + 1) % GLOBAL_LOADING_MESSAGES.length);
+    }, LOADING_MESSAGE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [isLoadingPublicSettings, isLoadingAuth]);
+
+  // Show loading indicator while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-6 bg-background">
+        <Mosaic color="hsl(217, 91%, 60%)" size="small" text="" />
+        <p className="text-sm font-semibold text-muted-foreground max-w-[280px] text-center px-4 animate-in fade-in duration-300">
+          {GLOBAL_LOADING_MESSAGES[loadingMessageIndex]}
+        </p>
       </div>
     );
   }
@@ -187,6 +225,28 @@ const AuthenticatedApp = () => {
           </AuthenticatedRoute>
         } />
 
+        <Route path="/operations-log" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.OperationsLog)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/operations-log/entry/:id" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.OperationsLogEntry)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/operations-log/entry/:id/attachment" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.OperationsLogAttachment)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+
         {/* Admin routes - same layout as app, permission-based content */}
         <Route path="/admin" element={
           <AdminRoute>
@@ -231,6 +291,22 @@ const AuthenticatedApp = () => {
           <SuperAdminRoute>
             <DashboardLayout>
               {React.createElement(Pages['admin/tank-configuration'])}
+            </DashboardLayout>
+          </SuperAdminRoute>
+        } />
+
+        <Route path="/admin/products" element={
+          <SuperAdminRoute>
+            <DashboardLayout>
+              {React.createElement(Pages['admin/products'])}
+            </DashboardLayout>
+          </SuperAdminRoute>
+        } />
+
+        <Route path="/admin/operations-log-categories" element={
+          <SuperAdminRoute>
+            <DashboardLayout>
+              {React.createElement(Pages['admin/operations-log-categories'])}
             </DashboardLayout>
           </SuperAdminRoute>
         } />

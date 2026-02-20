@@ -25,6 +25,7 @@ export function MultiSelection({
   value,
   options = [],
   isLoading = false,
+  placeholder = 'Select drivers',
 }) {
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState('add');
@@ -71,6 +72,7 @@ export function MultiSelection({
         selected={data.remove}
         handleUnselect={handleUnselect}
         handleTogglePopover={handleTogglePopover}
+        placeholder={placeholder}
       />
       <PopoverContent
         className="min-w-[var(--radix-popper-anchor-width)] p-0 max-h-[300px] overflow-hidden"
@@ -94,6 +96,7 @@ function SelectedProperty({
   isLoading,
   handleTogglePopover,
   handleUnselect,
+  placeholder = 'Select drivers',
   className,
   ...props
 }) {
@@ -158,7 +161,7 @@ function SelectedProperty({
                 </div>
               ) : (
                 <div className="mx-auto flex w-full items-center justify-between">
-                  <span className="mx-3 text-sm capitalize text-muted-foreground">Select drivers</span>
+                  <span className="mx-3 text-sm capitalize text-muted-foreground">{placeholder}</span>
                   <ChevronDown className="mx-2 h-4 cursor-pointer text-muted-foreground" />
                 </div>
               )}
@@ -191,7 +194,10 @@ function PropertiesList({
           </TabsTrigger>
         ))}
       </TabsList>
-      <div className="flex-grow overflow-auto min-h-[120px]">
+      <div
+        className="flex-grow overflow-auto min-h-[120px]"
+        onWheel={(e) => e.stopPropagation()}
+      >
         {tabTitles.map((title) => (
           <TabsContent key={title} value={title} className="h-full m-0 mt-0">
             <PropertyCommand

@@ -162,6 +162,22 @@ export const queryKeys = {
       'smsReminders',
       filters,
     ],
+
+    // Operations Log
+    operationsLogEntries: (companyId, filters = {}) => [
+      'tenant',
+      companyId,
+      'operationsLog',
+      'entries',
+      filters,
+    ],
+    operationsLogEntry: (companyId, entryId) => [
+      'tenant',
+      companyId,
+      'operationsLog',
+      'entry',
+      entryId,
+    ],
   },
   
   // User-scoped resources (not tenant-specific)
@@ -200,6 +216,12 @@ export const queryKeys = {
     aiSettings: () => ['aiSettings'],
     // Tank configurations (global, accessible to all authenticated users)
     tankConfigurations: () => ['tankConfigurations'],
+    // Operations log categories (read for all; super_admin manages)
+    operationsLogCategories: () => ['operationsLogCategories'],
+    // Products (read for dropdown; super_admin manages)
+    products: () => ['products'],
+    // Current user's operations log permissions (can_create, etc.)
+    operationsLogMyPermissions: (userId) => ['operationsLogMyPermissions', userId],
   },
   // AI Insights (tenant-scoped)
   ai: {

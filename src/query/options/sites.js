@@ -37,9 +37,9 @@ export const sitesOptions = (companyId, filters = {}) =>
       }
       return data.map((s) => ({
         id: s.ref,
-        name: s.siteName,
+        name: s.siteName ?? s.site_name ?? s.name,
         ref: s.ref,
-        customer_ref: s.customerRef,
+        customer_ref: s.customerRef ?? s.customer_ref,
         address: s.address,
         city: s.city,
         state: s.state,

@@ -14,6 +14,8 @@ import {
   LayoutGrid,
   ArrowRight,
   CheckCircle2,
+  Package,
+  ClipboardList,
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -112,6 +114,7 @@ export default function AdminDashboard() {
     },
   ];
 
+  // Only super_admin can see and access these; routes are protected by SuperAdminRoute in App.jsx
   const superAdminOnlyActions = [
     {
       title: 'User Role Management',
@@ -124,6 +127,18 @@ export default function AdminDashboard() {
       description: 'Override which tabs each role can see on the dashboard',
       icon: LayoutGrid,
       path: '/admin/tab-visibility',
+    },
+    {
+      title: 'Products',
+      description: 'Add and manage products (name + price) for Operations Log dropdown',
+      icon: Package,
+      path: '/admin/products',
+    },
+    {
+      title: 'Operations Log Categories',
+      description: 'Keep default categories and add more for New Entry',
+      icon: ClipboardList,
+      path: '/admin/operations-log-categories',
     },
   ];
 

@@ -59,6 +59,8 @@ import { queryKeys } from '@/query/keys';
 const TAB_VISIBILITY_OPTIONS = [
   { value: 'dashboard', label: 'Dashboard' },
   { value: 'compliance', label: 'Compliance' },
+  { value: 'operations-log', label: 'Operations Log' },
+  { value: 'operations-log-edit', label: 'Edit Operations Log' },
   { value: 'costs', label: 'Usage Costs' },
   { value: 'refills', label: 'Tank Levels' },
   { value: 'devices', label: 'Device Health' },

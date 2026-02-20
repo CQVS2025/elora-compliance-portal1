@@ -25,6 +25,7 @@ const PATH_TO_HEADER = {
   '/branding': { title: 'Branding', description: 'Customize branding' },
   '/ai-insights': { title: 'Elora AI', description: 'Intelligent wash optimization & predictions' },
   '/sms-alerts': { title: 'SMS Alerts', description: 'Risk prediction alert history' },
+  '/operations-log': { title: 'Operations Log', description: 'Site activity tracking, notes & task management' },
   '/Settings': { title: 'Settings', description: 'Manage your account preferences' },
   '/settings': { title: 'Settings', description: 'Manage your account preferences' },
   '/Profile': { title: 'Profile', description: 'Your account profile' },
@@ -37,6 +38,8 @@ const PATH_TO_HEADER = {
   '/admin/role-management': { title: 'Role Management', description: 'View role definitions and permissions' },
   '/admin/tab-visibility': { title: 'Tab Visibility', description: 'Override which tabs each role can see' },
   '/admin/tank-configuration': { title: 'Tank Configuration', description: 'Manage tank capacities and calibration settings' },
+  '/admin/products': { title: 'Products', description: 'Manage products for Operations Log and forms' },
+  '/admin/operations-log-categories': { title: 'Operations Log Categories', description: 'Keep default categories and add more' },
 };
 
 /** Paths that map to a nav tab (for tab visibility guard). Admin/settings/profile/vehicle are not restricted by tab visibility. */
@@ -57,10 +60,13 @@ const PATH_TO_TAB = {
   '/leaderboard': 'leaderboard',
   '/ai-insights': 'ai-insights',
   '/sms-alerts': 'sms-alerts',
+  '/operations-log': 'operations-log',
 };
 
 function getPathHeader(pathname) {
   if (pathname.startsWith('/vehicle/')) return { title: 'Vehicle details', description: 'Wash history, compliance & analytics' };
+  if (pathname.match(/^\/operations-log\/entry\/[^/]+$/)) return { title: 'Entry details', description: 'Operations log entry' };
+  if (pathname.match(/^\/operations-log\/entry\/[^/]+\/attachment$/)) return { title: 'Attachment', description: 'View attachment' };
   return PATH_TO_HEADER[pathname];
 }
 
@@ -152,9 +158,9 @@ export default function DashboardLayout({ children, title: titleProp, descriptio
           </SidebarFooter>
         </Sidebar>
 
-        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+        <div className="flex flex-1 flex-col min-w-0 overflow-hidden w-full">
           <SiteHeader title={title} description={description} breadcrumbs={breadcrumbs} />
-          <main className="relative z-0 flex-1 overflow-y-auto overflow-x-hidden bg-muted/40 [scrollbar-gutter:stable]">
+          <main className="relative z-0 flex-1 overflow-y-auto overflow-x-hidden bg-muted/40 [scrollbar-gutter:stable] min-h-0">
             {children}
           </main>
         </div>

@@ -9,7 +9,6 @@ PROJECT_REF="mtjfypwrtvzhnzgatoim"
 echo "🚀 Deploying Supabase Edge Functions to project: $PROJECT_REF"
 echo "=================================================="
 echo ""
-
 # Array of all Elora API edge functions that need to be deployed
 FUNCTIONS=(
   "elora_customers"

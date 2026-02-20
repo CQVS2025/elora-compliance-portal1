@@ -68,6 +68,7 @@ const INTELLIGENCE_TABS = [
 const ALL_TABS = [
   { value: 'dashboard', label: 'Dashboard' },
   { value: 'compliance', label: 'Compliance' },
+  { value: 'operations-log', label: 'Operations Log' },
   { value: 'costs', label: 'Usage Costs' },
   { value: 'refills', label: 'Tank Levels' },
   { value: 'devices', label: 'Device Health' },
@@ -183,6 +184,7 @@ const PATH_TO_TAB = {
   '/Dashboard': 'dashboard',
   '/dashboard': 'dashboard',
   '/compliance': 'compliance',
+  '/operations-log': 'operations-log',
   '/usage-costs': 'costs',
   '/refills': 'refills',
   '/device-health': 'devices',
