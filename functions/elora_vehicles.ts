@@ -19,9 +19,10 @@ Deno.serve(async (req) => {
       ?? body.site
       ?? url.searchParams.get('site_id')
       ?? url.searchParams.get('site');
+    const exportParam = body.export ?? url.searchParams.get('export') ?? 'true';
 
-    // Get ALL vehicles (active + inactive) - no status filter means API returns 1,2 by default
-    const params = new URLSearchParams({ status: '1,2' }); // active + inactive
+    // Get ALL vehicles (active + inactive) - export=true disables pagination
+    const params = new URLSearchParams({ status: '1,2', export: String(exportParam) });
     if (customerId && customerId !== 'all') {
       params.append('customer', customerId);
     }

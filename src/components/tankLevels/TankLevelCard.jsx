@@ -65,12 +65,16 @@ export default function TankLevelCard({ site, onClick }) {
       <Card {...cardProps}>
         <CardContent className="p-4">
           <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="text-lg font-bold">{site.siteName}</h3>
-              <p className="text-sm text-muted-foreground">{site.customer}</p>
-              <p className="text-xs text-muted-foreground">{locationText}</p>
+            <div className="min-w-0">
+              <p className="mb-1">
+                <Badge variant="outline" className="text-xs font-medium text-muted-foreground">
+                  {site.customer || 'Unknown customer'}
+                </Badge>
+              </p>
+              <h3 className="text-lg font-bold truncate">{site.siteName}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">{locationText}</p>
             </div>
-            <Badge className={cn('text-xs font-medium uppercase', badgeClass)}>NO DEVICE</Badge>
+            <Badge className={cn('text-xs font-medium uppercase shrink-0', badgeClass)}>NO DEVICE</Badge>
           </div>
           <div className="flex flex-col items-center justify-center py-8">
             <Activity className="w-10 h-10 text-muted-foreground mb-2" />
@@ -97,10 +101,14 @@ export default function TankLevelCard({ site, onClick }) {
     <Card {...cardProps}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2 mb-4">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="mb-1.5">
+              <Badge variant="outline" className="text-xs font-medium text-primary border-primary/50">
+                {site.customer || 'Unknown customer'}
+              </Badge>
+            </p>
             <h3 className="text-lg font-bold truncate">{site.siteName}</h3>
-            <p className="text-sm text-muted-foreground">{site.customer}</p>
-            <p className="text-xs text-muted-foreground">{locationText}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{locationText}</p>
           </div>
           <Badge className={cn('text-xs font-semibold uppercase shrink-0', badgeClass)}>
             {site.overallStatus}
@@ -113,9 +121,15 @@ export default function TankLevelCard({ site, onClick }) {
             const statusClass = STATUS_TEXT[tank.status] || 'text-muted-foreground';
             const daysLow = tank.status === 'CRITICAL' || tank.status === 'WARNING';
 
+            const deviceName = tank.device?.computerName ?? tank.device?.computer_name ?? null;
             return (
               <div key={idx} className="flex flex-col items-center gap-1.5">
                 <TankLevelBar percentage={pct} status={tank.status} size="md" />
+                {deviceName && site.tanks.length > 1 && (
+                  <span className="text-[10px] text-muted-foreground truncate max-w-full" title={deviceName}>
+                    {deviceName}
+                  </span>
+                )}
                 <span className="text-xs font-medium">
                   Tank {tank.tank_number} {productLabel(tank.product_type)}
                 </span>

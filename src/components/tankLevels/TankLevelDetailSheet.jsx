@@ -47,9 +47,14 @@ export default function TankLevelDetailSheet({ site, open, onOpenChange }) {
         className="w-full sm:max-w-md overflow-y-auto bg-background/95 backdrop-blur"
       >
         <SheetHeader className="text-left space-y-1 pb-4 border-b border-border">
+          <div className="flex items-center gap-2 mb-1">
+            <Badge variant="secondary" className="text-xs font-medium">
+              {site.customer || 'Unknown customer'}
+            </Badge>
+          </div>
           <SheetTitle className="text-xl font-bold">{site.siteName}</SheetTitle>
           <SheetDescription>
-            {site.customer} • {locationText}
+            {locationText}
           </SheetDescription>
         </SheetHeader>
 

@@ -25,7 +25,7 @@ export const vehiclesOptions = (companyId, filters = {}) =>
             ? companyEloraCustomerRef
             : filters.customerId;
       const siteRef = filters.siteId && filters.siteId !== 'all' ? filters.siteId : undefined;
-      const params = {};
+      const params = { export: true };
       if (customerRef) {
         params.customer = customerRef;
         params.customer_id = customerRef;
@@ -55,6 +55,7 @@ export const vehicleOptions = (companyId, vehicleId) =>
       // Assuming you have a single vehicle endpoint, otherwise fetch list and filter
       const response = await callEdgeFunction('elora_vehicles', {
         vehicle_id: vehicleId,
+        export: true,
       });
       const vehicles = response?.data ?? response ?? [];
       return vehicles.find((v) => v.vehicleRef === vehicleId || v.internalVehicleId === vehicleId);

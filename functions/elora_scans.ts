@@ -1,10 +1,12 @@
 /**
- * ACATC /api/scans supports: fromDate, toDate, customer, site, vehicle, device, status, page, pageSize. We pass them.
+ * ACATC /api/scans: fromDate, toDate, customer, site, vehicle, device, status.
+ * API supports export=1|true|all to disable pagination and return all matching rows in one response.
+ * We always send export=all so we get the full result set without pagination.
  */
 Deno.serve(async (req) => {
   try {
     const apiKey = Deno.env.get("ELORA_API_KEY");
-    
+
     if (!apiKey) {
       return Response.json({ error: 'API key not configured' }, { status: 500 });
     }
@@ -15,40 +17,41 @@ Deno.serve(async (req) => {
     const siteId = body.site_id ?? body.site ?? url.searchParams.get('site_id') ?? url.searchParams.get('site');
     const startDate = body.start_date ?? body.fromDate ?? url.searchParams.get('start_date') ?? url.searchParams.get('fromDate');
     const endDate = body.end_date ?? body.toDate ?? url.searchParams.get('end_date') ?? url.searchParams.get('toDate');
+    const status = body.status ?? url.searchParams.get('status') ?? 'success';
+    const vehicleId = body.vehicle_id ?? body.vehicleId ?? body.vehicle ?? url.searchParams.get('vehicle_id') ?? url.searchParams.get('vehicle');
+    const deviceId = body.device_id ?? body.deviceId ?? body.device ?? url.searchParams.get('device_id') ?? url.searchParams.get('device');
+    const exportParam = body.export ?? url.searchParams.get('export') ?? 'true';
 
-    const params = new URLSearchParams({ 
-      export: 'all',
-      status: 'success'
-    });
-    
+    const params = new URLSearchParams();
+    params.set('export', String(exportParam));
+    params.set('status', status);
     if (customerId && customerId !== 'all') params.append('customer', customerId);
     if (siteId && siteId !== 'all') params.append('site', siteId);
+    if (vehicleId && vehicleId !== 'all') params.append('vehicle', vehicleId);
+    if (deviceId && deviceId !== 'all') params.append('device', deviceId);
     if (startDate) params.append('fromDate', startDate);
     if (endDate) params.append('toDate', endDate);
 
     const response = await fetch(`https://www.elora.com.au/api/scans?${params.toString()}`, {
-      headers: {
-        'x-api-key': apiKey
-      }
+      headers: { 'x-api-key': apiKey },
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Elora API error (${response.status}):`, errorText);
-      return Response.json({ 
+      return Response.json({
         error: `Elora API error: ${response.status}`,
-        details: errorText 
+        details: errorText,
       }, { status: response.status });
     }
 
     const json = await response.json();
     return Response.json(json?.data ?? json);
-    
   } catch (error) {
     console.error('Server error:', error);
-    return Response.json({ 
+    return Response.json({
       error: error.message,
-      stack: error.stack 
+      stack: error.stack,
     }, { status: 500 });
   }
 });

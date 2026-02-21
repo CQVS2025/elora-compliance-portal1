@@ -67,12 +67,14 @@ function buildScansParams(filters, tenantContext) {
   // Status – API: CSV of IDs or names (1,2,4 or success,exceeded,auto,refills)
   if (filters.status != null) params.status = filters.status;
 
-  // Pagination – API: page (1-based), pageSize (max 1000)
+  // Export – API: 1, true or all to disable pagination and return all rows.
+  // Use 'true' so ACATC returns full result set (some backends expect true rather than 'all').
+  const useExportAll = filters.export != null ? filters.export : true;
+  params.export = useExportAll;
+
+  // Pagination – only when explicitly requesting a page (otherwise export=all is used)
   if (filters.page != null) params.page = filters.page;
   if (filters.pageSize != null) params.pageSize = Math.min(Number(filters.pageSize) || 100, 1000);
-
-  // Export – API: 1, true or all to disable pagination and return all rows
-  if (filters.export != null) params.export = filters.export;
 
   return params;
 }

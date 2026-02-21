@@ -14,7 +14,9 @@ import {
   sitesOptions,
   vehiclesOptions,
   dashboardOptions,
+  scansOptions,
   refillsOptions,
+  devicesOptions,
   vehicleLikelihoodOverridesOptions,
 } from '@/query/options';
 import { useSetVehicleLikelihood } from '@/query/mutations';
@@ -85,6 +87,7 @@ const getDefaultFilters = () => ({
   selectedCustomer: 'all',
   selectedSite: 'all',
   selectedDriverIds: [],
+  selectedDeviceId: 'all',
   dateRange: {
     start: moment().startOf('month').format('YYYY-MM-DD'),
     end: moment().format('YYYY-MM-DD')
@@ -102,6 +105,7 @@ function getInitialFilters() {
       selectedCustomer: parsed.selectedCustomer ?? defaults.selectedCustomer,
       selectedSite: parsed.selectedSite ?? defaults.selectedSite,
       selectedDriverIds: Array.isArray(parsed.selectedDriverIds) ? parsed.selectedDriverIds : defaults.selectedDriverIds,
+      selectedDeviceId: parsed.selectedDeviceId ?? defaults.selectedDeviceId,
       dateRange: parsed.dateRange && typeof parsed.dateRange === 'object' && parsed.dateRange.start && parsed.dateRange.end
         ? { start: parsed.dateRange.start, end: parsed.dateRange.end }
         : defaults.dateRange,
@@ -204,7 +208,7 @@ export default function Dashboard() {
 
   // Single shared filter state - persisted so it survives navigation to vehicle detail and back
   const [sharedFilters, setSharedFilters] = useState(getInitialFilters);
-  const { selectedCustomer, selectedSite, selectedDriverIds = [], dateRange, activePeriod } = sharedFilters;
+  const { selectedCustomer, selectedSite, selectedDriverIds = [], selectedDeviceId = 'all', dateRange, activePeriod } = sharedFilters;
 
   useEffect(() => {
     try {
@@ -255,9 +259,11 @@ export default function Dashboard() {
       if (updates.selectedCustomer != null && updates.selectedCustomer !== prev.selectedCustomer) {
         next.selectedSite = 'all';
         next.selectedDriverIds = [];
+        next.selectedDeviceId = 'all';
       }
       if (updates.selectedSite != null && updates.selectedSite !== prev.selectedSite) {
         next.selectedDriverIds = [];
+        next.selectedDeviceId = 'all';
       }
       return next;
     });
@@ -266,6 +272,7 @@ export default function Dashboard() {
   const setSelectedCustomer = useCallback((v) => updateSharedFilter({ selectedCustomer: v }), [updateSharedFilter]);
   const setSelectedSite = useCallback((v) => updateSharedFilter({ selectedSite: v }), [updateSharedFilter]);
   const setSelectedDriverIds = useCallback((v) => updateSharedFilter({ selectedDriverIds: v }), [updateSharedFilter]);
+  const setSelectedDeviceId = useCallback((v) => updateSharedFilter({ selectedDeviceId: v }), [updateSharedFilter]);
   const setDateRange = useCallback((v) => updateSharedFilter({ dateRange: v, activePeriod: 'Custom' }), [updateSharedFilter]);
   const setActivePeriod = useCallback((period) => {
     const range = getDateRangeForPeriod(period);
@@ -273,10 +280,18 @@ export default function Dashboard() {
   }, [updateSharedFilter]);
 
   const [isResetting, setIsResetting] = useState(false);
+  // Reset clears all top-level filters: Customer → All, Site → All, Drivers → none, Device → All, Date → default range
   const resetAllFiltersToDefault = useCallback(() => {
     setIsResetting(true);
     const defaults = getDefaultFilters();
-    setSharedFilters(defaults);
+    setSharedFilters(() => ({
+      selectedCustomer: defaults.selectedCustomer,
+      selectedSite: defaults.selectedSite,
+      selectedDriverIds: defaults.selectedDriverIds,
+      selectedDeviceId: defaults.selectedDeviceId,
+      dateRange: { ...defaults.dateRange },
+      activePeriod: defaults.activePeriod,
+    }));
     try {
       sessionStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(defaults));
     } catch {
@@ -303,11 +318,26 @@ export default function Dashboard() {
     sitesOptions(companyId, { customerId: selectedCustomer !== 'all' ? selectedCustomer : undefined })
   );
 
+  // Devices for top-level device filter (active + inactive, scoped by customer/site)
+  const { data: filterDevices = [] } = useQuery({
+    ...devicesOptions(companyId, {
+      customerId: selectedCustomer !== 'all' ? selectedCustomer : undefined,
+      siteId: selectedSite !== 'all' ? selectedSite : undefined,
+      status: '1,2', // active + inactive so dropdown shows all devices
+    }),
+    placeholderData: (previousData) => previousData,
+  });
+
+  // Include selectedDriverIds in query keys so that when a vehicle is selected we refetch all APIs
+  // (vehicles, dashboard, scans, refills) — same behaviour as when customer or site changes.
+  const selectedDriverKey = selectedDriverIds?.length ? selectedDriverIds.slice().sort().join(',') : undefined;
+
   // Fetch ALL vehicles with filters and placeholderData to prevent flashing
   const { data: allVehicles = [], isLoading: vehiclesLoading, isFetching: vehiclesFetching, dataUpdatedAt: vehiclesUpdatedAt, error: vehiclesError } = useQuery({
     ...vehiclesOptions(companyId, {
       customerId: selectedCustomer !== 'all' ? selectedCustomer : undefined,
       siteId: selectedSite !== 'all' ? selectedSite : undefined,
+      selectedDriverIds: selectedDriverKey,
     }),
     placeholderData: (previousData) => previousData, // Keep previous data while refetching
   });
@@ -318,9 +348,30 @@ export default function Dashboard() {
       siteId: selectedSite,
       startDate: dateRange.start,
       endDate: dateRange.end,
+      selectedDriverIds: selectedDriverKey,
     }),
     placeholderData: (previousData) => previousData, // Keep previous data while refetching
   });
+
+  // When exactly one driver is selected, pass vehicleId so API returns only that vehicle's scans (same as vehicle detail page).
+  const scansVehicleId = selectedDriverIds?.length === 1 ? selectedDriverIds[0] : undefined;
+
+  // Wash counts: use scans API with status=success only (matches old system "Scan (Success)");
+  // include vehicleId when one driver selected so request is scoped to that vehicle.
+  const { data: successScansData } = useQuery({
+    ...scansOptions(companyId, {
+      fromDate: dateRange.start,
+      toDate: dateRange.end,
+      customerId: selectedCustomer !== 'all' ? selectedCustomer : undefined,
+      siteId: selectedSite !== 'all' ? selectedSite : undefined,
+      vehicleId: scansVehicleId,
+      deviceId: selectedDeviceId !== 'all' ? selectedDeviceId : undefined,
+      status: 'success',
+    }),
+    placeholderData: (previousData) => previousData,
+    enabled: FILTER_TABS.includes(activeTab),
+  });
+  const successScansList = Array.isArray(successScansData) ? successScansData : (successScansData?.data ?? []);
 
   // Extended dashboard fetch (last 90 days) for Wash Frequency chart so period filter (7d–90d) has data
   const washChartEnd = moment(dateRange.end);
@@ -331,6 +382,7 @@ export default function Dashboard() {
       siteId: selectedSite,
       startDate: washChartStart.format('YYYY-MM-DD'),
       endDate: washChartEnd.format('YYYY-MM-DD'),
+      selectedDriverIds: selectedDriverKey,
     }),
     placeholderData: (previousData) => previousData,
     enabled: FILTER_TABS.includes(activeTab),
@@ -341,6 +393,7 @@ export default function Dashboard() {
     ...refillsOptions(companyId, {
       customerRef: selectedCustomer !== 'all' ? selectedCustomer : undefined,
       siteRef: selectedSite !== 'all' ? selectedSite : undefined,
+      selectedDriverIds: selectedDriverKey,
     }),
     placeholderData: (previousData) => previousData, // Keep previous data while refetching
   });
@@ -360,89 +413,97 @@ export default function Dashboard() {
   const processedData = useMemo(() => {
     // Start with ALL vehicles from vehicles API
     const vehicleMap = new Map();
-    
-    // First, add all vehicles from the vehicles API
+
+    // Filter scans to exact selected date range (start-of-day to end-of-day) so table matches top-level filter
+    const rangeStart = moment(dateRange.start).startOf('day');
+    const rangeEnd = moment(dateRange.end).endOf('day');
+    const scansInRange = successScansList.filter((scan) => {
+      const ts = scan.createdAt ?? scan.timestamp ?? scan.updatedAt;
+      return ts && moment(ts).isBetween(rangeStart, rangeEnd, null, '[]');
+    });
+
+    // Wash counts from filtered scans (status=success only — matches old system "Scan (Success)")
+    const washCountByVehicle = {};
+    const lastScanByVehicle = {};
+    const scansArray = [];
+    scansInRange.forEach((scan) => {
+      const ref = scan.vehicleRef ?? scan.vehicle_ref ?? null;
+      if (!ref) return;
+      washCountByVehicle[ref] = (washCountByVehicle[ref] || 0) + 1;
+      const ts = scan.createdAt ?? scan.timestamp ?? scan.updatedAt;
+      if (ts && (!lastScanByVehicle[ref] || ts > lastScanByVehicle[ref])) {
+        lastScanByVehicle[ref] = ts;
+      }
+      scansArray.push({
+        vehicleRef: ref,
+        siteRef: scan.siteRef ?? scan.site_ref,
+        siteName: scan.siteName ?? scan.site_name,
+        timestamp: ts,
+      });
+    });
+
+    const startMoment = moment(dateRange.start);
+    const endMoment = moment(dateRange.end);
+
+    // Add all vehicles from the vehicles API; set washes_completed and last_scan from scan-based counts
+    // Look up by vehicleRef first, then vehicleName/name (scans API may return display name e.g. "PCX2042" while vehicle has vehicleRef as id)
     allVehicles.forEach(vehicle => {
       const ref = vehicle.vehicleRef || vehicle.internalVehicleId;
+      const name = vehicle.vehicleName ?? vehicle.name ?? '';
+      const washCount = washCountByVehicle[ref] ?? washCountByVehicle[name] ?? 0;
+      const lastScan = lastScanByVehicle[ref] ?? lastScanByVehicle[name] ?? vehicle.lastScanAt ?? null;
       vehicleMap.set(ref, {
         id: ref,
         vehicleRef: vehicle.vehicleRef ?? ref,
-        name: vehicle.vehicleName,
+        name: vehicle.vehicleName ?? name,
         rfid: vehicle.vehicleRfid,
         site_id: vehicle.siteId,
         site_name: vehicle.siteName,
         customer_name: vehicle.customerName,
         customer_ref: vehicle.customerId,
-        washes_completed: 0, // Will be updated from dashboard data
+        washes_completed: washCount,
         target: vehicle.washesPerWeek || 12,
         washesPerDay: vehicle.washesPerDay ?? null,
         washesPerWeek: vehicle.washesPerWeek ?? 12,
-        last_scan: vehicle.lastScanAt || null,
+        last_scan: lastScan,
         status: vehicle.statusLabel,
         washTime1Seconds: vehicle.washTime1Seconds ?? vehicle.washTime ?? null,
         protocolNumber: vehicle.protocolNumber ?? vehicle.protocol ?? null,
       });
     });
 
-    const scansArray = [];
-    const startMoment = moment(dateRange.start);
-    const endMoment = moment(dateRange.end);
-
-    // Then, update wash counts from dashboard data (for the date range)
-    // API may return totalScans as string (e.g. "6") — coerce to number so we sum correctly
+    // Include any vehicle that appears in scans but not in vehicles API (edge case)
     if (dashboardData?.rows && Array.isArray(dashboardData.rows)) {
       dashboardData.rows.forEach(row => {
         const rowDate = moment(`${row.year}-${String(row.month).padStart(2, '0')}-01`);
-        if (!rowDate.isBetween(startMoment, endMoment, 'month', '[]')) {
-          return;
-        }
-
-        const totalScansNum = Number(row.totalScans) || 0;
+        if (!rowDate.isBetween(startMoment, endMoment, 'month', '[]')) return;
         const vehicleKey = row.vehicleRef;
-
-        if (vehicleMap.has(vehicleKey)) {
-          const existing = vehicleMap.get(vehicleKey);
-          existing.washes_completed += totalScansNum;
-          if (row.lastScan && (!existing.last_scan || row.lastScan > existing.last_scan)) {
-            existing.last_scan = row.lastScan;
-          }
-        } else {
-          // Vehicle exists in dashboard but not in vehicles API (shouldn't happen, but handle it)
-          vehicleMap.set(vehicleKey, {
-            id: row.vehicleRef,
-            vehicleRef: row.vehicleRef,
-            name: row.vehicleName,
-            rfid: row.vehicleRef,
-            site_id: row.siteRef,
-            site_name: row.siteName,
-            customer_name: row.customerName,
-            customer_ref: row.customerRef,
-            washes_completed: totalScansNum,
-            target: row.washesPerWeek || 12,
-            washesPerDay: row.washesPerDay ?? null,
-            washesPerWeek: row.washesPerWeek ?? 12,
-            last_scan: row.lastScan,
-            washTime1Seconds: row.washTime ?? null,
-            protocolNumber: null,
-          });
-        }
-
-        if (totalScansNum > 0) {
-          scansArray.push({
-            vehicleRef: row.vehicleRef,
-            siteRef: row.siteRef,
-            siteName: row.siteName,
-            timestamp: row.lastScan
-          });
-        }
+        if (vehicleMap.has(vehicleKey)) return;
+        vehicleMap.set(vehicleKey, {
+          id: row.vehicleRef,
+          vehicleRef: row.vehicleRef,
+          name: row.vehicleName,
+          rfid: row.vehicleRef,
+          site_id: row.siteRef,
+          site_name: row.siteName,
+          customer_name: row.customerName,
+          customer_ref: row.customerRef,
+          washes_completed: washCountByVehicle[vehicleKey] ?? 0,
+          target: row.washesPerWeek || 12,
+          washesPerDay: row.washesPerDay ?? null,
+          washesPerWeek: row.washesPerWeek ?? 12,
+          last_scan: lastScanByVehicle[vehicleKey] ?? row.lastScan ?? null,
+          washTime1Seconds: row.washTime ?? null,
+          protocolNumber: null,
+        });
       });
     }
 
     return {
       vehicles: Array.from(vehicleMap.values()),
-      scans: scansArray
+      scans: scansArray,
     };
-  }, [allVehicles, dashboardData, dateRange]);
+  }, [allVehicles, dashboardData, dateRange, successScansList]);
 
   const enrichedVehicles = processedData.vehicles;
   const scans = processedData.scans;
@@ -767,9 +828,13 @@ export default function Dashboard() {
 
   const navigateToVehicleDetail = useCallback(
     (vehicleRef) => {
-      if (vehicleRef) navigate(`/vehicle/${encodeURIComponent(vehicleRef)}`);
+      if (vehicleRef) {
+        navigate(`/vehicle/${encodeURIComponent(vehicleRef)}`, {
+          state: { fromDate: dateRange.start, toDate: dateRange.end },
+        });
+      }
     },
-    [navigate]
+    [navigate, dateRange.start, dateRange.end]
   );
 
   const handleLikelihoodOverride = useCallback(
@@ -1017,6 +1082,9 @@ export default function Dashboard() {
             vehiclesForDriverFilter={vehiclesAfterCustomerSite}
             selectedDriverIds={selectedDriverIds}
             setSelectedDriverIds={setSelectedDriverIds}
+            devicesForFilter={filterDevices}
+            selectedDeviceId={selectedDeviceId}
+            setSelectedDeviceId={setSelectedDeviceId}
             dateRange={dateRange}
             setDateRange={setDateRange}
             activePeriod={activePeriod}
@@ -1303,6 +1371,7 @@ export default function Dashboard() {
                 selectedSite={selectedSite}
                 selectedCustomer={selectedCustomer}
                 selectedDriverIds={selectedDriverIds}
+                selectedDeviceId={selectedDeviceId}
                 companyId={effectiveCompanyIdForLikelihood}
                 isSyncing={showContentSkeletons}
               />

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -303,8 +303,20 @@ function VehicleDetailSkeleton({ onBack }) {
 export default function VehicleDetail() {
   const { vehicleRef } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const permissions = usePermissions();
   const companyId = permissions.userProfile?.company_id;
+
+  const periodFromState = location.state?.fromDate && location.state?.toDate
+    ? { start: location.state.fromDate, end: location.state.toDate }
+    : null;
+  const scansDateRange = useMemo(() => {
+    if (periodFromState) return { from: periodFromState.start, to: periodFromState.end };
+    return {
+      from: moment().subtract(3, 'months').format('YYYY-MM-DD'),
+      to: moment().format('YYYY-MM-DD'),
+    };
+  }, [periodFromState]);
 
   const { data: allVehicles = [], isLoading: vehiclesLoading, error: vehiclesError, dataUpdatedAt: vehiclesUpdatedAt } = useQuery({
     ...vehiclesOptions(companyId, {}),
@@ -324,19 +336,19 @@ export default function VehicleDetail() {
     ...dashboardOptions(companyId, {
       customerId: vehicle?.customerId ?? 'all',
       siteId: vehicle?.siteId ?? 'all',
-      startDate: DEFAULT_DATE_RANGE.start,
-      endDate: DEFAULT_DATE_RANGE.end,
+      startDate: periodFromState?.start ?? DEFAULT_DATE_RANGE.start,
+      endDate: periodFromState?.end ?? DEFAULT_DATE_RANGE.end,
     }),
     enabled: !!companyId && !!vehicle,
   });
 
+  // Wash history: success only; use compliance date range when opened from compliance, else last 3 months
   const { data: scansRaw, isLoading: scansLoading, dataUpdatedAt: scansUpdatedAt } = useQuery({
     ...scansOptions(companyId, {
       vehicleId: vehicleRef,
-      fromDate: moment().subtract(3, 'months').format('YYYY-MM-DD'),
-      toDate: moment().format('YYYY-MM-DD'),
-      status: 'success,exceeded',
-      export: 'all',
+      fromDate: scansDateRange.from,
+      toDate: scansDateRange.to,
+      status: 'success',
     }),
     enabled: !!companyId && !!vehicleRef,
   });
@@ -352,47 +364,59 @@ export default function VehicleDetail() {
 
   const dashboardRowForVehicle = useMemo(() => {
     if (!vehicle?.vehicleRef || !dashboardData?.rows?.length) return null;
-    const start = moment(DEFAULT_DATE_RANGE.start);
-    const end = moment(DEFAULT_DATE_RANGE.end);
+    const start = periodFromState ? moment(periodFromState.start) : moment(DEFAULT_DATE_RANGE.start);
+    const end = periodFromState ? moment(periodFromState.end) : moment(DEFAULT_DATE_RANGE.end);
     const rows = dashboardData.rows.filter(
       (r) => r.vehicleRef === vehicle.vehicleRef && moment(`${r.year}-${String(r.month).padStart(2, '0')}-01`).isBetween(start, end, 'month', '[]')
     );
-    const totalScans = rows.reduce((sum, r) => sum + (Number(r.totalScans) || 0), 0);
     const lastScan = rows.length
       ? rows.reduce((latest, r) => (!latest || (r.lastScan && r.lastScan > latest) ? r.lastScan : latest), null)
       : vehicle.lastScanAt;
-    return { totalScans, lastScan, rows };
-  }, [vehicle, dashboardData]);
+    return { lastScan, rows };
+  }, [vehicle, dashboardData, periodFromState]);
 
   const targetWashes = vehicle?.protocolNumber ?? 12;
   const washesPerDay = vehicle?.washesPerDay ?? (vehicle?.washesPerWeek ? Math.ceil(vehicle.washesPerWeek / 7) : 2);
-  const washesThisMonth = dashboardRowForVehicle?.totalScans ?? 0;
-  const isCompliant = washesThisMonth >= targetWashes;
-  const progressPct = targetWashes ? Math.round((washesThisMonth / targetWashes) * 100) : 0;
+  const periodStart = useMemo(
+    () => (periodFromState ? moment(periodFromState.start).startOf('day') : moment().startOf('month')),
+    [periodFromState]
+  );
+  const periodEnd = useMemo(
+    () => (periodFromState ? moment(periodFromState.end).endOf('day') : moment().endOf('month')),
+    [periodFromState]
+  );
+  const scansInPeriod = useMemo(() => {
+    return scans.filter((s) => {
+      const t = s.createdAt ?? s.timestamp ?? s.scanDate;
+      return t && moment(t).isBetween(periodStart, periodEnd, null, '[]');
+    });
+  }, [scans, periodStart, periodEnd]);
+  const washesInPeriod = scansInPeriod.length;
+  const isCompliant = washesInPeriod >= targetWashes;
+  const progressPct = targetWashes ? Math.round((washesInPeriod / targetWashes) * 100) : 0;
   const lastScanDt = dashboardRowForVehicle?.lastScan ?? vehicle?.lastScanAt;
   const now = moment();
   const daysInMonth = now.daysInMonth();
   const expectedPctAtMidMonth = 50;
   const likelihoodLabel = progressPct >= expectedPctAtMidMonth ? 'ON TRACK' : 'OFF TRACK';
 
-  const scansThisMonth = useMemo(() => {
-    const start = moment().startOf('month');
-    const end = moment().endOf('month');
-    return scans.filter((s) => {
-      const t = s.createdAt ?? s.timestamp ?? s.scanDate;
-      return t && moment(t).isBetween(start, end, null, '[]');
-    });
-  }, [scans]);
-
   const [washHistoryPage, setWashHistoryPage] = useState(1);
   const [washHistoryPageSize, setWashHistoryPageSize] = useState(20);
+  const washHistoryList = scansInPeriod;
+  const periodLabel = periodFromState
+    ? `${moment(periodFromState.start).format('D MMM YYYY')} – ${moment(periodFromState.end).format('D MMM YYYY')}`
+    : now.format('MMMM YYYY');
+  const washHistoryTotalPages = Math.max(1, Math.ceil(washHistoryList.length / washHistoryPageSize));
+  const safePage = Math.min(washHistoryPage, washHistoryTotalPages);
+  React.useEffect(() => {
+    if (washHistoryPage > washHistoryTotalPages) setWashHistoryPage(1);
+  }, [washHistoryList.length, washHistoryTotalPages, washHistoryPage]);
   const paginatedScans = useMemo(() => {
-    const start = (washHistoryPage - 1) * washHistoryPageSize;
-    return scans.slice(start, start + washHistoryPageSize);
-  }, [scans, washHistoryPage, washHistoryPageSize]);
-  const washHistoryTotalPages = Math.max(1, Math.ceil(scans.length / washHistoryPageSize));
-  const showingFrom = (washHistoryPage - 1) * washHistoryPageSize + 1;
-  const showingTo = Math.min(washHistoryPage * washHistoryPageSize, scans.length);
+    const start = (safePage - 1) * washHistoryPageSize;
+    return washHistoryList.slice(start, start + washHistoryPageSize);
+  }, [washHistoryList, safePage, washHistoryPageSize]);
+  const showingFrom = washHistoryList.length === 0 ? 0 : (safePage - 1) * washHistoryPageSize + 1;
+  const showingTo = Math.min(safePage * washHistoryPageSize, washHistoryList.length);
 
   const lastSyncedAt = Math.max(vehiclesUpdatedAt ?? 0, dashboardUpdatedAt ?? 0, scansUpdatedAt ?? 0) || null;
   const syncLabel = formatSyncAgo(lastSyncedAt);
@@ -406,7 +430,8 @@ export default function VehicleDetail() {
     const headers = ['Date & Time', 'Site', 'Device', 'Status', 'Wash Time', 'Protocol'];
     const washTimeFallback = vehicle?.washTime1Seconds != null ? `${vehicle.washTime1Seconds}s` : '';
     const protocolFallback = vehicle?.protocolNumber ?? '';
-    const rows = scans.map((s) => {
+    const listToExport = scansInPeriod.length ? scansInPeriod : scans;
+    const rows = listToExport.map((s) => {
       const dt = s.createdAt ?? s.timestamp ?? s.scanDate;
       const dateStr = dt ? moment(dt).format('DD MMM YYYY · HH:mm') : '—';
       const washTime = s.washDurationSeconds != null ? `${s.washDurationSeconds}s` : s.washTime != null ? `${s.washTime}s` : washTimeFallback;
@@ -518,8 +543,10 @@ export default function VehicleDetail() {
           <CardContent className="pt-5 pb-4">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Washes This Month</p>
-                <p className="text-2xl font-bold mt-1">{washesThisMonth}</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {periodFromState ? 'Washes in selected period' : 'Washes This Month'}
+                </p>
+                <p className="text-2xl font-bold mt-1">{washesInPeriod}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">of {targetWashes} target</p>
               </div>
               <BarChart3 className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -628,18 +655,18 @@ export default function VehicleDetail() {
             vehicleName={displayName}
           />
           <VehicleComplianceProgress
-            washesThisMonth={washesThisMonth}
+            washesThisMonth={washesInPeriod}
             targetWashes={targetWashes}
             vehicleName={displayName}
             monthLabel={now.format('MMM YYYY')}
           />
           <VehicleCumulativeWashesChart
-            scans={scansThisMonth}
+            scans={scansInPeriod}
             targetWashes={targetWashes}
             vehicleName={displayName}
           />
           <VehicleWashFrequencyByDay
-            scans={scansThisMonth}
+            scans={scansInPeriod}
             vehicleName={displayName}
             monthLabel={now.format('MMM YYYY')}
           />
@@ -660,7 +687,7 @@ export default function VehicleDetail() {
         <CardContent>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              Wash Records · {scans.length} scan{scans.length !== 1 ? 's' : ''} total · {now.format('MMMM YYYY')}
+              Wash Records · {washHistoryList.length} scan{washHistoryList.length !== 1 ? 's' : ''} total · {periodLabel}
             </p>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className="gap-2" disabled>
@@ -675,8 +702,10 @@ export default function VehicleDetail() {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
-          ) : scans.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">No wash scans in the last 3 months.</p>
+          ) : washHistoryList.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              {periodFromState ? 'No wash scans in the selected period.' : 'No wash scans this month.'}
+            </p>
           ) : (
             <>
               <div className="rounded-md border overflow-x-auto">
@@ -698,7 +727,7 @@ export default function VehicleDetail() {
                       const washTimeStr = washTimeSec != null ? `${washTimeSec}s` : '—';
                       const protocol = scan.protocol ?? scan.protocolNumber ?? vehicle?.protocolNumber ?? '—';
                       return (
-                        <TableRow key={scan.internalScanId ?? scan.scanRef ?? `${washHistoryPage}-${i}`}>
+                        <TableRow key={scan.internalScanId ?? scan.scanRef ?? `${safePage}-${i}`}>
                           <TableCell className="font-medium">
                             {dt ? moment(dt).format('DD MMM YYYY · HH:mm') : '—'}
                           </TableCell>
@@ -719,7 +748,7 @@ export default function VehicleDetail() {
               </div>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
                 <p className="text-sm text-muted-foreground">
-                  Showing {showingFrom} to {showingTo} of {scans.length} records
+                  Showing {showingFrom} to {showingTo} of {washHistoryList.length} records
                 </p>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
@@ -747,18 +776,18 @@ export default function VehicleDetail() {
                         variant="outline"
                         size="sm"
                         onClick={() => setWashHistoryPage((p) => Math.max(1, p - 1))}
-                        disabled={washHistoryPage <= 1}
+                        disabled={safePage <= 1}
                       >
                         Previous
                       </Button>
                       <span className="text-sm text-muted-foreground">
-                        Page {washHistoryPage} of {washHistoryTotalPages}
+                        Page {safePage} of {washHistoryTotalPages}
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setWashHistoryPage((p) => Math.min(washHistoryTotalPages, p + 1))}
-                        disabled={washHistoryPage >= washHistoryTotalPages}
+                        disabled={safePage >= washHistoryTotalPages}
                       >
                         Next
                       </Button>

@@ -79,7 +79,7 @@ const CHART_CONFIG = {
   vehicles: { label: 'Vehicles', color: 'hsl(var(--primary) / 0.4)' },
 };
 
-export default function ReportsDashboard({ vehicles, scans, dateRange, selectedSite, selectedCustomer, selectedDriverIds, companyId, isSyncing = false }) {
+export default function ReportsDashboard({ vehicles, scans, dateRange, selectedSite, selectedCustomer, selectedDriverIds, selectedDeviceId, companyId, isSyncing = false }) {
   const [drillDownModal, setDrillDownModal] = useState({ open: false, type: null, data: null });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -126,13 +126,14 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
     return { filteredScans, filteredVehicles };
   }, [scans, vehicles, selectedSite]);
 
-  // Fetch individual wash records (scans) for CSV/PDF export - respects filters
+  // Fetch individual wash records (scans) for CSV/PDF export - respects filters including device
   const { data: rawScansData = [], isLoading: scansLoading } = useQuery({
     ...scansOptions(companyId, {
       fromDate: dateRange?.start,
       toDate: dateRange?.end,
       customerId: selectedCustomer && selectedCustomer !== 'all' ? selectedCustomer : undefined,
       siteId: selectedSite && selectedSite !== 'all' ? selectedSite : undefined,
+      deviceId: selectedDeviceId && selectedDeviceId !== 'all' ? selectedDeviceId : undefined,
       status: 'success,exceeded',
       export: 'all',
     }),
@@ -367,39 +368,35 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
     exportToCSV(reportData, 'vehicle_compliance_detail');
   };
 
-  /** Export all wash events for a single vehicle - one row per wash event with timestamps (Option A).
-   * No date restriction. Fetches all pages (API returns paginated, max 1000/page) so export includes every wash. */
+  /** Export wash events for a single vehicle within the report date range only.
+   * Uses same date range and success-only status as the wash count shown on the page. */
   const exportVehicleWashEventsCSV = async (vehicle) => {
     const vehicleRef = vehicle.vehicleRef ?? vehicle.id;
     if (!vehicleRef || !companyId) {
       toast('Cannot export', { description: 'Missing vehicle or company.' });
       return;
     }
+    if (!dateRange?.start || !dateRange?.end) {
+      toast('Select date range', { description: 'Choose a date range in the top filter first.' });
+      return;
+    }
     setExportingVehicleRef(vehicleRef);
     try {
-      const baseFilters = {
+      const filters = {
+        fromDate: dateRange.start,
+        toDate: dateRange.end,
         customerId: selectedCustomer && selectedCustomer !== 'all' ? selectedCustomer : undefined,
         siteId: selectedSite && selectedSite !== 'all' ? selectedSite : undefined,
-        status: 'success,exceeded',
         vehicleId: vehicleRef,
+        status: 'success',
+        export: true,
       };
-      const pageSize = 1000;
-      let allScans = [];
-      let page = 1;
-      let pageCount = 1;
-      do {
-        const options = scansOptions(companyId, { ...baseFilters, page, pageSize });
-        const raw = await queryClient.fetchQuery(options);
-        const data = Array.isArray(raw) ? raw : (raw?.data ?? []);
-        allScans = allScans.concat(data);
-        pageCount = raw?.pageCount ?? 1;
-        if (data.length < pageSize || page >= pageCount) break;
-        page += 1;
-      } while (true);
+      const options = scansOptions(companyId, filters);
+      const raw = await queryClient.fetchQuery(options);
+      const vehicleScans = Array.isArray(raw) ? raw : (raw?.data ?? []);
 
-      const vehicleScans = allScans;
       if (vehicleScans.length === 0) {
-        toast('No wash events', { description: `No wash events found for ${vehicle.name ?? vehicle.rfid ?? 'this vehicle'}.` });
+        toast('No wash events', { description: `No wash events in selected period for ${vehicle.name ?? vehicle.rfid ?? 'this vehicle'}.` });
         return;
       }
       const rows = vehicleScans.map(s => {
@@ -417,7 +414,7 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
         };
       });
       exportToCSV(rows, `wash_events_${(vehicle.name || vehicle.rfid || 'vehicle').toString().replace(/\s+/g, '_')}`);
-      toast('Export complete', { description: `${rows.length} wash event${rows.length === 1 ? '' : 's'} for ${vehicle.name ?? 'vehicle'} (all time, one row per wash).` });
+      toast('Export complete', { description: `${rows.length} wash event${rows.length === 1 ? '' : 's'} for ${vehicle.name ?? 'vehicle'} in selected period.` });
     } catch (e) {
       console.error('Export vehicle wash events failed:', e);
       toast('Export failed', { description: e?.message || 'Could not load wash events for this vehicle.' });

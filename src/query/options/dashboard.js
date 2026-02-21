@@ -18,7 +18,7 @@ export const dashboardOptions = (companyId, filters = {}) =>
     queryKey: queryKeys.tenant.dashboard(companyId, filters),
     queryFn: async ({ signal }) => {
       const { companyEloraCustomerRef, isSuperAdmin } = getEloraTenantContext();
-      const params = {};
+      const params = { export: true };
 
       if (filters.customerId && filters.customerId !== 'all') {
         params.customer_id = filters.customerId;

@@ -15,7 +15,7 @@ import { queryKeys } from '../keys';
  */
 function buildRefillsParams(filters, tenantContext) {
   const { companyEloraCustomerRef, isSuperAdmin } = tenantContext;
-  const params = {};
+  const params = { export: true };
 
   if (filters.customerRef && filters.customerRef !== 'all') {
     params.customerRef = filters.customerRef;

@@ -31,6 +31,9 @@ export default function FilterSection({
   vehiclesForDriverFilter = [],
   selectedDriverIds = [],
   setSelectedDriverIds,
+  devicesForFilter = [],
+  selectedDeviceId = 'all',
+  setSelectedDeviceId,
   dateRange,
   setDateRange,
   activePeriod,
@@ -58,6 +61,17 @@ export default function FilterSection({
       })
       .filter(Boolean);
   }, [vehiclesForDriverFilter]);
+
+  const deviceOptions = useMemo(() => {
+    const list = devicesForFilter || [];
+    return list.map((d) => {
+      const ref = d.deviceRef ?? d.ref ?? d.id ?? '';
+      const name = d.computerName ?? d.deviceName ?? d.computerSerialId ?? (ref || '—');
+      const statusLabel = d.statusLabel ?? d.status ?? '';
+      const label = statusLabel ? `${name} (${statusLabel})` : name;
+      return ref ? { value: String(ref), label } : null;
+    }).filter(Boolean);
+  }, [devicesForFilter]);
 
   const isSyncing = (filterQueriesFetching ?? isFiltering) || isDataLoading;
   const showLoading = !suppressDriverDropdownLoader && isSyncing;
@@ -184,6 +198,25 @@ export default function FilterSection({
               isLoading={showLoading}
             />
           </div>
+        )}
+
+        {typeof setSelectedDeviceId === 'function' && (
+          <Select
+            value={selectedDeviceId}
+            onValueChange={setSelectedDeviceId}
+          >
+            <SelectTrigger className="min-w-[160px]">
+              <SelectValue placeholder="All devices" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All devices</SelectItem>
+              {deviceOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
 
         <Popover>

@@ -27,9 +27,10 @@ Deno.serve(async (req) => {
       ?? body.toDate
       ?? url.searchParams.get('end_date')
       ?? url.searchParams.get('toDate');
+    const exportParam = body.export ?? url.searchParams.get('export') ?? 'true';
 
     const params = new URLSearchParams();
-    
+    params.set('export', String(exportParam));
     if (customerId && customerId !== 'all') params.append('customer', customerId);
     if (siteId && siteId !== 'all') params.append('site', siteId);
     if (startDate) params.append('fromDate', startDate);

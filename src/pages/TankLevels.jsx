@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
-import { tankLevelsOptions, sitesWithoutDevicesOptions } from '@/query/options/tankLevels';
+import { tankLevelsOptions } from '@/query/options/tankLevels';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,8 @@ import {
   RefreshCw,
   LayoutGrid,
   LayoutList,
+  Users,
+  MapPin,
   AlertCircle,
   ChevronLeft,
   ChevronRight,
@@ -50,6 +52,7 @@ export default function TankLevels() {
   const [stateFilter, setStateFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('cards'); // 'cards' or 'table'
+  const [groupBy, setGroupBy] = useState('customer'); // 'customer' or 'site'
   // Pagination: default 20 per page
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
@@ -72,11 +75,6 @@ export default function TankLevels() {
     placeholderData: (previousData) => previousData,
   });
 
-  // Fetch sites without devices
-  const { data: sitesWithoutDevices = [] } = useQuery(
-    sitesWithoutDevicesOptions(companyId)
-  );
-
   // Extract unique customers and states for filters
   const uniqueCustomers = useMemo(() => {
     if (!tankData?.allSites) return [];
@@ -90,43 +88,31 @@ export default function TankLevels() {
     return Array.from(states).sort();
   }, [tankData?.allSites]);
 
-  // Combine monitored sites with sites without devices
+  // Monitored sites only (no-device sites are not shown)
   const allSitesForDisplay = useMemo(() => {
     const monitored = tankData?.sites || [];
-    const noDevice = sitesWithoutDevices.map(site => ({
-      ...site,
-      overallStatus: 'NO_DEVICE',
-      tanks: [],
-      deviceCount: 0,
-    }));
-    
-    // Apply filters to no-device sites
-    let filteredNoDevice = noDevice;
-    if (statusFilter === 'NO_DEVICE') {
-      filteredNoDevice = noDevice;
-    } else if (statusFilter !== 'all') {
-      filteredNoDevice = [];
+    const statusOrder = { CRITICAL: 0, WARNING: 1, OK: 2, NO_DATA: 3, ERROR: 5 };
+    const sorted = [...monitored];
+    if (groupBy === 'site') {
+      sorted.sort((a, b) => {
+        const statusDiff = (statusOrder[a.overallStatus] ?? 9) - (statusOrder[b.overallStatus] ?? 9);
+        if (statusDiff !== 0) return statusDiff;
+        const siteCmp = (a.siteName || '').localeCompare(b.siteName || '');
+        if (siteCmp !== 0) return siteCmp;
+        return (a.customer || '').localeCompare(b.customer || '');
+      });
+    } else {
+      sorted.sort((a, b) => {
+        const customerA = (a.customer || '').toLowerCase();
+        const customerB = (b.customer || '').toLowerCase();
+        if (customerA !== customerB) return customerA.localeCompare(customerB);
+        const statusDiff = (statusOrder[a.overallStatus] ?? 9) - (statusOrder[b.overallStatus] ?? 9);
+        if (statusDiff !== 0) return statusDiff;
+        return (a.siteName || '').localeCompare(b.siteName || '');
+      });
     }
-    
-    if (customerFilter !== 'all') {
-      filteredNoDevice = filteredNoDevice.filter(s => s.customer === customerFilter);
-    }
-    
-    if (stateFilter !== 'all') {
-      filteredNoDevice = filteredNoDevice.filter(s => s.state === stateFilter);
-    }
-    
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filteredNoDevice = filteredNoDevice.filter(s =>
-        s.siteName?.toLowerCase().includes(query) ||
-        s.customer?.toLowerCase().includes(query) ||
-        s.location?.toLowerCase().includes(query)
-      );
-    }
-    
-    return [...monitored, ...filteredNoDevice];
-  }, [tankData?.sites, sitesWithoutDevices, statusFilter, customerFilter, stateFilter, searchQuery]);
+    return sorted;
+  }, [tankData?.sites, groupBy]);
 
   // Table rows: one row per tank (flatten sites)
   const tableRows = useMemo(() => {
@@ -292,9 +278,15 @@ export default function TankLevels() {
               <Droplet className="w-6 h-6 text-primary" />
               Tank Levels
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm font-medium text-muted-foreground mt-1">
               Real-time chemical inventory across {tankData?.metrics.totalSites || 0} sites •{' '}
               {tankData?.metrics.totalTanks || 0} monitored tanks
+            </p>
+            <p className="text-xs font-medium text-muted-foreground mt-0.5">
+              Each card is per customer and site, the same site name may appear for different customers.
+            </p>
+            <p className="text-xs font-medium text-muted-foreground mt-0.5">
+              Tank 1 / Tank 2 = tank slot at the device. ECSR = Concrete Safe Remover, TW = Truck Wash, GEL = Gel.
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -389,12 +381,6 @@ export default function TankLevels() {
                     OK
                   </span>
                 </SelectItem>
-                <SelectItem value="NO_DEVICE">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-muted-foreground" />
-                    No Device
-                  </span>
-                </SelectItem>
               </SelectContent>
             </Select>
 
@@ -439,6 +425,33 @@ export default function TankLevels() {
               <RotateCcw className="w-4 h-4" />
               Reset
             </Button>
+
+            {/* Group by: Customer | Site */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Group by</span>
+              <div className="flex gap-1 border rounded-md p-1">
+                <Button
+                  variant={groupBy === 'customer' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setGroupBy('customer')}
+                  className="px-3 gap-1.5"
+                  title="Group by customer"
+                >
+                  <Users className="w-4 h-4" />
+                  Customer
+                </Button>
+                <Button
+                  variant={groupBy === 'site' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setGroupBy('site')}
+                  className="px-3 gap-1.5"
+                  title="Group by site"
+                >
+                  <MapPin className="w-4 h-4" />
+                  Site
+                </Button>
+              </div>
+            </div>
 
             {/* View Mode Toggle */}
             <div className="flex gap-1 border rounded-md p-1">
@@ -532,7 +545,7 @@ export default function TankLevels() {
         </div>
       </div>
 
-      {/* Sites Grid/List — show skeletons when filtering/refetching */}
+      {/* Sites Grid/List — grouped by customer, then status; show skeletons when filtering/refetching */}
       {viewMode === 'cards' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {isFetching ? (
@@ -540,13 +553,31 @@ export default function TankLevels() {
               <TankLevelCardSkeleton key={`skeleton-card-${idx}`} />
             ))
           ) : (
-            paginatedSites.map((site, idx) => (
-              <TankLevelCard
-                key={`${site.siteRef}-${startItem + idx}`}
-                site={site}
-                onClick={() => setSelectedSite(site)}
-              />
-            ))
+            paginatedSites.flatMap((site, idx) => {
+              const showCustomerHeader =
+                groupBy === 'customer' &&
+                (idx === 0 || paginatedSites[idx - 1].customer !== site.customer);
+              return [
+                ...(showCustomerHeader
+                  ? [
+                      <div
+                        key={`customer-header-${site.customer}-${startItem + idx}`}
+                        className="col-span-full flex items-center gap-2 pt-2 pb-1 first:pt-0"
+                      >
+                        <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                          {site.customer || 'Unknown customer'}
+                        </span>
+                        <span className="flex-1 h-px bg-border" />
+                      </div>,
+                    ]
+                  : []),
+                <TankLevelCard
+                  key={`${site.siteRef}-${site.customer}-${startItem + idx}`}
+                  site={site}
+                  onClick={() => setSelectedSite(site)}
+                />,
+              ];
+            })
           )}
         </div>
       ) : (
@@ -563,7 +594,6 @@ export default function TankLevels() {
                     <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tank</th>
                     <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Level</th>
                     <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Daily use</th>
-                    <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Days left</th>
                     <th className="text-center p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Devices</th>
                     <th className="text-center p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
                   </tr>
@@ -584,7 +614,6 @@ export default function TankLevels() {
                           </div>
                         </td>
                         <td className="p-3 text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
-                        <td className="p-3 text-right"><Skeleton className="h-4 w-10 ml-auto" /></td>
                         <td className="p-3 text-center"><Skeleton className="h-4 w-6 mx-auto" /></td>
                         <td className="p-3 text-center"><Skeleton className="h-6 w-16 rounded mx-auto" /></td>
                       </tr>
@@ -606,7 +635,6 @@ export default function TankLevels() {
                           <td className="p-3 text-sm">—</td>
                           <td className="p-3">—</td>
                           <td className="p-3 text-right text-sm">—</td>
-                          <td className="p-3 text-right text-sm">—</td>
                           <td className="p-3 text-center text-sm">{site.deviceCount || 0}</td>
                           <td className="p-3 text-center">
                             <Badge variant="secondary" className="text-xs">NO DEVICE</Badge>
@@ -615,7 +643,6 @@ export default function TankLevels() {
                       );
                     }
                     const { site, tank, siteIdx, tankIdx } = row;
-                    const daysLow = tank.status === 'CRITICAL' || tank.status === 'WARNING';
                     return (
                       <tr
                         key={`${site.siteRef}-${siteIdx}-${tankIdx}`}
@@ -647,16 +674,6 @@ export default function TankLevels() {
                           {tank.consumption?.avgDailyLitres != null
                             ? `${tank.consumption.avgDailyLitres} L/d`
                             : '—'}
-                        </td>
-                        <td className="p-3 text-right">
-                          <span
-                            className={cn(
-                              'text-sm',
-                              daysLow ? 'text-red-500 dark:text-red-400 font-medium' : 'text-muted-foreground'
-                            )}
-                          >
-                            {tank.daysRemaining != null ? `${tank.daysRemaining}d` : '—'}
-                          </span>
                         </td>
                         <td className="p-3 text-center text-sm">{site.deviceCount ?? 0}</td>
                         <td className="p-3 text-center">

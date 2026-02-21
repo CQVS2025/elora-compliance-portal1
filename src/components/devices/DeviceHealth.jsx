@@ -34,8 +34,11 @@ import DataPagination from '@/components/ui/DataPagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // NEW: Import queryOptions with tenant isolation
-import { devicesOptions } from '@/query/options';
+import { devicesOptions, scansOptions } from '@/query/options';
 import { usePermissions } from '@/components/auth/PermissionGuard';
+
+// Status filter for "last activity" including auto check-ins (devices check in ~every 20 min)
+const DEVICE_LAST_ACTIVITY_SCAN_STATUS = 'success,exceeded,auto';
 
 const getDeviceLastScan = (device) =>
   device?.lastScanAt ??
@@ -104,19 +107,56 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
     })
   );
 
-  // Single source of truth for last scan; always normalize to UTC ISO (append Z if API omits it)
+  // Fetch recent scans including auto check-ins so "Last scan" reflects last device activity (~every 20 min)
+  const dateRange = useMemo(() => {
+    const end = moment.utc();
+    const start = moment.utc().subtract(7, 'days');
+    return {
+      fromDate: start.format('YYYY-MM-DD'),
+      toDate: end.format('YYYY-MM-DD'),
+    };
+  }, []);
+  const { data: recentScansData } = useQuery({
+    ...scansOptions(companyId, {
+      ...dateRange,
+      status: DEVICE_LAST_ACTIVITY_SCAN_STATUS,
+      customerId: selectedCustomer !== 'all' ? selectedCustomer : undefined,
+      siteId: selectedSite !== 'all' ? selectedSite : undefined,
+    }),
+    staleTime: 60 * 1000, // 1 min – device check-ins are frequent
+  });
+  const recentScansList = Array.isArray(recentScansData) ? recentScansData : (recentScansData?.data ?? []);
+
+  // Latest scan timestamp per device (from scans API, includes auto check-ins)
+  const latestScanByDeviceRef = useMemo(() => {
+    const map = {};
+    recentScansList.forEach((scan) => {
+      const ref = scan.deviceRef ?? scan.device_ref ?? null;
+      if (!ref) return;
+      const ts = scan.createdAt ?? scan.timestamp ?? scan.updatedAt ?? null;
+      if (!ts) return;
+      const iso = toUTCISO(ts);
+      if (!iso) return;
+      if (!map[ref] || iso > map[ref]) map[ref] = iso;
+    });
+    return map;
+  }, [recentScansList]);
+
+  // Single source of truth for last scan: max of device API lastScan and latest scan (incl. auto check-in) per device
   const devices = useMemo(
     () =>
       (allDevices ?? []).map((device) => {
         const rawLast = getDeviceLastScan(device);
-        const normalizedLastScan = toUTCISO(rawLast);
+        const fromDeviceApi = toUTCISO(rawLast);
+        const fromScans = latestScanByDeviceRef[device.deviceRef ?? ''] ?? latestScanByDeviceRef[device.device_ref ?? ''] ?? null;
+        const normalizedLastScan = [fromDeviceApi, fromScans].filter(Boolean).sort().pop() ?? fromDeviceApi ?? null;
         return {
           ...device,
           normalizedLastScan,
           lastScanAt: normalizedLastScan ?? device.lastScanAt,
         };
       }),
-    [allDevices]
+    [allDevices, latestScanByDeviceRef]
   );
 
   // Calculate device health stats (use canonical last scan; compare in UTC)

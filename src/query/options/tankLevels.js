@@ -15,6 +15,12 @@ import { queryKeys } from '../keys';
 
 const UNKNOWN_LOCATION = 'Unknown Location';
 
+/** Normalize site name for comparison (trim, lower case). */
+function normalizeSiteName(name) {
+  if (name == null || typeof name !== 'string') return '';
+  return name.trim().toLowerCase();
+}
+
 /**
  * Normalize site location for display. API may return undefined, "undefined, undefined",
  * or use camelCase/snake_case (suburb, stateShort vs state_short). Returns a safe string.
@@ -211,28 +217,34 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
     // Then enrich with full site data if available
     const deviceSiteRef = device.siteRef || device.site_ref;
     const deviceSiteName = device.siteName || device.site_name;
-    
-    // Find full site record using device's siteRef
-    const apiSite = sites.find(s => 
-      s.ref === deviceSiteRef || 
-      s.siteRef === deviceSiteRef ||
-      (deviceSiteName && s.siteName === deviceSiteName)
-    );
-    
-    // Build normalized site object - prefer full site data, fallback to device data
+    const deviceCustomer = device.customerName ?? device.customer ?? device.customer_ref;
+
+    // Find full site record: prefer device's siteRef; when matching by name only, prefer site that matches device's customer so we don't attach ACM's Epping to HEIDELBERG's device
+    const normalizeCustomer = (c) => (c ?? '').toString().trim().toLowerCase();
+    const apiSite = sites.find(s => {
+      const refMatch = deviceSiteRef && (s.ref === deviceSiteRef || s.siteRef === deviceSiteRef);
+      if (refMatch) return true;
+      const nameMatch = deviceSiteName && (s.siteName === deviceSiteName || (s.name && s.name === deviceSiteName));
+      if (!nameMatch) return false;
+      // Same site name can exist for multiple customers (e.g. Epping for ACM, HEIDELBERG, HOLCIM) — pick the site record for this device's customer
+      const sc = normalizeCustomer(s.customer ?? s.customerName);
+      const dc = normalizeCustomer(deviceCustomer);
+      return !dc || !sc || sc === dc;
+    });
+
+    // Customer always from device so grouping is correct (one card per customer+site, not one card per site name)
     const site = apiSite ? {
       ...apiSite,
       siteRef: apiSite.ref || apiSite.siteRef || deviceSiteRef,
-      siteName: apiSite.siteName || deviceSiteName,
+      siteName: apiSite.siteName || apiSite.name || deviceSiteName,
       suburb: apiSite.suburb ?? apiSite.addr_suburb ?? apiSite.addressSuburb,
       stateShort: apiSite.stateShort ?? apiSite.state_short ?? apiSite.addr_state_short ?? apiSite.state,
       location: apiSite.location,
-      customer: apiSite.customer || device.customerName,
+      customer: deviceCustomer || apiSite.customer || apiSite.customerName,
     } : {
-      // Fallback to device data if site not found
       siteRef: deviceSiteRef,
       siteName: deviceSiteName,
-      customer: device.customerName,
+      customer: deviceCustomer,
       suburb: undefined,
       stateShort: undefined,
       location: undefined,
@@ -373,14 +385,19 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
       const tenantContext = getEloraTenantContext();
       
       // Fetch all required data in parallel
+      // Refills: only confirmed and delivered count as actual refills (not scheduled)
+      // Scans: only success and exceeded = real washes; exclude auto check-ins
+      // Devices: only active devices (cross-reference with CMS)
       const [tankConfigs, refillsResponse, scansResponse, devicesResponse, sitesResponse] = await Promise.all([
         supabase.from('tank_configurations').select('*').eq('active', true),
         callEdgeFunction('elora_refills', {
           customerRef: !tenantContext.isSuperAdmin ? tenantContext.companyEloraCustomerRef : undefined,
+          status: 'confirmed,delivered',
         }),
         callEdgeFunction('elora_scans', {
           customerRef: !tenantContext.isSuperAdmin ? tenantContext.companyEloraCustomerRef : undefined,
-          export: 'all', // Get all scans for accurate calculation
+          export: 'all',
+          status: 'success,exceeded',
         }),
         callEdgeFunction('elora_devices', {
           status: 'active',
@@ -392,41 +409,85 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
       if (tankConfigs.error) throw tankConfigs.error;
 
       const configs = tankConfigs.data || [];
-      const refills = Array.isArray(refillsResponse) ? refillsResponse : (refillsResponse?.data || []);
-      const scans = Array.isArray(scansResponse) ? scansResponse : (scansResponse?.data || []);
+      let refills = Array.isArray(refillsResponse) ? refillsResponse : (refillsResponse?.data || []);
+      let scans = Array.isArray(scansResponse) ? scansResponse : (scansResponse?.data || []);
       const devices = Array.isArray(devicesResponse) ? devicesResponse : (devicesResponse?.data || []);
-      const sites = Array.isArray(sitesResponse) ? sitesResponse : (sitesResponse?.data || []);
 
-      // DEBUG: Log what we got from APIs
-      console.log('🔍 TANK LEVELS DEBUG:', {
-        configsCount: configs.length,
-        refillsCount: refills.length,
-        scansCount: scans.length,
-        devicesCount: devices.length,
-        sitesCount: sites.length,
-        sampleConfig: configs[0],
-        sampleDevice: devices[0],
-        sampleSite: sites[0],
-        deviceRefs: devices.slice(0, 5).map(d => ({
-          deviceRef: d.deviceRef,
-          ref: d.ref,
-          device_ref: d.device_ref,
-          siteRef: d.siteRef,
-          site_ref: d.site_ref,
-          siteName: d.siteName,
-        })),
+      // Only confirmed or delivered refills count for tank level "since refill" (exclude scheduled/cancelled)
+      // API returns status (e.g. "Scheduled", "Confirmed", "Delivered") and statusId (1=Scheduled, 2=Confirmed, 3=Delivered, 4=Cancelled)
+      refills = refills.filter((r) => {
+        const s = (r.status ?? r.statusLabel ?? '').toString().toLowerCase();
+        const id = r.statusId ?? r.status_id;
+        if (id != null) return id === 2 || id === 3; // 2=Confirmed, 3=Delivered
+        return s === 'confirmed' || s === 'delivered';
       });
 
-      // Calculate levels for all tanks
+      // Exclude auto check-ins: only real washes (success/exceeded). API is requested with status=success,exceeded; filter again by rfid !== 'auto'
+      scans = scans.filter((s) => {
+        const rfid = (s.rfid ?? '').toString().toLowerCase();
+        const statusLabel = (s.statusLabel ?? s.status ?? '').toString().toLowerCase();
+        if (rfid === 'auto') return false;
+        if (statusLabel === 'auto') return false;
+        return true;
+      });
+
+      const sites = Array.isArray(sitesResponse) ? sitesResponse : (sitesResponse?.data || []);
+
+      // Only use active devices for tank levels (cross-reference with CMS; exclude inactive)
+      const activeDevices = devices.filter((d) => {
+        const label = (d.statusLabel ?? d.status ?? '').toString().toLowerCase();
+        const code = d.statusCode ?? d.status_code;
+        return label === 'active' || code === 1;
+      });
+
+      // Build set of active device serials (all possible API field names) so we only show tanks for devices that exist in the API
+      const activeSerials = new Set();
+      activeDevices.forEach((d) => {
+        const s = d.computerSerialId ?? d.computerSerial ?? d.serial;
+        if (s) activeSerials.add(String(s).trim());
+      });
+
+      // Only include configs whose device_serial matches an active device — source of truth is /api/devices, not tank_configurations
+      const configsForActiveDevices = configs.filter((c) => activeSerials.has(String(c.device_serial || '').trim()));
+
+      // Deduplicate by (device_serial, tank_number) in case DB has duplicates; keep first
+      const seenKey = new Set();
+      const configsDeduped = configsForActiveDevices.filter((c) => {
+        const key = `${(c.device_serial || '').trim()}|${c.tank_number ?? 1}`;
+        if (seenKey.has(key)) return false;
+        seenKey.add(key);
+        return true;
+      });
+
+      // Calculate levels only for tanks that belong to an active device
       const tankLevels = await Promise.all(
-        configs.map(config => calculateTankLevel(config, refills, scans, devices, sites))
+        configsDeduped.map((config) => calculateTankLevel(config, refills, scans, activeDevices, sites))
       );
 
-      // Group by site for multi-tank sites
+      // Exclude NO_DEVICE/ERROR tanks from display
+      let tankLevelsToShow = tankLevels.filter(
+        (t) => t.status !== 'NO_DEVICE' && t.status !== 'ERROR'
+      );
+
+      // Only show a tank when config.site_ref matches the device's current site from the API.
+      // tank_configurations can have stale rows (device moved or decommissioned); device site is source of truth.
+      tankLevelsToShow = tankLevelsToShow.filter((t) => {
+        if (!t.device) return true;
+        const configSite = normalizeSiteName(t.site_ref);
+        if (!configSite) return true;
+        const deviceSite = normalizeSiteName(t.device.siteName ?? t.device.site_name);
+        if (!deviceSite) return true;
+        return configSite === deviceSite;
+      });
+
+      // Group by site for multi-tank sites (only tanks we're displaying).
+      // Include customer in key so different customers' sites with same name (e.g. Epping) don't merge into one card.
       const siteMap = new Map();
-      tankLevels.forEach(tank => {
-        // Use tank.site object from calculation (which came from device)
-        const siteKey = tank.site?.siteRef || tank.site?.siteName || tank.device_ref;
+      tankLevelsToShow.forEach((tank) => {
+        const customer = tank.site?.customer ?? tank.device?.customerName ?? '';
+        const siteRef = tank.site?.siteRef ?? '';
+        const siteName = tank.site?.siteName ?? '';
+        const siteKey = [customer, siteRef || siteName || tank.device_ref].filter(Boolean).join('|') || 'unknown';
         
         if (!siteMap.has(siteKey)) {
           const tankSite = tank.site || {};
@@ -474,10 +535,15 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
         devices: undefined, // Remove Set from output
       }));
 
-      // Sort: Critical > Warning > OK > No Data/Error
+      // Sort: by customer first (so sites are grouped per customer), then by status (Critical > Warning > OK), then by site name
       const statusOrder = { CRITICAL: 0, WARNING: 1, OK: 2, NO_DATA: 3, NO_DEVICE: 4, ERROR: 5 };
       sitesWithTanks.sort((a, b) => {
-        return statusOrder[a.overallStatus] - statusOrder[b.overallStatus];
+        const customerA = (a.customer || '').toLowerCase();
+        const customerB = (b.customer || '').toLowerCase();
+        if (customerA !== customerB) return customerA.localeCompare(customerB);
+        const statusDiff = statusOrder[a.overallStatus] - statusOrder[b.overallStatus];
+        if (statusDiff !== 0) return statusDiff;
+        return (a.siteName || '').localeCompare(b.siteName || '');
       });
 
       // Apply filters
@@ -504,17 +570,20 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
         );
       }
 
-      // Calculate summary metrics
+      // Calculate summary metrics (based on displayed tanks only)
       const metrics = {
         totalSites: sitesWithTanks.length,
-        monitoredSites: sitesWithTanks.filter(s => s.overallStatus !== 'NO_DEVICE').length,
-        pendingSites: sitesWithTanks.filter(s => s.overallStatus === 'NO_DEVICE').length,
-        criticalCount: sitesWithTanks.filter(s => s.overallStatus === 'CRITICAL').length,
-        warningCount: sitesWithTanks.filter(s => s.overallStatus === 'WARNING').length,
-        okCount: sitesWithTanks.filter(s => s.overallStatus === 'OK').length,
-        totalTanks: tankLevels.length,
-        avgLevel: tankLevels.filter(t => t.percentage != null).reduce((sum, t) => sum + t.percentage, 0) / 
-                  tankLevels.filter(t => t.percentage != null).length || 0,
+        monitoredSites: sitesWithTanks.filter((s) => s.overallStatus !== 'NO_DEVICE').length,
+        pendingSites: sitesWithTanks.filter((s) => s.overallStatus === 'NO_DEVICE').length,
+        criticalCount: sitesWithTanks.filter((s) => s.overallStatus === 'CRITICAL').length,
+        warningCount: sitesWithTanks.filter((s) => s.overallStatus === 'WARNING').length,
+        okCount: sitesWithTanks.filter((s) => s.overallStatus === 'OK').length,
+        totalTanks: tankLevelsToShow.length,
+        avgLevel:
+          tankLevelsToShow.filter((t) => t.percentage != null).length > 0
+            ? tankLevelsToShow.filter((t) => t.percentage != null).reduce((sum, t) => sum + t.percentage, 0) /
+              tankLevelsToShow.filter((t) => t.percentage != null).length
+            : 0,
       };
 
       return {
