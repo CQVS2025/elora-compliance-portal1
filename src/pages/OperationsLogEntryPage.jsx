@@ -12,6 +12,8 @@ import {
   Loader2,
   ArrowLeft,
   Pencil,
+  CloudUpload,
+  X,
 } from 'lucide-react';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
@@ -32,7 +34,7 @@ import {
   operationsLogCategoriesOptions,
   productsOptions,
 } from '@/query/options';
-import { useUpdateOperationsLogStatus, useUpdateOperationsLogEntry } from '@/query/mutations';
+import { useUpdateOperationsLogStatus, useUpdateOperationsLogEntry, useAddOperationsLogAttachment, useDeleteOperationsLogAttachment } from '@/query/mutations';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
@@ -65,6 +67,9 @@ const ASSIGNEES = [
   'Blair McDonough',
 ];
 
+const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
 function getInitials(name) {
   if (!name) return '?';
   return name.split(/\s+/).map((s) => s[0]).join('').toUpperCase().slice(0, 2);
@@ -89,6 +94,10 @@ export default function OperationsLogEntryPage() {
   const [editAssignedTo, setEditAssignedTo] = useState('');
   const [editDueDate, setEditDueDate] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editNewFiles, setEditNewFiles] = useState([]);
+  const [editDragOver, setEditDragOver] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState(null);
 
   const { data: entry, isLoading } = useQuery({
     ...operationsLogEntryOptions(effectiveCompanyId, entryId),
@@ -172,6 +181,8 @@ export default function OperationsLogEntryPage() {
 
   const updateStatus = useUpdateOperationsLogStatus();
   const updateEntry = useUpdateOperationsLogEntry();
+  const addAttachmentMutation = useAddOperationsLogAttachment();
+  const deleteAttachmentMutation = useDeleteOperationsLogAttachment();
 
   const handleStatusChange = (newStatus) => {
     if (!entryId || newStatus === entry?.status) return;
@@ -206,15 +217,52 @@ export default function OperationsLogEntryPage() {
     setEditAssignedTo(entry.assigned_to ?? '');
     setEditDueDate(entry.due_date ?? '');
     setEditDescription(entry.description ?? '');
+    setEditNewFiles([]);
     setEditMode(true);
   };
 
-  const cancelEdit = () => setEditMode(false);
+  const cancelEdit = () => {
+    setEditNewFiles([]);
+    setEditMode(false);
+  };
 
-  const saveEdit = () => {
-    if (!entryId) return;
-    updateEntry.mutate(
+  const companyIdForStorage = effectiveCompanyId && effectiveCompanyId !== 'all'
+    ? effectiveCompanyId
+    : (entry?.company_id ?? effectiveCompanyId);
+
+  const processEditNewFiles = (fileList) => {
+    const chosen = Array.from(fileList ?? []);
+    const valid = chosen.filter((f) => {
+      if (f.size > MAX_FILE_SIZE) return false;
+      if (!ALLOWED_MIME.includes(f.type)) return false;
+      return true;
+    });
+    setEditNewFiles((prev) => [...prev, ...valid]);
+  };
+
+  const removeEditNewFile = (index) => setEditNewFiles((prev) => prev.filter((_, i) => i !== index));
+
+  const handleDeleteAttachment = (attachmentId) => {
+    if (!attachmentId) return;
+    setDeletingAttachmentId(attachmentId);
+    deleteAttachmentMutation.mutate(
+      { attachmentId },
       {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['tenant'], exact: false });
+          toastSuccess('Attachment removed.');
+        },
+        onError: (err) => toastError(err, 'removing attachment'),
+        onSettled: () => setDeletingAttachmentId(null),
+      }
+    );
+  };
+
+  const saveEdit = async () => {
+    if (!entryId || !entry) return;
+    setIsSavingEdit(true);
+    try {
+      await updateEntry.mutateAsync({
         entryId,
         payload: {
           title: editTitle.trim(),
@@ -224,16 +272,32 @@ export default function OperationsLogEntryPage() {
           due_date: editDueDate || null,
           description: editDescription.trim() || null,
         },
-      },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['tenant'], exact: false });
-          toastSuccess('update', 'entry');
-          setEditMode(false);
-        },
-        onError: (err) => toastError(err, 'updating entry'),
+      });
+      const cid = companyIdForStorage || entry.company_id;
+      for (const file of editNewFiles) {
+        const path = `${cid}/${entryId}/${crypto.randomUUID()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from('operations-log')
+          .upload(path, file, { contentType: file.type, upsert: false });
+        if (!uploadError) {
+          await addAttachmentMutation.mutateAsync({
+            entryId,
+            storagePath: path,
+            fileName: file.name,
+            mimeType: file.type,
+            fileSize: file.size,
+          });
+        }
       }
-    );
+      queryClient.invalidateQueries({ queryKey: ['tenant'], exact: false });
+      toastSuccess('update', 'entry');
+      setEditNewFiles([]);
+      setEditMode(false);
+    } catch (err) {
+      toastError(err, 'updating entry');
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const { data: categories = [] } = useQuery(operationsLogCategoriesOptions());
@@ -536,12 +600,105 @@ export default function OperationsLogEntryPage() {
                       className="resize-y"
                     />
                   </div>
+
+                  <div className="grid gap-2">
+                    <Label>Attachments</Label>
+                    {entry.operations_log_attachments?.length > 0 && (
+                      <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                        <p className="text-xs text-muted-foreground mb-2">Existing attachments — preview and click X to remove</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {entry.operations_log_attachments.map((att) => {
+                            const isDeleting = deletingAttachmentId === att.id;
+                            return (
+                              <div
+                                key={att.id}
+                                className={cn(
+                                  'rounded-lg border bg-card overflow-hidden flex flex-col relative',
+                                  isDeleting && 'opacity-70 pointer-events-none'
+                                )}
+                              >
+                                {isDeleting && (
+                                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 rounded-lg">
+                                    <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
+                                  </div>
+                                )}
+                                {isImageMime(att.mime_type) ? (
+                                  <div className="w-full aspect-[4/3] min-h-[100px] bg-muted shrink-0 overflow-hidden">
+                                    <AttachmentThumb path={att.storage_path} getSignedUrl={getSignedUrl} compact />
+                                  </div>
+                                ) : (
+                                  <div className="w-full aspect-[4/3] min-h-[100px] bg-muted flex items-center justify-center shrink-0">
+                                    <FileText className="size-10 text-muted-foreground" />
+                                  </div>
+                                )}
+                                <div className="p-2 flex items-center justify-between gap-2 min-w-0">
+                                  <span className="truncate text-xs font-medium" title={att.file_name}>{att.file_name}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-7 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteAttachment(att.id)}
+                                    disabled={deleteAttachmentMutation.isPending}
+                                  >
+                                    <X className="size-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setEditDragOver(true); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setEditDragOver(false); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditDragOver(false);
+                        processEditNewFiles(e.dataTransfer?.files);
+                      }}
+                      onClick={() => document.getElementById('edit-ops-log-files')?.click()}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click(); }}
+                      className={cn(
+                        'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-4 cursor-pointer text-muted-foreground hover:bg-muted/50 transition-colors',
+                        editDragOver && 'border-primary bg-primary/5'
+                      )}
+                    >
+                      <input
+                        type="file"
+                        accept=".png,.jpg,.jpeg,.pdf"
+                        multiple
+                        className="hidden"
+                        id="edit-ops-log-files"
+                        onChange={(e) => { processEditNewFiles(e.target.files); e.target.value = ''; }}
+                      />
+                      <CloudUpload className="size-6 mb-1" />
+                      <span className="text-xs">Add more images or PDFs (PNG, JPG, PDF up to 10MB each)</span>
+                      {editNewFiles.length > 0 && (
+                        <ul className="mt-2 w-full space-y-1 text-sm" onClick={(e) => e.stopPropagation()}>
+                          {editNewFiles.map((f, i) => (
+                            <li key={i} className="flex items-center justify-between gap-2">
+                              <span className="truncate">{f.name}</span>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => removeEditNewFile(i)}>
+                                <X className="size-4" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex gap-2">
-                    <Button onClick={saveEdit} disabled={updateEntry.isPending || !editTitle.trim()}>
-                      {updateEntry.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
+                    <Button onClick={saveEdit} disabled={isSavingEdit || !editTitle.trim()}>
+                      {isSavingEdit && <Loader2 className="size-4 mr-2 animate-spin" />}
                       Save
                     </Button>
-                    <Button variant="outline" onClick={cancelEdit} disabled={updateEntry.isPending}>
+                    <Button variant="outline" onClick={cancelEdit} disabled={isSavingEdit}>
                       Cancel
                     </Button>
                   </div>
@@ -561,7 +718,7 @@ export default function OperationsLogEntryPage() {
   );
 }
 
-function AttachmentThumb({ path, getSignedUrl }) {
+function AttachmentThumb({ path, getSignedUrl, compact }) {
   const [url, setUrl] = React.useState(null);
   const [err, setErr] = React.useState(false);
   React.useEffect(() => {
@@ -571,6 +728,21 @@ function AttachmentThumb({ path, getSignedUrl }) {
     }).catch(() => { if (!cancelled) setErr(true); });
     return () => { cancelled = true; };
   }, [path, getSignedUrl]);
-  if (err || !url) return <div className="w-full h-full min-h-[200px] bg-muted flex items-center justify-center"><ImageIcon className="size-12 text-muted-foreground" /></div>;
-  return <img src={url} alt="" className="w-full h-full min-h-[200px] object-contain bg-muted/30" />;
+  if (err || !url) {
+    return (
+      <div className={cn('w-full bg-muted flex items-center justify-center', compact ? 'aspect-[4/3] min-h-0' : 'h-full min-h-[200px]')}>
+        <ImageIcon className={compact ? 'size-8 text-muted-foreground' : 'size-12 text-muted-foreground'} />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      className={cn(
+        'w-full bg-muted/30',
+        compact ? 'aspect-[4/3] object-cover min-h-0' : 'h-full min-h-[200px] object-contain'
+      )}
+    />
+  );
 }

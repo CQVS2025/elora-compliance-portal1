@@ -529,7 +529,7 @@ export function NewEntryModal({
           </div>
 
           <div className="grid gap-2">
-            <Label>Photos / Attachments</Label>
+            <Label>Photos / Attachments (you can add multiple)</Label>
             <div
               role="button"
               tabIndex={0}
@@ -555,7 +555,7 @@ export function NewEntryModal({
               <div className="flex flex-col items-center gap-2 pointer-events-none">
                 <CloudUpload className="size-8" />
                 <span className="text-sm">Click to upload or drag and drop</span>
-                <span className="text-xs">PNG, JPG, PDF up to 10MB each</span>
+                <span className="text-xs">PNG, JPG, PDF up to 10MB each. Select or drag multiple files.</span>
               </div>
               {files.length > 0 && (
                 <ul className="mt-2 w-full space-y-1 text-sm pointer-events-auto" onClick={(e) => e.stopPropagation()}>

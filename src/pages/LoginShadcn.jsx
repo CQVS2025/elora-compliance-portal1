@@ -136,51 +136,60 @@ export default function LoginShadcn() {
   //   }
   // };
 
-  const logoAlignment = {
-    left: 'justify-start',
-    center: 'justify-center',
-    right: 'justify-end',
-  }[branding.login_logo_position] || 'justify-center';
-
   return (
-    <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
-      <div className="flex w-full max-w-sm flex-col gap-6">
-        <a
-          href="/"
-          className="flex items-center gap-2 self-center font-medium text-foreground no-underline hover:opacity-90"
-          aria-label={branding.company_name}
-        >
-          <div
-            className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-lg"
-            style={branding.logo_url ? undefined : { background: `linear-gradient(to bottom right, ${branding.primary_color}, ${branding.secondary_color})` }}
+    <div className="grid min-h-svh lg:grid-cols-2">
+      <div className="flex flex-col gap-4 bg-background p-6 md:p-10 lg:p-12">
+        <div className="flex justify-center gap-2 md:justify-start">
+          <a
+            href="/"
+            className="flex items-center gap-2.5 font-medium text-foreground no-underline transition-opacity hover:opacity-90"
+            aria-label={branding.company_name}
           >
-            {branding.logo_url ? (
-              <img src={branding.logo_url} alt="" className="size-6 object-contain" />
-            ) : (
-              <Truck className="size-5" />
-            )}
+            <div
+              className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg shadow-sm"
+              style={branding.logo_url ? undefined : { background: `linear-gradient(135deg, ${branding.primary_color}, ${branding.secondary_color})` }}
+            >
+              {branding.logo_url ? (
+                <img src={branding.logo_url} alt="" className="size-5 object-contain" />
+              ) : (
+                <Truck className="size-5" />
+              )}
+            </div>
+            <span className="text-sm tracking-tight sm:text-base">
+              {branding.company_name || DEFAULT_BRANDING.company_name}
+            </span>
+          </a>
+        </div>
+        <div className="flex flex-1 items-center justify-center">
+          <div className="w-full max-w-sm">
+            <LoginForm
+              companyName={branding.company_name}
+              loginTagline={branding.login_tagline}
+              primaryColor={branding.primary_color}
+              email={email}
+              setEmail={setEmail}
+              password={password}
+              setPassword={setPassword}
+              rememberMe={false}
+              setRememberMe={() => {}}
+              showForgotPassword={false}
+              setShowForgotPassword={() => {}}
+              error={error}
+              isLoading={isLoading}
+              onSubmitLogin={handleLogin}
+              onSubmitForgotPassword={(e) => e.preventDefault()}
+              supportEmail={branding.support_email}
+              termsUrl={branding.terms_url}
+              privacyUrl={branding.privacy_url}
+            />
           </div>
-          <span>{branding.company_name || DEFAULT_BRANDING.company_name}</span>
-        </a>
-        <LoginForm
-          companyName={branding.company_name}
-          loginTagline={branding.login_tagline}
-          primaryColor={branding.primary_color}
-          email={email}
-          setEmail={setEmail}
-          password={password}
-          setPassword={setPassword}
-          rememberMe={false}
-          setRememberMe={() => {}}
-          showForgotPassword={false}
-          setShowForgotPassword={() => {}}
-          error={error}
-          isLoading={isLoading}
-          onSubmitLogin={handleLogin}
-          onSubmitForgotPassword={(e) => e.preventDefault()}
-          supportEmail={branding.support_email}
-          termsUrl={branding.terms_url}
-          privacyUrl={branding.privacy_url}
+        </div>
+      </div>
+      <div className="bg-muted relative hidden lg:block overflow-hidden">
+        <img
+          src="/eloralogo.png"
+          alt="ELORA"
+          className="absolute inset-0 h-full w-full object-cover"
         />
       </div>
     </div>

@@ -11,7 +11,8 @@ import { motion } from 'framer-motion';
 import DataPagination from '@/components/ui/DataPagination';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { scansOptions } from '@/query/options';
-import CostForecast from '@/components/analytics/CostForecast';
+// Cost Forecast section commented out per request
+// import CostForecast from '@/components/analytics/CostForecast';
 
 // Pricing rules
 const PRICING_RULES = {
@@ -453,9 +454,11 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
   if (!filteredScansForCost.length) {
     return (
       <div className="space-y-6">
+        {/* Cost Forecast section commented out
         {!permissions.hideCostForecast && (
           <CostForecast scans={[]} selectedCustomer={selectedCustomer} selectedSite={selectedSite} />
         )}
+        */}
         <div className="flex items-center justify-center py-12 rounded-xl border border-border bg-card">
           <div className="text-center">
             <Droplet className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
@@ -471,6 +474,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
 
   return (
     <div className="space-y-6 relative">
+      {/* Cost Forecast section commented out
       {!permissions.hideCostForecast && (
         <CostForecast
           scans={filteredScansForCost}
@@ -478,6 +482,7 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
           selectedSite={selectedSite}
         />
       )}
+      */}
       {isFetching && (
         <div className="absolute inset-0 bg-background/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
           <div className="flex items-center gap-3 bg-card px-6 py-3 rounded-xl shadow-lg border border-border">
