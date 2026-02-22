@@ -61,6 +61,7 @@ function SearchableSelect({
   disabled = false,
   emptyText = 'No results.',
   className,
+  contentClassName,
 }) {
   const [open, setOpen] = useState(false);
   const selected = useMemo(
@@ -82,7 +83,7 @@ function SearchableSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popper-anchor-width)] p-0" align="start">
+      <PopoverContent className={cn('w-[var(--radix-popper-anchor-width)] p-0', contentClassName)} align="start">
         <Command>
           <CommandInput placeholder="Search…" />
           <CommandList>
@@ -132,6 +133,7 @@ export function NewEntryModal({
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: customersFromQuery = [] } = useQuery({
     ...customersOptions(effectiveCompanyId),
@@ -201,10 +203,10 @@ export function NewEntryModal({
     const forCustomer = !customerRef
       ? []
       : list.filter(
-          (s) =>
-            String(s.customer_ref ?? '') === String(customerRef) ||
-            String(s.id ?? s.ref ?? '') === String(customerRef)
-        );
+        (s) =>
+          String(s.customer_ref ?? '') === String(customerRef) ||
+          String(s.id ?? s.ref ?? '') === String(customerRef)
+      );
     return forCustomer.map((s) => ({
       value: String(s.id ?? s.ref ?? ''),
       label: s.name ?? s.siteName ?? String(s.id ?? s.ref ?? ''),
@@ -316,6 +318,7 @@ export function NewEntryModal({
       due_date: dueDate || null,
     };
 
+    setIsSubmitting(true);
     try {
       const entry = await createMutation.mutateAsync({
         companyId: effectiveCompanyId,
@@ -343,10 +346,10 @@ export function NewEntryModal({
       handleClose(false);
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
-
-  const isSubmitting = createMutation.isPending;
   const requiresCustomer = customers.length > 1;
   const canSubmit =
     title.trim() &&
@@ -359,221 +362,248 @@ export function NewEntryModal({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
-        <DialogHeader className="px-0 sm:px-0">
-          <DialogTitle className="text-lg sm:text-xl pr-8">New Operations Log Entry</DialogTitle>
-        </DialogHeader>
+        <div className="relative grid gap-4 min-h-0">
+          <DialogHeader className="px-0 sm:px-0">
+            <DialogTitle className="text-lg sm:text-xl pr-8">New Operations Log Entry</DialogTitle>
+          </DialogHeader>
 
-        <div className="grid gap-4 py-2 sm:py-4 min-w-0">
-          <div className="grid gap-2 min-w-0">
-            <Label htmlFor="title">Title *</Label>
-            <Input
-              id="title"
-              placeholder="Brief description of the issue or activity"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="min-w-0"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>{customers.length > 1 ? 'Customer *' : 'Customer'}</Label>
-              <SearchableSelect
-                value={customerRef}
-                onValueChange={onCustomerChange}
-                options={customerOptions}
-                placeholder="All Customers"
-                emptyText="No customers found."
-              />
+          {isSubmitting && (
+            <div
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-lg bg-background/80 backdrop-blur-sm"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <Loader2 className="size-10 animate-spin text-primary" />
+              <p className="text-sm font-medium text-foreground">Creating entry…</p>
+              {files.length > 0 && (
+                <p className="text-xs text-muted-foreground">Uploading attachments</p>
+              )}
             </div>
-            <div className="grid gap-2">
-              <Label>Site *</Label>
-              <SearchableSelect
-                value={siteRef}
-                onValueChange={onSiteChange}
-                options={siteOptions}
-                placeholder="Select site…"
-                disabled={!customerRef}
-                emptyText="No sites for this customer."
-              />
-            </div>
-          </div>
+          )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className={cn('grid gap-4 py-2 sm:py-4 min-w-0', isSubmitting && 'pointer-events-none opacity-70')}>
             <div className="grid gap-2 min-w-0">
-              <Label>Category *</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category…">
-                    {categoryId ? categories.find((c) => c.id === categoryId)?.name : null}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent modal={false}>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="title">Title *</Label>
+              <Input
+                id="title"
+                placeholder="Brief description of the issue or activity"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="min-w-0"
+                disabled={isSubmitting}
+              />
             </div>
-            <div className="grid gap-2">
-              <Label>Priority *</Label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select priority…">
-                    {priority ? priority.charAt(0).toUpperCase() + priority.slice(1) : null}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent modal={false}>
-                  <SelectItem value="urgent">Urgent</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
 
-          <div className="grid gap-2">
-            <Label>Product</Label>
-            <SearchableSelect
-              value={productId}
-              onValueChange={setProductId}
-              options={productOptions}
-              placeholder={productOptions.length ? 'Select product (optional)…' : 'No products — add in Admin → Products'}
-              emptyText={productOptions.length ? 'No match.' : 'Add products in Admin → Products.'}
-            />
-            {productId && (
-              <div className="grid gap-2 max-w-[120px]">
-                <Label htmlFor="product-qty">Quantity</Label>
-                <Input
-                  id="product-qty"
-                  type="number"
-                  min={1}
-                  placeholder="1"
-                  value={productQuantity}
-                  onChange={(e) => setProductQuantity(e.target.value)}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>{customers.length > 1 ? 'Customer *' : 'Customer'}</Label>
+                <SearchableSelect
+                  value={customerRef}
+                  onValueChange={onCustomerChange}
+                  options={customerOptions}
+                  placeholder="All Customers"
+                  emptyText="No customers found."
+                  disabled={isSubmitting}
+                  contentClassName="z-[102]"
                 />
               </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="grid gap-2 min-w-0">
-              <Label>Assign To</Label>
-              <Select value={assignedTo} onValueChange={setAssignedTo}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select team member…">
-                    {assignedTo || null}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent modal={false}>
-                  {ASSIGNEES.map((name) => (
-                    <SelectItem key={name} value={name}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Due Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      'w-full justify-start text-left font-normal',
-                      !dueDate && 'text-muted-foreground'
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dueDate ? format(new Date(dueDate), 'dd/MM/yyyy') : 'Pick a date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={dueDate ? new Date(dueDate) : undefined}
-                    onSelect={(d) => setDueDate(d ? format(d, 'yyyy-MM-dd') : '')}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Link to Vehicles</Label>
-            <MultiSelection
-              value={vehicleIds}
-              options={vehicleOptions}
-              onValueSelected={setVehicleIds}
-              isLoading={vehiclesLoading}
-            />
-            {!siteRef && (
-              <p className="text-xs text-muted-foreground">Select a customer and site to choose vehicles.</p>
-            )}
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Description *</Label>
-            <Textarea
-              placeholder="Detailed description of the issue, observation, or work completed."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="resize-y"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Photos / Attachments (you can add multiple)</Label>
-            <div
-              role="button"
-              tabIndex={0}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => document.getElementById('ops-log-files')?.click()}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click(); }}
-              className={cn(
-                'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 cursor-pointer',
-                'text-muted-foreground hover:bg-muted/50 transition-colors',
-                isDragging && 'border-primary bg-primary/5'
-              )}
-            >
-              <input
-                type="file"
-                accept=".png,.jpg,.jpeg,.pdf"
-                multiple
-                className="hidden"
-                id="ops-log-files"
-                onChange={handleFileChange}
-              />
-              <div className="flex flex-col items-center gap-2 pointer-events-none">
-                <CloudUpload className="size-8" />
-                <span className="text-sm">Click to upload or drag and drop</span>
-                <span className="text-xs">PNG, JPG, PDF up to 10MB each. Select or drag multiple files.</span>
+              <div className="grid gap-2">
+                <Label>Site *</Label>
+                <SearchableSelect
+                  value={siteRef}
+                  onValueChange={onSiteChange}
+                  options={siteOptions}
+                  placeholder="Select site…"
+                  disabled={!customerRef || isSubmitting}
+                  emptyText="No sites for this customer."
+                  contentClassName="z-[102]"
+                />
               </div>
-              {files.length > 0 && (
-                <ul className="mt-2 w-full space-y-1 text-sm pointer-events-auto" onClick={(e) => e.stopPropagation()}>
-                  {files.map((f, i) => (
-                    <li key={i} className="flex items-center justify-between">
-                      <span className="truncate">{f.name}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => { e.stopPropagation(); removeFile(i); }}
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-2 min-w-0">
+                <Label>Category *</Label>
+                <Select value={categoryId} onValueChange={setCategoryId} disabled={isSubmitting}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category…">
+                      {categoryId ? categories.find((c) => c.id === categoryId)?.name : null}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent modal={false} className="z-[102]">
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Priority *</Label>
+                <Select value={priority} onValueChange={setPriority} disabled={isSubmitting}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select priority…">
+                      {priority ? priority.charAt(0).toUpperCase() + priority.slice(1) : null}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent modal={false} className="z-[102]">
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Product</Label>
+              <SearchableSelect
+                value={productId}
+                onValueChange={setProductId}
+                options={productOptions}
+                placeholder={productOptions.length ? 'Select product (optional)…' : 'No products — add in Admin → Products'}
+                emptyText={productOptions.length ? 'No match.' : 'Add products in Admin → Products.'}
+                disabled={isSubmitting}
+                contentClassName="z-[102]"
+              />
+              {productId && (
+                <div className="grid gap-2 max-w-[120px]">
+                  <Label htmlFor="product-qty">Quantity</Label>
+                  <Input
+                    id="product-qty"
+                    type="number"
+                    min={1}
+                    placeholder="1"
+                    value={productQuantity}
+                    onChange={(e) => setProductQuantity(e.target.value)}
+                    disabled={isSubmitting}
+                  />
+                </div>
               )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-2 min-w-0">
+                <Label>Assign To</Label>
+                <Select value={assignedTo} onValueChange={setAssignedTo} disabled={isSubmitting}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select team member…">
+                      {assignedTo || null}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent modal={false} className="z-[102]">
+                    {ASSIGNEES.map((name) => (
+                      <SelectItem key={name} value={name}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Due Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      disabled={isSubmitting}
+                      className={cn(
+                        'w-full justify-start text-left font-normal',
+                        !dueDate && 'text-muted-foreground'
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dueDate ? format(new Date(dueDate), 'dd/MM/yyyy') : 'Pick a date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 z-[102]" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dueDate ? new Date(dueDate) : undefined}
+                      onSelect={(d) => setDueDate(d ? format(d, 'yyyy-MM-dd') : '')}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Link to Vehicles</Label>
+              <MultiSelection
+                value={vehicleIds}
+                options={vehicleOptions}
+                onValueSelected={setVehicleIds}
+                isLoading={vehiclesLoading}
+                contentClassName="z-[102]"
+              />
+              {!siteRef && (
+                <p className="text-xs text-muted-foreground">Select a customer and site to choose vehicles.</p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Description *</Label>
+              <Textarea
+                placeholder="Detailed description of the issue, observation, or work completed."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                className="resize-y"
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Photos / Attachments (you can add multiple)</Label>
+              <div
+                role="button"
+                tabIndex={0}
+                onDragOver={isSubmitting ? undefined : handleDragOver}
+                onDragLeave={isSubmitting ? undefined : handleDragLeave}
+                onDrop={isSubmitting ? undefined : handleDrop}
+                onClick={isSubmitting ? undefined : () => document.getElementById('ops-log-files')?.click()}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click(); }}
+                className={cn(
+                  'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 cursor-pointer',
+                  'text-muted-foreground hover:bg-muted/50 transition-colors',
+                  isDragging && 'border-primary bg-primary/5',
+                  isSubmitting && 'cursor-not-allowed'
+                )}
+              >
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.pdf"
+                  multiple
+                  className="hidden"
+                  id="ops-log-files"
+                  onChange={handleFileChange}
+                />
+                <div className="flex flex-col items-center gap-2 pointer-events-none">
+                  <CloudUpload className="size-8" />
+                  <span className="text-sm">Click to upload or drag and drop</span>
+                  <span className="text-xs">PNG, JPG, PDF up to 10MB each. Select or drag multiple files.</span>
+                </div>
+                {files.length > 0 && (
+                  <ul className="mt-2 w-full space-y-1 text-sm pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+                    {files.map((f, i) => (
+                      <li key={i} className="flex items-center justify-between">
+                        <span className="truncate">{f.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -26,6 +26,7 @@ export function MultiSelection({
   options = [],
   isLoading = false,
   placeholder = 'Select drivers',
+  contentClassName,
 }) {
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState('add');
@@ -75,7 +76,7 @@ export function MultiSelection({
         placeholder={placeholder}
       />
       <PopoverContent
-        className="min-w-[var(--radix-popper-anchor-width)] p-0 max-h-[300px] overflow-hidden"
+        className={cn('min-w-[var(--radix-popper-anchor-width)] p-0 max-h-[300px] overflow-hidden', contentClassName)}
         align="start"
       >
         <PropertiesList
