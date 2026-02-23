@@ -152,6 +152,10 @@ module.exports = {
   				from: { opacity: '0', transform: 'translateX(-10px)' },
   				to: { opacity: '1', transform: 'translateX(0)' }
   			},
+  			'jump': {
+  				'0%, 80%, 100%': { transform: 'translateY(0)' },
+  				'40%': { transform: 'translateY(-4px)' }
+  			},
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
@@ -161,6 +165,7 @@ module.exports = {
   			'scale-in': 'scale-in 0.2s ease-out',
   			'slide-in-right': 'slide-in-right 0.3s ease-out',
   			'slide-in-left': 'slide-in-left 0.3s ease-out',
+  			'jump': 'jump 0.4s ease-in-out infinite',
   		},
   		// Apple-style transitions
   		transitionDuration: {

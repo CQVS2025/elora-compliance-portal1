@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Trophy, ChevronRight, AlertTriangle, Download } from 'lucide-react';
 import VehicleLikelihoodCell, { getDefaultLikelihood } from '@/components/dashboard/VehicleLikelihoodCell';
+import { JumpingDots } from '@/components/ui/JumpingDots';
 import { motion, AnimatePresence } from 'framer-motion';
 import moment from 'moment';
 import { Link } from 'react-router-dom';
@@ -223,6 +224,7 @@ export default function Dashboard() {
   const availableIntelligenceTabs = useAvailableTabs(INTELLIGENCE_TABS);
   const [searchQuery, setSearchQuery] = useState('');
   const [complianceStatusFilter, setComplianceStatusFilter] = useState('all');
+  const [complianceUpdatingVehicleRef, setComplianceUpdatingVehicleRef] = useState(null);
   const [complianceSiteFilter, setComplianceSiteFilter] = useState('all');
   const [selectedVehicleForWashHistory, setSelectedVehicleForWashHistory] = useState(null);
 
@@ -804,7 +806,7 @@ export default function Dashboard() {
     return Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [filteredVehicles]);
 
-  // Compliance table: filter by site then by status
+  // Compliance table: filter by site then by status (status = effective likelihood: green = compliant)
   const complianceFilteredVehicles = useMemo(() => {
     let list = Array.isArray(filteredVehicles) ? filteredVehicles : [];
     if (complianceSiteFilter !== 'all') {
@@ -815,16 +817,18 @@ export default function Dashboard() {
       );
     }
     if (complianceStatusFilter === 'all') return list;
-    const targetDefault = 12;
-    const getTargetWashes = (v) => v.protocolNumber ?? v.target ?? targetDefault;
+    const isCompliantByLikelihood = (v) => {
+      const effective = likelihoodOverrides[v.id ?? v.rfid] ?? getDefaultLikelihood(v, 12);
+      return effective === 'green';
+    };
     if (complianceStatusFilter === 'compliant') {
-      return list.filter((v) => (v.washes_completed ?? 0) >= getTargetWashes(v));
+      return list.filter(isCompliantByLikelihood);
     }
     if (complianceStatusFilter === 'non-compliant') {
-      return list.filter((v) => (v.washes_completed ?? 0) < getTargetWashes(v));
+      return list.filter((v) => !isCompliantByLikelihood(v));
     }
     return list;
-  }, [filteredVehicles, complianceStatusFilter, complianceSiteFilter]);
+  }, [filteredVehicles, complianceStatusFilter, complianceSiteFilter, likelihoodOverrides]);
 
   const navigateToVehicleDetail = useCallback(
     (vehicleRef) => {
@@ -840,11 +844,17 @@ export default function Dashboard() {
   const handleLikelihoodOverride = useCallback(
     (vehicleRef, value) => {
       if (!effectiveCompanyIdForLikelihood) return;
-      setLikelihoodMutation.mutate({
-        vehicleRef,
-        likelihood: value,
-        userEmail: permissions.user?.email,
-      });
+      setComplianceUpdatingVehicleRef(vehicleRef);
+      setLikelihoodMutation.mutate(
+        {
+          vehicleRef,
+          likelihood: value,
+          userEmail: permissions.user?.email,
+        },
+        {
+          onSettled: () => setComplianceUpdatingVehicleRef(null),
+        }
+      );
     },
     [effectiveCompanyIdForLikelihood, setLikelihoodMutation, permissions.user?.email]
   );
@@ -856,13 +866,15 @@ export default function Dashboard() {
       const targetWashes = getTargetWashes(v);
       const washes = v.washes_completed ?? 0;
       const progressPct = targetWashes ? Math.round((washes / targetWashes) * 100) : 0;
+      const effective = likelihoodOverrides[v.id ?? v.rfid] ?? getDefaultLikelihood(v, 12);
+      const status = effective === 'green' ? 'Compliant' : 'Non-Compliant';
       return {
         Customer: v.customer_name ?? empty,
         Site: v.site_name ?? empty,
         Vehicle: v.name ?? empty,
         'Washes Total': washes,
         'Target Washes': targetWashes,
-        Status: washes >= targetWashes ? 'Compliant' : 'Non-Compliant',
+        Status: status,
         'Progress %': progressPct,
         'Last Scan': v.last_scan ? moment(v.last_scan).format('YYYY-MM-DD HH:mm') : empty,
       };
@@ -877,7 +889,7 @@ export default function Dashboard() {
     a.download = `vehicle-compliance-${moment().format('YYYY-MM-DD')}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
-  }, [complianceFilteredVehicles]);
+  }, [complianceFilteredVehicles, likelihoodOverrides]);
 
   // Only block full-page spinner on permissions + customers + sites (needed for shell).
   // Vehicles and dashboard load in background so the page appears sooner.
@@ -983,8 +995,16 @@ export default function Dashboard() {
         id: 'status',
         header: 'Compliance Status',
         cell: (row) => {
-          const targetWashes = getTargetWashes(row);
-          const isCompliant = (row.washes_completed ?? 0) >= targetWashes;
+          const vehicleRef = row.id ?? row.rfid;
+          if (complianceUpdatingVehicleRef === vehicleRef) {
+            return (
+              <span className="inline-flex items-center min-h-[24px]">
+                <JumpingDots className="text-muted-foreground" />
+              </span>
+            );
+          }
+          const effective = likelihoodOverrides[vehicleRef] ?? getDefaultLikelihood(row);
+          const isCompliant = effective === 'green';
           return (
             <Badge className={isCompliant ? 'bg-primary' : 'bg-red-500 hover:bg-red-600'}>
               {isCompliant ? 'Compliant' : 'Non-Compliant'}
@@ -1014,7 +1034,7 @@ export default function Dashboard() {
       },
     ];
     return base;
-  }, [userEmail, likelihoodOverrides, handleLikelihoodOverride, effectiveCompanyIdForLikelihood, navigateToVehicleDetail]);
+  }, [userEmail, likelihoodOverrides, handleLikelihoodOverride, effectiveCompanyIdForLikelihood, navigateToVehicleDetail, complianceUpdatingVehicleRef]);
 
 
   if (isMobile && permissions.isDriver) {
@@ -1273,7 +1293,7 @@ export default function Dashboard() {
                     {/* Vehicle Performance Chart + Wash Frequency Chart */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       <ChartAreaInteractive data={washTrendsData} />
-                      <VehiclePerformanceChart vehicles={filteredVehicles} />
+                      <VehiclePerformanceChart vehicles={filteredVehicles} likelihoodOverrides={likelihoodOverrides} />
                     </div>
                     {/* Favorite Vehicles - moved to bottom */}
                     <div>

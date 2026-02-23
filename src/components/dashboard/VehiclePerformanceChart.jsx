@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, LabelList, Cell } from 'recharts';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { getDefaultLikelihood } from '@/components/dashboard/VehicleLikelihoodCell';
 
 const chartConfig = { washes: { label: 'Washes', color: 'hsl(var(--primary))' } };
 
@@ -9,32 +10,38 @@ const BAR_HEIGHT = 28;
 const MIN_CHART_HEIGHT = 200;
 const MAX_VISIBLE_HEIGHT = 480;
 
-function getStatusColor(washes, target) {
-  if (washes >= target) return 'hsl(142 76% 36%)'; // On Target - green
-  if (washes > 0) return 'hsl(38 92% 50%)';      // Partial - amber
-  return 'hsl(0 84% 60%)';                        // Below Target - red
+// Colors aligned with On Target / Partial / Below Target (and likelihood green / orange / red)
+const COLOR_ON_TARGET = 'hsl(142 76% 36%)';   // green
+const COLOR_PARTIAL = 'hsl(38 92% 50%)';     // amber
+const COLOR_BELOW_TARGET = 'hsl(0 84% 60%)'; // red
+
+function getFillByLikelihood(likelihood) {
+  if (likelihood === 'green') return COLOR_ON_TARGET;
+  if (likelihood === 'orange') return COLOR_PARTIAL;
+  return COLOR_BELOW_TARGET;
 }
 
-export default function VehiclePerformanceChart({ vehicles }) {
+export default function VehiclePerformanceChart({ vehicles, likelihoodOverrides = {} }) {
   const { data, xDomain } = useMemo(() => {
     const targetDefault = 12;
     const mapped = [...(Array.isArray(vehicles) ? vehicles : [])]
       .sort((a, b) => (b.washes_completed ?? 0) - (a.washes_completed ?? 0))
       .map(v => {
-        const target = v.target ?? v.washesPerWeek ?? targetDefault;
+        const target = v.target ?? v.washesPerWeek ?? v.protocolNumber ?? targetDefault;
         const washes = v.washes_completed ?? 0;
-        const displayName = [v.name, v.site_name].filter(Boolean).join(' · ') || v.rfid || 'Unknown';
+        const displayName = [v.name, v.site_name].filter(Boolean).join(' · ') || v.rfid || v.id || 'Unknown';
+        const effectiveLikelihood = likelihoodOverrides[v.id ?? v.rfid] ?? getDefaultLikelihood(v, target);
         return {
           name: displayName,
           washes,
           target,
           label: `${washes}/${target}`,
-          fill: getStatusColor(washes, target),
+          fill: getFillByLikelihood(effectiveLikelihood),
         };
       });
     const maxVal = mapped.length ? Math.max(...mapped.map(d => Math.max(d.washes, d.target)), 6) + 2 : 8;
     return { data: mapped, xDomain: [0, maxVal] };
-  }, [vehicles]);
+  }, [vehicles, likelihoodOverrides]);
 
   const chartHeight = Math.min(
     MAX_VISIBLE_HEIGHT,

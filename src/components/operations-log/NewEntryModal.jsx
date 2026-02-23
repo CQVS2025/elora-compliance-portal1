@@ -39,6 +39,7 @@ import { useCreateOperationsLogEntry, useAddOperationsLogAttachment } from '@/qu
 import { customersOptions, sitesOptions, vehiclesOptions } from '@/query/options';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { usePermissions } from '@/components/auth/PermissionGuard';
 
 const ASSIGNEES = [
   'Bruce Cunningham',
@@ -119,6 +120,7 @@ export function NewEntryModal({
   effectiveCompanyId,
   onSuccess,
 }) {
+  const permissions = usePermissions();
   const [title, setTitle] = useState('');
   const [brief, setBrief] = useState('');
   const [customerRef, setCustomerRef] = useState('');
@@ -457,6 +459,7 @@ export function NewEntryModal({
               </div>
             </div>
 
+            {permissions.showProductsInOpsLogEntry && (
             <div className="grid gap-2">
               <Label>Product</Label>
               <SearchableSelect
@@ -483,6 +486,7 @@ export function NewEntryModal({
                 </div>
               )}
             </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="grid gap-2 min-w-0">

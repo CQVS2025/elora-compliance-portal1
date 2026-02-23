@@ -542,72 +542,6 @@ export default function OperationsLog() {
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {summaryLoading ? (
-          <ByCategoryBySiteSkeleton />
-        ) : (
-          <>
-        <Card className="bg-card border-border overflow-hidden">
-          <CardHeader className="pb-2 px-3 sm:px-6">
-            <CardTitle className="text-sm font-medium text-foreground">By Category</CardTitle>
-            <p className="text-xs text-muted-foreground">Open and in-progress items by type.</p>
-          </CardHeader>
-          <CardContent className="px-3 sm:px-6 min-w-0">
-                {summary.byCategory.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
-                ) : (
-                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
-                    <PieChart>
-                      <ChartTooltip content={<ChartTooltipContent nameKey="name" />} />
-                      <Pie
-                        data={[...summary.byCategory].sort((a, b) => b.count - a.count).slice(0, 8)}
-                        dataKey="count"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={56}
-                        outerRadius={88}
-                        paddingAngle={2}
-                        stroke="hsl(var(--border))"
-                      >
-                        {[...summary.byCategory].sort((a, b) => b.count - a.count).slice(0, 8).map((_, index) => (
-                          <Cell key={index} fill={CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length]} stroke="hsl(var(--border))" />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ChartContainer>
-                )}
-              </CardContent>
-            </Card>
-        <Card className="bg-card border-border overflow-hidden">
-          <CardHeader className="pb-2 px-3 sm:px-6">
-            <CardTitle className="text-sm font-medium text-foreground">Open Items by Site</CardTitle>
-            <p className="text-xs text-muted-foreground">Sites with outstanding tasks.</p>
-          </CardHeader>
-          <CardContent className="px-3 sm:px-6 min-w-0">
-                {summary.bySite.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
-                ) : (
-                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
-                    <BarChart
-                      data={[...summary.bySite].sort((a, b) => b.count - a.count).slice(0, 8)}
-                      layout="vertical"
-                      margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                      <YAxis type="category" dataKey="site" width={140} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                      <ChartTooltip content={<ChartTooltipContent nameKey="site" />} />
-                      <Bar dataKey="count" name="Items" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} maxBarSize={24} />
-                    </BarChart>
-                  </ChartContainer>
-                )}
-              </CardContent>
-            </Card>
-          </>
-        )}
-      </div>
-
       <Card className="bg-card border-border overflow-hidden">
         <CardHeader className="pb-2 px-3 sm:px-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -692,6 +626,72 @@ export default function OperationsLog() {
           )}
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {summaryLoading ? (
+          <ByCategoryBySiteSkeleton />
+        ) : (
+          <>
+        <Card className="bg-card border-border overflow-hidden">
+          <CardHeader className="pb-2 px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium text-foreground">By Category</CardTitle>
+            <p className="text-xs text-muted-foreground">Open and in-progress items by type.</p>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6 min-w-0">
+                {summary.byCategory.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
+                ) : (
+                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
+                    <PieChart>
+                      <ChartTooltip content={<ChartTooltipContent nameKey="name" />} />
+                      <Pie
+                        data={[...summary.byCategory].sort((a, b) => b.count - a.count).slice(0, 8)}
+                        dataKey="count"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={56}
+                        outerRadius={88}
+                        paddingAngle={2}
+                        stroke="hsl(var(--border))"
+                      >
+                        {[...summary.byCategory].sort((a, b) => b.count - a.count).slice(0, 8).map((_, index) => (
+                          <Cell key={index} fill={CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length]} stroke="hsl(var(--border))" />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ChartContainer>
+                )}
+              </CardContent>
+            </Card>
+        <Card className="bg-card border-border overflow-hidden">
+          <CardHeader className="pb-2 px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium text-foreground">Open Items by Site</CardTitle>
+            <p className="text-xs text-muted-foreground">Sites with outstanding tasks.</p>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6 min-w-0">
+                {summary.bySite.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
+                ) : (
+                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
+                    <BarChart
+                      data={[...summary.bySite].sort((a, b) => b.count - a.count).slice(0, 8)}
+                      layout="vertical"
+                      margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis type="category" dataKey="site" width={140} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                      <ChartTooltip content={<ChartTooltipContent nameKey="site" />} />
+                      <Bar dataKey="count" name="Items" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} maxBarSize={24} />
+                    </BarChart>
+                  </ChartContainer>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
 
       <NewEntryModal
         open={newEntryOpen}

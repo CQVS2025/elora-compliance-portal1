@@ -5,7 +5,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  pointerWithin,
+  closestCenter,
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core';
@@ -133,9 +133,21 @@ export function OperationsLogBoardView({
     const currentStatus = active.data.current?.currentStatus;
     const entryId = active.data.current?.entryId;
     if (!entryId || !currentStatus) return;
-    if (STATUS_COLUMNS.includes(over.id) && over.id !== currentStatus) {
+
+    const overId = String(over.id);
+
+    // Resolve target status: either dropped on column (over.id is status) or on a card (over.id is entry id)
+    let targetStatus = null;
+    if (STATUS_COLUMNS.includes(overId)) {
+      targetStatus = overId;
+    } else {
+      const targetEntry = entries.find((e) => String(e.id) === overId);
+      if (targetEntry?.status) targetStatus = targetEntry.status;
+    }
+
+    if (targetStatus && STATUS_COLUMNS.includes(targetStatus) && targetStatus !== currentStatus) {
       updateStatus.mutate(
-        { entryId, status: over.id },
+        { entryId, status: targetStatus },
         {
           onSuccess: () => toastSuccess('update', 'status'),
           onError: () => {},
@@ -146,7 +158,7 @@ export function OperationsLogBoardView({
 
   return (
     <div className="space-y-4 min-w-0">
-      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
           {STATUS_COLUMNS.map((status) => (
             <div key={status} className="rounded-lg border bg-muted/30 p-3">

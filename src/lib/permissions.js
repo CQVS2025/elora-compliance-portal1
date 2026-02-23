@@ -195,17 +195,17 @@ export function getAccessibleTabs(userProfile) {
 
   // Super admin sees all tabs (Users tab moved to Admin console). SMS Alerts on by default only for super_admin. Edit Operations Log on by default for super_admin.
   if (role === 'super_admin') {
-    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
   }
 
   // Admin and all other roles: SMS Alerts off by default. Edit Operations Log on by default for admin.
   if (role === 'admin') {
-    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
   }
 
   // Manager sees most tabs (limited to assigned sites). Edit Operations Log on by default for manager.
   if (role === 'manager') {
-    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // User (demo) sees same as admin but limited to assigned company/companies. No operations-log-edit by default.

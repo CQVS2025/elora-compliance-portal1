@@ -107,7 +107,7 @@ export function getEffectiveConfig(email) {
   return null;
 }
 
-const ALL_TAB_VALUES = ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+const ALL_TAB_VALUES = ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
 
 /**
  * Get tabs allowed by role: Admin Console role override if set, else role default from getAccessibleTabs.
@@ -200,6 +200,7 @@ export function usePermissions() {
       // Tab visibility: effective set after Role → Company → User
       effectiveTabValues: effectiveTabs,
       canEditOperationsLog: effectiveTabs.includes('operations-log-edit'),
+      showProductsInOpsLogEntry: effectiveTabs.includes('operations-log-products'),
       visibleTabs: perms.visible_tabs,
       hiddenTabs: perms.hidden_tabs,
 

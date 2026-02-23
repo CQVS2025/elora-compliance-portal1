@@ -34,13 +34,14 @@ import AIInsightsRecommendations from '@/components/ai-insights/AIInsightsRecomm
 import AIInsightsPatterns from '@/components/ai-insights/AIInsightsPatterns';
 
 // Default filter values (no site in main filters)
+// Default date range: first of current month → today (for all roles with AI Insights access)
 const getDefaultFilters = () => ({
   selectedCustomer: 'all',
   dateRange: {
-    start: moment().format('YYYY-MM-DD'),
+    start: moment().startOf('month').format('YYYY-MM-DD'),
     end: moment().format('YYYY-MM-DD')
   },
-  activePeriod: 'Today'
+  activePeriod: 'Month'
 });
 
 // Date range for period preset
