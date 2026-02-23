@@ -349,7 +349,7 @@ export default function OperationsLog() {
   }, [summaryEntries, siteRefToName]);
 
   const canCreate =
-    (permissions.isAdmin || permissions.isSuperAdmin) &&
+    permissions.canEditOperationsLog &&
     (myOpsPermissions === undefined || myOpsPermissions?.can_create !== false);
 
   const handleExport = () => {

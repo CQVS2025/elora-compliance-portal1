@@ -20,7 +20,7 @@ const ALL_TABS = [
   { value: 'dashboard', label: 'Dashboard' },
   { value: 'compliance', label: 'Compliance' },
   { value: 'operations-log', label: 'Operations Log' },
-  { value: 'operations-log-edit', label: 'Edit Operations Log' },
+  { value: 'operations-log-edit', label: 'Create & Edit Operations Log' },
   { value: 'costs', label: 'Usage Costs' },
   { value: 'refills', label: 'Tank Levels' },
   { value: 'devices', label: 'Device Health' },
