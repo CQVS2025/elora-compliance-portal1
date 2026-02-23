@@ -42,6 +42,13 @@ function productDisplay(productType) {
   return 'ECSR';
 }
 
+/** Prefer actual product name from last refill (matches CMS Products); else short type. */
+function tankProductDisplay(tank) {
+  const name = tank.lastRefill?.productName ?? tank.lastRefill?.product;
+  if (name && typeof name === 'string' && name.trim()) return name.trim();
+  return productDisplay(tank.product_type);
+}
+
 export default function TankLevels() {
   const { userProfile } = useAuth();
   const companyId = userProfile?.company_id;
@@ -210,7 +217,7 @@ export default function TankLevels() {
         site.location,
         tank.status,
         tank.tank_number,
-        tank.product_type,
+        tankProductDisplay(tank),
         tank.currentLitres || '-',
         tank.max_capacity_litres,
         tank.percentage ? `${tank.percentage}%` : '-',
@@ -413,6 +420,8 @@ export default function TankLevels() {
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Date Range Filter - removed per client: tank levels are always "live" (last refill → now) */}
 
             {/* Reset Filters */}
             <Button
@@ -652,7 +661,7 @@ export default function TankLevels() {
                         <td className="p-3 text-sm font-medium text-primary">{site.siteName}</td>
                         <td className="p-3 text-sm">{site.customer}</td>
                         <td className="p-3 text-sm text-muted-foreground">{site.state || '—'}</td>
-                        <td className="p-3 text-sm">{productDisplay(tank.product_type)}</td>
+                        <td className="p-3 text-sm">{tankProductDisplay(tank)}</td>
                         <td className="p-3 text-sm">T{tank.tank_number}</td>
                         <td className="p-3">
                           <div className="flex items-center gap-2">

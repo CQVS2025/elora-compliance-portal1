@@ -21,9 +21,10 @@ Deno.serve(async (req) => {
     const vehicleId = body.vehicle_id ?? body.vehicleId ?? body.vehicle ?? url.searchParams.get('vehicle_id') ?? url.searchParams.get('vehicle');
     const deviceId = body.device_id ?? body.deviceId ?? body.device ?? url.searchParams.get('device_id') ?? url.searchParams.get('device');
     const exportParam = body.export ?? url.searchParams.get('export') ?? 'true';
+    const page = body.page ?? url.searchParams.get('page');
+    const pageSize = body.pageSize ?? body.page_size ?? url.searchParams.get('pageSize') ?? url.searchParams.get('page_size');
 
     const params = new URLSearchParams();
-    params.set('export', String(exportParam));
     params.set('status', status);
     if (customerId && customerId !== 'all') params.append('customer', customerId);
     if (siteId && siteId !== 'all') params.append('site', siteId);
@@ -31,6 +32,12 @@ Deno.serve(async (req) => {
     if (deviceId && deviceId !== 'all') params.append('device', deviceId);
     if (startDate) params.append('fromDate', startDate);
     if (endDate) params.append('toDate', endDate);
+    if (page != null && page !== '' && pageSize != null && pageSize !== '') {
+      params.append('page', String(page));
+      params.append('pageSize', String(Math.min(Number(pageSize) || 1000, 1000)));
+    } else {
+      params.set('export', String(exportParam));
+    }
 
     const response = await fetch(`https://www.elora.com.au/api/scans?${params.toString()}`, {
       headers: { 'x-api-key': apiKey },
@@ -46,6 +53,10 @@ Deno.serve(async (req) => {
     }
 
     const json = await response.json();
+    // Return full response when API returns paginated shape so client can paginate (e.g. { data, total, page, pageCount, pageSize })
+    if (json != null && typeof json === 'object' && Array.isArray(json.data) && typeof json.total === 'number') {
+      return Response.json(json);
+    }
     return Response.json(json?.data ?? json);
   } catch (error) {
     console.error('Server error:', error);

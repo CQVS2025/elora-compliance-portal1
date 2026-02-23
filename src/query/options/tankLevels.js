@@ -6,11 +6,18 @@ import { queryKeys } from '../keys';
 
 /**
  * Tank Levels Query Options
- * 
- * Calculates real-time tank levels based on:
- * 1. Last refill (newTotalLitres from /api/refills)
- * 2. Consumption since refill (scans × washTime × calibration_rate)
- * 3. Tank configuration (capacity, thresholds)
+ *
+ * Implements the live "tank level / remaining chemical" indicator per site + product tank (client spec).
+ *
+ * Objective: "Since the last delivered/confirmed refill, how much product has been used, and how much should be left in the tank right now?"
+ *
+ * Data flow:
+ * - Tank config (DB): product type, max capacity, calibration (L/60s), thresholds, device_ref/serial (serial from CMS).
+ * - Refills API: status Delivered/Confirmed only; latest per site+product = baseline; start level = new_total_litres when available, else max_capacity.
+ * - Scans API: all wash events; filter scan.created_at >= last_refill_datetime; match to tank by device (device_ref so Foam vs Truck Wash correct).
+ * - Consumption: liters_used_per_scan = calibration_rate_per_60s * (wash_time_seconds / 60). Wash time required; missing → 0 and flag.
+ * - Remaining = start_level - sum(consumption); clamp [0, max_capacity]; remaining_percent = (remaining / max_capacity) * 100; status from thresholds.
+ * - No user date range in UI; internally filter scans from last refill → now.
  */
 
 const UNKNOWN_LOCATION = 'Unknown Location';
@@ -78,6 +85,33 @@ function getSiteState(site) {
 }
 
 /**
+ * Parse refill date from API (may be YYYY-MM-DD, DD/MM/YYYY, or ISO string).
+ * Returns { date: Date, dateOnly: string } with dateOnly as YYYY-MM-DD for consistent "Since refill" display.
+ */
+function parseRefillDate(refill) {
+  const raw = refill.deliveredAt ?? refill.dateTime ?? refill.date;
+  if (!raw) return { date: new Date(0), dateOnly: '' };
+  const s = String(raw).trim();
+  // Already YYYY-MM-DD or ISO
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const date = new Date(s);
+    const dateOnly = s.slice(0, 10);
+    return { date: Number.isFinite(date.getTime()) ? date : new Date(0), dateOnly };
+  }
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    const date = new Date(Number(y), Number(m) - 1, Number(d));
+    const dateOnly = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    return { date, dateOnly };
+  }
+  const date = new Date(s);
+  const dateOnly = Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : '';
+  return { date: Number.isFinite(date.getTime()) ? date : new Date(0), dateOnly };
+}
+
+/**
  * Fetch tank configurations from Supabase (active only - for Tank Levels calculation)
  */
 export const tankConfigurationsOptions = () =>
@@ -124,8 +158,12 @@ function calculateConsumption(washTimeSeconds, calibrationRate) {
     // Exclude 0s and ≤15s scans (drive-through, no actual wash)
     return 0;
   }
+  // Ensure calibrationRate is a number (might be string from DB)
+  const rate = typeof calibrationRate === 'string' ? parseFloat(calibrationRate) : calibrationRate;
+  if (isNaN(rate) || rate <= 0) return 0;
+  
   // Include ≥600s scans but flag them (handled in UI)
-  return (washTimeSeconds / 60) * calibrationRate;
+  return (washTimeSeconds / 60) * rate;
 }
 
 /**
@@ -138,18 +176,18 @@ function calculateAvgDailyConsumption(scans, calibrationRate, daysToAnalyze = 7)
   const cutoffDate = new Date(now.getTime() - daysToAnalyze * 24 * 60 * 60 * 1000);
   
   const recentScans = scans.filter(scan => {
-    const scanDate = new Date(scan.createdAt);
+    const scanDate = new Date(scan.createdAt ?? scan.created_at);
     return scanDate >= cutoffDate;
   });
   
   if (recentScans.length === 0) return 0;
   
   const totalConsumed = recentScans.reduce((sum, scan) => {
-    return sum + calculateConsumption(scan.washTime, calibrationRate);
+    const washTime = scan.washTime ?? scan.wash_time;
+    return sum + calculateConsumption(washTime, calibrationRate);
   }, 0);
   
-  // Calculate actual days spanned
-  const oldestScan = new Date(Math.min(...recentScans.map(s => new Date(s.createdAt))));
+  const oldestScan = new Date(Math.min(...recentScans.map(s => new Date(s.createdAt ?? s.created_at))));
   const daysSpanned = Math.max(1, (now - oldestScan) / (24 * 60 * 60 * 1000));
   
   return totalConsumed / daysSpanned;
@@ -159,6 +197,7 @@ function calculateAvgDailyConsumption(scans, calibrationRate, daysToAnalyze = 7)
  * Get status based on percentage
  */
 function getTankStatus(percentage, warningThreshold = 20, criticalThreshold = 10) {
+  if (percentage == null || !Number.isFinite(percentage)) return 'NO_DATA';
   if (percentage < criticalThreshold) return 'CRITICAL';
   if (percentage < warningThreshold) return 'WARNING';
   return 'OK';
@@ -233,10 +272,13 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
     });
 
     // Customer always from device so grouping is correct (one card per customer+site, not one card per site name)
+    // Include customerRef/siteRef so we can match refills and scans by ID instead of name when API returns refs
+    const deviceCustomerRef = device.customerRef || device.customer_ref;
     const site = apiSite ? {
       ...apiSite,
       siteRef: apiSite.ref || apiSite.siteRef || deviceSiteRef,
       siteName: apiSite.siteName || apiSite.name || deviceSiteName,
+      customerRef: deviceCustomerRef || apiSite.customerRef || apiSite.customer_ref,
       suburb: apiSite.suburb ?? apiSite.addr_suburb ?? apiSite.addressSuburb,
       stateShort: apiSite.stateShort ?? apiSite.state_short ?? apiSite.addr_state_short ?? apiSite.state,
       location: apiSite.location,
@@ -244,25 +286,67 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
     } : {
       siteRef: deviceSiteRef,
       siteName: deviceSiteName,
+      customerRef: deviceCustomerRef,
       customer: deviceCustomer,
       suburb: undefined,
       stateShort: undefined,
       location: undefined,
     };
     
-    // Find last refill for this site/product
-    // Refills API uses site NAME (not code), so match by name
+    // Find last refill for this site + product type
+    // Prefer matching by siteRef/customerRef (IDs) when API returns them; fall back to site/customer names
+    const siteName = (site.siteName || '').trim();
+    const productType = (config.product_type || '').toUpperCase(); // ECSR, TW, GEL
     const siteRefills = refills
-      .filter(r => 
-        r.site === site.siteName || 
-        r.siteName === site.siteName ||
-        r.siteRef === site.siteRef
-      )
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-    
+      .filter(r => {
+        const rSiteRef = (r.siteRef ?? r.site_ref ?? '').toString().trim();
+        const rCustomerRef = (r.customerRef ?? r.customer_ref ?? '').toString().trim();
+        const siteMatchByRef = rSiteRef && site.siteRef && rSiteRef === site.siteRef;
+        const customerMatchByRef = !site.customerRef || !rCustomerRef || rCustomerRef === site.customerRef;
+        const siteMatch =
+          (siteMatchByRef && customerMatchByRef) ||
+          (() => {
+            const rSite = (r.site ?? r.siteName ?? '').toString().trim();
+            return (rSite === siteName || (r.siteName && r.siteName === siteName)) ||
+              (siteName && rSite && (rSite.endsWith(siteName) || rSite.includes(' - ' + siteName)));
+          })();
+        if (!siteMatch) return false;
+        // Refills are already requested with customerRef when not super admin, so no need to filter by customer name/ref here
+        // Only use refills for this tank's product (CONC/ECSR / FOAM / TW / GEL) so multi-tank sites get correct level per product
+        // FOAM tanks at Prestons etc. use refill product "ELORA-GAR - GUNLAKE" (not the word "FOAM"), so match ELORA-GAR / GAR to FOAM.
+        if (productType) {
+          const rProduct = (r.productName ?? r.product ?? '').toString().toUpperCase();
+          const hasEcsr = (productType === 'ECSR' || productType === 'CONC') && (
+            rProduct.includes('ECSR') ||
+            rProduct.includes('CONCRETE SAFE') ||
+            rProduct.includes('CONC') ||
+            rProduct.includes('ELORA-GAR') ||
+            rProduct.includes(' GAR ') ||
+            rProduct.includes(' GAR)')
+          );
+          const hasFoam = productType === 'FOAM' && (
+            rProduct.includes('FOAM') ||
+            rProduct.includes('ELORA-GAR') ||
+            rProduct.includes(' GAR ') ||
+            rProduct.includes('GAR)')
+          );
+          const hasTw = productType === 'TW' && (rProduct.includes('TRUCK WASH') || rProduct.includes(' ETW') || rProduct.includes('TW-'));
+          const hasGel = productType === 'GEL' && rProduct.includes('GEL');
+          if (!hasEcsr && !hasFoam && !hasTw && !hasGel) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        // Latest by date/time (Rule 2: pick the latest Delivered/Confirmed)
+        const aParsed = parseRefillDate(a);
+        const bParsed = parseRefillDate(b);
+        return bParsed.date - aParsed.date;
+      });
+
     const lastRefill = siteRefills[0];
     
     if (!lastRefill) {
+      // Edge case: no Delivered/Confirmed refill — show "No refill data" / Unknown (Rule D)
       return {
         ...config,
         device,
@@ -275,40 +359,86 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
       };
     }
 
-    // Get scans since last refill
-    // Scans API - match by device serial number
-    const refillDate = new Date(lastRefill.date);
+    // Get scans since last refill (Rule 3: scan.created_at >= last_refill_datetime)
+    // Use parsed refill date so "Since refill" in UI matches the baseline we use for filtering scans
+    const refillParsed = parseRefillDate(lastRefill);
+    const refillDateTime = refillParsed.date;
     const deviceSerialId = device.computerSerialId || device.computerSerial || device.serial;
-    
-    const scansSinceRefill = scans.filter(scan => {
-      const scanDate = new Date(scan.createdAt);
-      // Match by device serial (most reliable)
+    const deviceRefFromApi = device.deviceRef || device.ref;
+    const configDeviceRef = (config.device_ref || '').toString().trim();
+    const deviceComputerName = device.computerName || device.computer_name;
+    const siteNameNorm = (site.siteName || '').trim().toLowerCase();
+    const customerNorm = (site.customer || '').trim().toLowerCase();
+
+    const scanMatchesDevice = (scan) => {
+      // Prefer tank config device_ref (source of truth from CMS) — matches scan's deviceRef to this tank (e.g. Foam vs Truck Wash)
+      const scanDeviceRef = (scan.deviceRef ?? scan.device_ref ?? '').toString().trim();
+      if (configDeviceRef && scanDeviceRef && scanDeviceRef === configDeviceRef) return true;
+      if (deviceRefFromApi && scanDeviceRef && scanDeviceRef === deviceRefFromApi) return true;
       const scanSerial = scan.deviceSerial || scan.device_serial || scan.computerSerialId;
-      const matchesDevice = scanSerial === deviceSerialId ||
-                           scan.deviceRef === device.deviceRef; // Fallback to deviceRef
-      // Also verify site as sanity check
-      const matchesSite = !scan.siteRef || 
-                         scan.siteRef === site.siteRef || 
-                         scan.siteName === site.siteName;
-      return matchesDevice && matchesSite && scanDate >= refillDate;
+      if (scanSerial && deviceSerialId && String(scanSerial).trim() === String(deviceSerialId).trim()) return true;
+      const scanDeviceName = scan.computerName || scan.computer_name || scan.deviceName || scan.device_name || scan.genie;
+      if (scanDeviceName && deviceComputerName && String(scanDeviceName).trim() === String(deviceComputerName).trim()) return true;
+      return false;
+    };
+
+    const scanMatchesSiteAndCustomer = (scan) => {
+      const scanSiteRef = (scan.siteRef ?? scan.site_ref ?? '').toString().trim();
+      const scanCustomerRef = (scan.customerRef ?? scan.customer_ref ?? '').toString().trim();
+      if (scanSiteRef && site.siteRef && scanSiteRef === site.siteRef) {
+        if (site.customerRef && scanCustomerRef) return scanCustomerRef === site.customerRef;
+        return true;
+      }
+      const scanSite = (scan.siteName || scan.site_name || scan.site || '').trim().toLowerCase();
+      const scanCustomer = (scan.customerName || scan.customer || '').trim().toLowerCase();
+      if (!siteNameNorm) return true;
+      const siteOk = scanSite === siteNameNorm || (scanSite && scanSite.includes(siteNameNorm)) || (siteNameNorm && scanSite.includes(siteNameNorm));
+      const customerOk = !customerNorm || !scanCustomer || scanCustomer === customerNorm;
+      return siteOk && customerOk;
+    };
+
+    const scansSinceRefill = scans.filter(scan => {
+      const scanDate = new Date(scan.createdAt || scan.created_at);
+      if (scanDate < refillDateTime) return false;
+      if (!scanMatchesDevice(scan)) return false;
+      if (!scanMatchesSiteAndCustomer(scan)) return false;
+      return true;
     });
 
-    // Calculate total consumption
+    // Rule 5: wash time affects consumption. Missing wash time → 0 consumption and flag (Rule D).
+    const scansWithMissingWashTime = scansSinceRefill.filter(s => {
+      const wt = s.washTime ?? s.wash_time;
+      return wt == null || wt === '' || (typeof wt === 'number' && isNaN(wt));
+    });
+
+    // Calculate total consumption (API may return washTime or wash_time)
     const totalConsumed = scansSinceRefill.reduce((sum, scan) => {
-      return sum + calculateConsumption(scan.washTime, config.calibration_rate_per_60s);
+      const washTime = scan.washTime ?? scan.wash_time;
+      return sum + calculateConsumption(washTime, config.calibration_rate_per_60s);
     }, 0);
 
-    // Calculate current level
-    const startingLevel = lastRefill.newTotalLitres || lastRefill.deliveredLitres || 0;
-    const currentLitres = Math.max(0, startingLevel - totalConsumed);
-    const percentage = (currentLitres / config.max_capacity_litres) * 100;
+    // Calculate current level: start from refill newTotalLitres when available, else max capacity. Clamp to [0, max_capacity].
+    const startingLevel = lastRefill.newTotalLitres ?? lastRefill.new_total_litres ?? lastRefill.deliveredLitres ?? lastRefill.delivered_litres ?? 0;
+    const totalConsumedNum = Number.isFinite(totalConsumed) ? totalConsumed : 0;
+    const maxCap = Number(config.max_capacity_litres) || 0;
+    const startLevelNum = Number(startingLevel) || maxCap || 0;
+    const currentLitresRaw = Math.max(0, startLevelNum - totalConsumedNum);
+    const currentLitres = Number.isFinite(currentLitresRaw)
+      ? (maxCap > 0 ? Math.min(maxCap, Math.max(0, currentLitresRaw)) : Math.max(0, currentLitresRaw))
+      : null;
+    const percentage = maxCap > 0 && currentLitres != null && Number.isFinite(currentLitres)
+      ? (currentLitres / maxCap) * 100
+      : null;
 
     // Calculate days remaining
     const avgDailyConsumption = calculateAvgDailyConsumption(
       scansSinceRefill,
       config.calibration_rate_per_60s
     );
-    const daysRemaining = avgDailyConsumption > 0 ? currentLitres / avgDailyConsumption : null;
+    const avgDailyNum = Number.isFinite(avgDailyConsumption) ? avgDailyConsumption : 0;
+    const daysRemaining = avgDailyNum > 0 && currentLitres != null && Number.isFinite(currentLitres)
+      ? currentLitres / avgDailyNum
+      : null;
 
     // Get status
     const status = getTankStatus(
@@ -318,7 +448,7 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
     );
 
     // Validate
-    const flags = validateTankLevel(currentLitres, config.max_capacity_litres, lastRefill.date);
+    const flags = validateTankLevel(currentLitres, config.max_capacity_litres, refillParsed.dateOnly || lastRefill.date);
 
     // Check for device offline and stale data
     if (device.lastScanAt) {
@@ -333,28 +463,35 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
     }
 
     // Check for anomalous scans
-    const anomalousScans = scansSinceRefill.filter(s => s.washTime >= 600);
+    const anomalousScans = scansSinceRefill.filter(s => (s.washTime ?? s.wash_time) >= 600);
     if (anomalousScans.length > 0) {
       flags.push({ type: 'WASH_TIME_ANOMALY', message: `${anomalousScans.length} scans with ≥600s wash time` });
     }
+    if (scansWithMissingWashTime.length > 0) {
+      flags.push({ type: 'MISSING_WASH_TIME', message: `${scansWithMissingWashTime.length} scan(s) with missing wash time (excluded from consumption)` });
+    }
+
+    const safeRound = (v) => (v != null && Number.isFinite(v) ? Math.round(v) : null);
+    const safeRound1 = (v) => (v != null && Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 
     return {
       ...config,
       device,
       site,
       status,
-      currentLitres: Math.round(currentLitres),
-      percentage: Math.round(percentage * 10) / 10, // Round to 1 decimal
-      daysRemaining: daysRemaining ? Math.round(daysRemaining * 10) / 10 : null,
+      currentLitres: currentLitres != null ? Math.round(currentLitres) : null,
+      percentage: percentage != null && Number.isFinite(percentage) ? Math.round(percentage * 10) / 10 : null,
+      daysRemaining: daysRemaining != null && Number.isFinite(daysRemaining) ? Math.round(daysRemaining * 10) / 10 : null,
       lastRefill: {
-        date: lastRefill.date,
-        amount: lastRefill.newTotalLitres,
+        date: refillParsed.dateOnly || lastRefill.date,
+        amount: lastRefill.newTotalLitres ?? lastRefill.new_total_litres,
         ref: lastRefill.ref,
+        productName: lastRefill.productName ?? lastRefill.product ?? null,
       },
       consumption: {
-        totalLitres: Math.round(totalConsumed),
+        totalLitres: safeRound(totalConsumedNum),
         scanCount: scansSinceRefill.length,
-        avgDailyLitres: Math.round(avgDailyConsumption * 10) / 10,
+        avgDailyLitres: safeRound1(avgDailyConsumption),
       },
       flags,
       lastScanAt: device.lastScanAt,
@@ -385,23 +522,34 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
       const tenantContext = getEloraTenantContext();
       
       // Fetch all required data in parallel
-      // Refills: only confirmed and delivered count as actual refills (not scheduled)
-      // Scans: only success and exceeded = real washes; exclude auto check-ins
-      // Devices: only active devices (cross-reference with CMS)
+      // Refills: only Delivered/Confirmed (Rule 2). Scans: all wash events, export=true. Devices: Active only (CMS source of truth).
+      // No user date range — always "live"; internal range last 2 years → today (Rule 1).
+      const toDate = new Date().toISOString().split('T')[0];
+      const fromDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const customerRef = !tenantContext.isSuperAdmin ? tenantContext.companyEloraCustomerRef : undefined;
+
       const [tankConfigs, refillsResponse, scansResponse, devicesResponse, sitesResponse] = await Promise.all([
         supabase.from('tank_configurations').select('*').eq('active', true),
         callEdgeFunction('elora_refills', {
-          customerRef: !tenantContext.isSuperAdmin ? tenantContext.companyEloraCustomerRef : undefined,
+          customerRef,
           status: 'confirmed,delivered',
+          fromDate,
+          toDate,
         }),
         callEdgeFunction('elora_scans', {
-          customerRef: !tenantContext.isSuperAdmin ? tenantContext.companyEloraCustomerRef : undefined,
-          export: 'all',
+          customer: customerRef,
+          customerId: customerRef,
+          customer_id: customerRef,
+          fromDate,
+          toDate,
+          start_date: fromDate,
+          end_date: toDate,
           status: 'success,exceeded',
+          export: true,
         }),
         callEdgeFunction('elora_devices', {
           status: 'active',
-          customer_id: !tenantContext.isSuperAdmin ? tenantContext.companyEloraCustomerRef : undefined,
+          customer_id: customerRef,
         }),
         callEdgeFunction('elora_sites', {}),
       ]);
@@ -409,8 +557,19 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
       if (tankConfigs.error) throw tankConfigs.error;
 
       const configs = tankConfigs.data || [];
-      let refills = Array.isArray(refillsResponse) ? refillsResponse : (refillsResponse?.data || []);
-      let scans = Array.isArray(scansResponse) ? scansResponse : (scansResponse?.data || []);
+      let refills = [];
+      if (refillsResponse != null && !refillsResponse.error) {
+        refills = Array.isArray(refillsResponse)
+          ? refillsResponse
+          : (refillsResponse?.data ?? refillsResponse?.refills ?? []);
+      }
+      if (!Array.isArray(refills)) refills = [];
+      // Scans: API with export=true may return array directly or { data, total }; avoid using error payload as data
+      let scans = [];
+      if (scansResponse != null && !scansResponse.error) {
+        scans = Array.isArray(scansResponse) ? scansResponse : (scansResponse?.data ?? []);
+      }
+      if (!Array.isArray(scans)) scans = [];
       const devices = Array.isArray(devicesResponse) ? devicesResponse : (devicesResponse?.data || []);
 
       // Only confirmed or delivered refills count for tank level "since refill" (exclude scheduled/cancelled)
@@ -469,10 +628,13 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
         (t) => t.status !== 'NO_DEVICE' && t.status !== 'ERROR'
       );
 
-      // Only show a tank when config.site_ref matches the device's current site from the API.
-      // tank_configurations can have stale rows (device moved or decommissioned); device site is source of truth.
+      // Only show a tank when config.site_ref matches the device's current site (by ref or name).
+      // Prefer ID: when API device has siteRef and config has a ref-like value, compare refs; else compare normalized names.
       tankLevelsToShow = tankLevelsToShow.filter((t) => {
         if (!t.device) return true;
+        const configRef = (t.site_ref ?? '').toString().trim();
+        const deviceSiteRef = (t.device.siteRef ?? t.device.site_ref ?? '').toString().trim();
+        if (deviceSiteRef && configRef && deviceSiteRef === configRef) return true;
         const configSite = normalizeSiteName(t.site_ref);
         if (!configSite) return true;
         const deviceSite = normalizeSiteName(t.device.siteName ?? t.device.site_name);
@@ -570,7 +732,11 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
         );
       }
 
-      // Calculate summary metrics (based on displayed tanks only)
+      // Calculate summary metrics (based on displayed tanks only); exclude NaN from avgLevel
+      const tanksWithValidPct = tankLevelsToShow.filter((t) => t.percentage != null && Number.isFinite(t.percentage));
+      const avgLevel = tanksWithValidPct.length > 0
+        ? tanksWithValidPct.reduce((sum, t) => sum + t.percentage, 0) / tanksWithValidPct.length
+        : 0;
       const metrics = {
         totalSites: sitesWithTanks.length,
         monitoredSites: sitesWithTanks.filter((s) => s.overallStatus !== 'NO_DEVICE').length,
@@ -579,11 +745,7 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
         warningCount: sitesWithTanks.filter((s) => s.overallStatus === 'WARNING').length,
         okCount: sitesWithTanks.filter((s) => s.overallStatus === 'OK').length,
         totalTanks: tankLevelsToShow.length,
-        avgLevel:
-          tankLevelsToShow.filter((t) => t.percentage != null).length > 0
-            ? tankLevelsToShow.filter((t) => t.percentage != null).reduce((sum, t) => sum + t.percentage, 0) /
-              tankLevelsToShow.filter((t) => t.percentage != null).length
-            : 0,
+        avgLevel: Number.isFinite(avgLevel) ? avgLevel : 0,
       };
 
       return {

@@ -11,7 +11,10 @@
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
     "seed:tank-config": "node scripts/seed-tank-config-from-excel.mjs",
-    "seed:tank-config:sql": "node scripts/seed-tank-config-from-excel.mjs --output-sql"
+    "seed:tank-config:sql": "node scripts/seed-tank-config-from-excel.mjs --output-sql",
+    "update:tank-device-ref": "node scripts/update-tank-config-device-ref.mjs",
+    "update:tank-device-ref:dry": "node scripts/update-tank-config-device-ref.mjs --dry-run",
+    "verify:tank-levels": "node scripts/verify-tank-levels-gunlake-prestons.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

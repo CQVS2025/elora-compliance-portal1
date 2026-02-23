@@ -17,6 +17,13 @@ function productLabel(productType) {
   return 'ECSR';
 }
 
+/** Prefer actual product name from last refill (matches CMS Products); else short type. */
+function tankProductDisplay(tank) {
+  const name = tank.lastRefill?.productName ?? tank.lastRefill?.product;
+  if (name && typeof name === 'string' && name.trim()) return name.trim();
+  return productLabel(tank.product_type);
+}
+
 function displayLocation(site) {
   const loc = site?.location;
   if (loc && typeof loc === 'string' && loc !== 'undefined' && !/^(undefined|null)/i.test(loc)) return loc;
@@ -126,7 +133,7 @@ export default function TankLevelDetailSheet({ site, open, onOpenChange }) {
                         {tank.status}
                       </Badge>
                       <h4 className="text-sm font-semibold mb-3 pr-20">
-                        Tank {tank.tank_number} – {productLabel(tank.product_type)}
+                        Tank {tank.tank_number} – {tankProductDisplay(tank)}
                       </h4>
                       <div className="flex gap-4 mb-4">
                         <div className="shrink-0">

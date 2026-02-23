@@ -26,6 +26,13 @@ function productLabel(productType) {
   return 'ECSR';
 }
 
+/** Prefer actual product name from last refill (matches CMS Products); else short type (ECSR/TW/GEL). */
+function tankProductDisplay(tank) {
+  const name = tank.lastRefill?.productName ?? tank.lastRefill?.product;
+  if (name && typeof name === 'string' && name.trim()) return name.trim();
+  return productLabel(tank.product_type);
+}
+
 function displayLocation(site) {
   const loc = site?.location;
   const valid =
@@ -131,7 +138,7 @@ export default function TankLevelCard({ site, onClick }) {
                   </span>
                 )}
                 <span className="text-xs font-medium">
-                  Tank {tank.tank_number} {productLabel(tank.product_type)}
+                  Tank {tank.tank_number} {tankProductDisplay(tank)}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {tank.currentLitres != null ? tank.currentLitres : '—'}L / {tank.max_capacity_litres}L

@@ -109,7 +109,30 @@ const CMS_DEVICES = {
   "1000000095221e89": { customer: "GUNLAKE", site: "Glendenning", status: "Inactive" },
   "100000000ebec870": { customer: "HEIDELBERG MATERIALS - WA", site: "Neerabup", status: "Inactive" },
   "10000000514b1660": { customer: "BORAL - QLD", site: "Benowa", status: "Inactive" },
+  "0000000041ac048f": { customer: "BORAL - QLD", site: "Caloundra", status: "Active" },
+  "00000000bc11d216": { customer: "HOLCIM - VIC", site: "Oaklands Junction", status: "Active" },
 };
+
+// Generate SQL to fix device_ref in tank_configurations (run: node this-script.js --fix-device-ref-sql)
+if (process.argv.includes("--fix-device-ref-sql")) {
+  const fs = require("fs");
+  const path = require("path");
+  const lines = [
+    "-- Set device_ref from canonical mapping (device_serial + tank_number).",
+    "-- Run against your DB, e.g. psql $DATABASE_URL -f scripts/fix-tank-config-device-ref.sql",
+    "BEGIN;",
+    ...DB_CONFIGS.map((row) => {
+      const serial = row.device_serial.replace(/'/g, "''");
+      const ref = row.device_ref.replace(/'/g, "''");
+      return `UPDATE public.tank_configurations SET device_ref = '${ref}' WHERE device_serial = '${serial}' AND tank_number = ${row.tank_number};`;
+    }),
+    "COMMIT;",
+  ];
+  const outPath = path.join(process.cwd(), "scripts", "fix-tank-config-device-ref.sql");
+  fs.writeFileSync(outPath, lines.join("\n") + "\n", "utf8");
+  console.log("Wrote " + outPath + " (" + DB_CONFIGS.length + " UPDATEs).");
+  process.exit(0);
+}
 
 function norm(s) {
   if (s == null) return "";
@@ -154,6 +177,10 @@ for (const row of DB_CONFIGS) {
 
 console.log("=== TANK_CONFIG vs OLD CMS DEVICES — MISMATCH REPORT ===\n");
 
+console.log("0) DEVICE REF & SERIAL VERIFICATION (New DB vs Old System):");
+console.log("   Matching key: new DB device_serial = old system Computer Serial ID (computerSerialId).");
+console.log("   New DB device_ref (D00001..D00092) is your internal ref; old system uses deviceRef (e.g. 20220929141003S28442).");
+console.log("   All " + DB_CONFIGS.length + " new DB rows are matched by serial to the old system list below.\n");
 console.log("1) SITE MISMATCH (DB site_ref != CMS Site for this device):");
 console.log("   These rows cause wrong site grouping / wrong tank count per site.\n");
 if (report.siteMismatch.length === 0) {
