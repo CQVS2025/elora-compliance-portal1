@@ -28,6 +28,9 @@ export * from './vehicleLikelihoodOverrides';
 export * from './smsReminders';
 export * from './operationsLog';
 
+// Delivery calendar (Notion-synced)
+export * from './deliveries';
+
 // Admin options
 export * from './users';
 export * from './companies';

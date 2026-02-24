@@ -23,6 +23,7 @@ import SMSAlerts from './pages/SMSAlerts';
 import OperationsLog from './pages/OperationsLog';
 import OperationsLogEntryPage from './pages/OperationsLogEntryPage';
 import OperationsLogAttachmentPage from './pages/OperationsLogAttachmentPage';
+import DeliveryCalendar from './pages/DeliveryCalendar';
 import __Layout from './Layout.jsx';
 
 
@@ -52,6 +53,7 @@ export const PAGES = {
     "OperationsLog": OperationsLog,
     "OperationsLogEntry": OperationsLogEntryPage,
     "OperationsLogAttachment": OperationsLogAttachmentPage,
+    "DeliveryCalendar": DeliveryCalendar,
 }
 
 export const pagesConfig = {

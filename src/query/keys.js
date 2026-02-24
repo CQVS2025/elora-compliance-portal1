@@ -222,6 +222,9 @@ export const queryKeys = {
     products: () => ['products'],
     // Current user's operations log permissions (can_create, etc.)
     operationsLogMyPermissions: (userId) => ['operationsLogMyPermissions', userId],
+    // Delivery calendar (Notion-synced)
+    deliveryDrivers: () => ['deliveryDrivers'],
+    deliveryDeliveries: (filters = {}) => ['deliveryDeliveries', filters],
   },
   // AI Insights (tenant-scoped)
   ai: {

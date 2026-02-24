@@ -26,6 +26,7 @@ const PATH_TO_HEADER = {
   '/ai-insights': { title: 'Elora AI', description: 'Intelligent wash optimization & predictions' },
   '/sms-alerts': { title: 'SMS Alerts', description: 'Risk prediction alert history' },
   '/operations-log': { title: 'Operations Log', description: 'Site activity tracking, notes & task management' },
+  '/delivery-calendar': { title: 'Delivery Calendar', description: 'Delivery schedule from Notion' },
   '/Settings': { title: 'Settings', description: 'Manage your account preferences' },
   '/settings': { title: 'Settings', description: 'Manage your account preferences' },
   '/Profile': { title: 'Profile', description: 'Your account profile' },
@@ -61,6 +62,7 @@ const PATH_TO_TAB = {
   '/ai-insights': 'ai-insights',
   '/sms-alerts': 'sms-alerts',
   '/operations-log': 'operations-log',
+  '/delivery-calendar': 'delivery-calendar',
 };
 
 function getPathHeader(pathname) {

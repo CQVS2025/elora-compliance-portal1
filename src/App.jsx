@@ -232,6 +232,13 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        <Route path="/delivery-calendar" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.DeliveryCalendar)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
         <Route path="/operations-log/entry/:id" element={
           <AuthenticatedRoute>
             <DashboardLayout>

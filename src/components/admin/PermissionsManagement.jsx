@@ -61,6 +61,7 @@ const ALL_TABS = [
   { value: 'compliance', label: 'Compliance', icon: Check },
   { value: 'costs', label: 'Usage Costs', icon: DollarSign },
   { value: 'refills', label: 'Tank Levels', icon: Truck },
+  { value: 'delivery-calendar', label: 'Delivery Calendar', icon: BarChart2 },
   { value: 'devices', label: 'Device Health', icon: Settings },
   { value: 'sites', label: 'Sites', icon: MapPin },
   { value: 'reports', label: 'Reports', icon: FileText },

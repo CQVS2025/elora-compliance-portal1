@@ -107,18 +107,27 @@ export function getEffectiveConfig(email) {
   return null;
 }
 
-const ALL_TAB_VALUES = ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+const ALL_TAB_VALUES = ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
 
 /**
  * Get tabs allowed by role: Admin Console role override if set, else role default from getAccessibleTabs.
+ * When an override exists, we merge in any tabs from the role default that are missing (so new tabs
+ * like delivery-calendar appear without requiring a DB migration or re-saving Tab Visibility).
  */
 function getRoleTabs(userProfile, roleTabOverrides) {
   const role = userProfile?.role;
   if (!role) return ALL_TAB_VALUES;
+  const defaultTabs = getAccessibleTabs(userProfile) || ALL_TAB_VALUES;
   const roleData = roleTabOverrides?.[role];
   const overrideTabs = Array.isArray(roleData) ? roleData : roleData?.visible_tabs;
-  if (overrideTabs && overrideTabs.length > 0) return overrideTabs;
-  return getAccessibleTabs(userProfile) || ALL_TAB_VALUES;
+  if (overrideTabs && overrideTabs.length > 0) {
+    const combined = [...overrideTabs];
+    defaultTabs.forEach((t) => {
+      if (!combined.includes(t)) combined.push(t);
+    });
+    return combined;
+  }
+  return defaultTabs;
 }
 
 /**

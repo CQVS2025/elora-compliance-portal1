@@ -29,6 +29,8 @@ export function clearAllStorage(userEmail = null) {
       sessionStorage.removeItem('userEmail');
       sessionStorage.removeItem('authToken');
       sessionStorage.removeItem('sessionData');
+      // Top-level dashboard filters: reset so next session (e.g. after login) starts with defaults
+      sessionStorage.removeItem('elora-dashboard-filters');
       
       // Clear all Supabase-related keys
       Object.keys(sessionStorage).forEach(key => {

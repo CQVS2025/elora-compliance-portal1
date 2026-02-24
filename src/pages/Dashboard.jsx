@@ -83,6 +83,9 @@ const ALL_TABS = [
 
 const FILTER_STORAGE_KEY = 'elora-dashboard-filters';
 
+// Filters are stored in sessionStorage only (not localStorage), so:
+// - New session (new tab/window or after logout) = no stored data = default filters.
+// - Existing session (same tab, no logout) = restore filters so they are not reset on navigation.
 // Default filter values - each tab gets its own copy, no mixing
 const getDefaultFilters = () => ({
   selectedCustomer: 'all',
@@ -566,6 +569,23 @@ export default function Dashboard() {
       return { ...prev, selectedCustomer: companyRef, selectedSite: prev.selectedSite || 'all' };
     });
   }, [permissions.isSuperAdmin, permissions.userProfile?.company_elora_customer_ref]);
+
+  // When customer dropdown is editable, if stored selectedCustomer is not in the current customer list
+  // (e.g. stale sessionStorage or customer removed), reset to 'all' so the Select never gets stuck.
+  useEffect(() => {
+    if (lockCustomerFilter || customersLoading) return;
+    if (selectedCustomer === 'all' || selectedCustomer == null) return;
+    const isValid = customersForDropdown.some((c) => (c.id || c.ref) === selectedCustomer);
+    if (!isValid) {
+      setSharedFilters((prev) => ({
+        ...prev,
+        selectedCustomer: 'all',
+        selectedSite: 'all',
+        selectedDriverIds: [],
+        selectedDeviceId: 'all',
+      }));
+    }
+  }, [lockCustomerFilter, customersLoading, selectedCustomer, customersForDropdown]);
 
   // Auto-select site for batchers
   useEffect(() => {

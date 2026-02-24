@@ -148,7 +148,11 @@ export default function FilterSection({
         ) : (
           <div className="w-[180px] shrink-0">
             <Select
-              value={selectedCustomer}
+              value={
+                selectedCustomer === 'all' || customers.some((c) => (c.id || c.ref) === selectedCustomer)
+                  ? selectedCustomer
+                  : 'all'
+              }
               onValueChange={setSelectedCustomer}
             >
               <SelectTrigger className="w-full min-w-0">
