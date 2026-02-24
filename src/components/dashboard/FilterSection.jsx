@@ -257,10 +257,11 @@ export default function FilterSection({
 
         {onResetDateRange && (
           <Button
+            type="button"
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:text-foreground"
-            onClick={onResetDateRange}
+            onClick={() => onResetDateRange()}
           >
             <RotateCcw className="mr-1.5 h-4 w-4" />
             Reset

@@ -286,16 +286,20 @@ export default function Dashboard() {
   const resetAllFiltersToDefault = useCallback(() => {
     setIsResetting(true);
     const defaults = getDefaultFilters();
-    setSharedFilters(() => ({
+    setSharedFilters({
       selectedCustomer: defaults.selectedCustomer,
       selectedSite: defaults.selectedSite,
-      selectedDriverIds: defaults.selectedDriverIds,
-      selectedDeviceId: defaults.selectedDeviceId,
-      dateRange: { ...defaults.dateRange },
+      selectedDriverIds: Array.isArray(defaults.selectedDriverIds) ? [...defaults.selectedDriverIds] : [],
+      selectedDeviceId: defaults.selectedDeviceId ?? 'all',
+      dateRange: { start: defaults.dateRange.start, end: defaults.dateRange.end },
       activePeriod: defaults.activePeriod,
-    }));
+    });
     try {
-      sessionStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(defaults));
+      sessionStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({
+        ...defaults,
+        dateRange: defaults.dateRange,
+        selectedDriverIds: Array.isArray(defaults.selectedDriverIds) ? [...defaults.selectedDriverIds] : [],
+      }));
     } catch {
       // ignore
     }
@@ -774,9 +778,22 @@ export default function Dashboard() {
     const vehicles = Array.isArray(filteredVehicles) ? filteredVehicles : [];
     const targetDefault = 12;
     const getTargetWashes = (v) => v?.protocolNumber ?? v?.target ?? targetDefault;
-    const onTrackCount = vehicles.filter(v => v && (v.washes_completed ?? 0) >= getTargetWashes(v)).length;
-    const criticalCount = vehicles.filter(v => v && (v.washes_completed ?? 0) === 0).length;
-    const atRiskCount = vehicles.length - onTrackCount - criticalCount;
+    // Use effective likelihood (override ?? default) so top-level Compliance Rate reflects on/off track changes
+    const onTrackCount = vehicles.filter(v => {
+      if (!v) return false;
+      const effective = likelihoodOverrides[v.id ?? v.rfid] ?? getDefaultLikelihood(v, getTargetWashes(v));
+      return effective === 'green';
+    }).length;
+    const atRiskCount = vehicles.filter(v => {
+      if (!v) return false;
+      const effective = likelihoodOverrides[v.id ?? v.rfid] ?? getDefaultLikelihood(v, getTargetWashes(v));
+      return effective === 'orange';
+    }).length;
+    const criticalCount = vehicles.filter(v => {
+      if (!v) return false;
+      const effective = likelihoodOverrides[v.id ?? v.rfid] ?? getDefaultLikelihood(v, getTargetWashes(v));
+      return effective === 'red';
+    }).length;
     const totalWashes = vehicles.reduce((sum, v) => sum + (v?.washes_completed || 0), 0);
     const activeDriversCount = vehicles.filter(v => v && v.washes_completed > 0).length;
 
@@ -792,7 +809,7 @@ export default function Dashboard() {
         criticalPct: Math.round((criticalCount / total) * 100),
       } : { onTrackPct: 0, atRiskPct: 0, criticalPct: 0 },
     };
-  }, [filteredVehicles]);
+  }, [filteredVehicles, likelihoodOverrides]);
 
   // Unique sites for compliance table site filter (from current filtered vehicles)
   const complianceTableSites = useMemo(() => {
