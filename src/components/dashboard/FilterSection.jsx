@@ -142,39 +142,41 @@ export default function FilterSection({
 
       <div className="flex flex-wrap items-center gap-3">
         {lockCustomerFilter && displayName ? (
-          <div className="flex h-10 min-w-[180px] items-center rounded-md border border-transparent px-3 text-sm font-medium text-foreground">
+          <div className="flex h-9 min-w-0 shrink-0 items-center rounded-md border border-transparent px-3 text-sm font-medium text-foreground w-[180px]">
             {displayName}
           </div>
         ) : (
-          <Select
-            value={selectedCustomer}
-            onValueChange={setSelectedCustomer}
-          >
-            <SelectTrigger className="min-w-[180px]">
-              <SelectValue placeholder="All Customers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Customers</SelectItem>
-              {customers.map((customer) => (
-                <SelectItem key={customer.id} value={customer.id}>
-                  {customer.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="w-[180px] shrink-0">
+            <Select
+              value={selectedCustomer}
+              onValueChange={setSelectedCustomer}
+            >
+              <SelectTrigger className="w-full min-w-0">
+                <SelectValue placeholder="All Customers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Customers</SelectItem>
+                {customers.map((customer) => (
+                  <SelectItem key={customer.id} value={customer.id}>
+                    {customer.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         )}
 
         {lockSiteFilter && restrictedSiteName ? (
-          <div className="flex h-10 min-w-[160px] items-center rounded-md border border-transparent px-3 text-sm font-medium text-foreground">
+          <div className="flex h-9 w-[160px] shrink-0 items-center rounded-md border border-transparent px-3 text-sm font-medium text-foreground">
             {restrictedSiteName}
           </div>
         ) : (
-          <div className="relative">
+          <div className="w-[160px] shrink-0">
             <Select
               value={selectedSite}
               onValueChange={setSelectedSite}
             >
-              <SelectTrigger className="min-w-[160px]">
+              <SelectTrigger className="w-full min-w-0">
                 <SelectValue placeholder="All Sites" />
               </SelectTrigger>
               <SelectContent>
@@ -190,7 +192,7 @@ export default function FilterSection({
         )}
 
         {typeof setSelectedDriverIds === 'function' && (
-          <div className="min-w-[200px] max-w-[280px]">
+          <div className="w-[220px] min-w-0 shrink-0">
             <MultiSelection
               value={selectedDriverIds}
               options={driverOptions}
@@ -201,66 +203,72 @@ export default function FilterSection({
         )}
 
         {typeof setSelectedDeviceId === 'function' && (
-          <Select
-            value={selectedDeviceId}
-            onValueChange={setSelectedDeviceId}
-          >
-            <SelectTrigger className="min-w-[160px]">
-              <SelectValue placeholder="All devices" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All devices</SelectItem>
-              {deviceOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="w-[160px] shrink-0">
+            <Select
+              value={selectedDeviceId}
+              onValueChange={setSelectedDeviceId}
+            >
+              <SelectTrigger className="w-full min-w-0">
+                <SelectValue placeholder="All devices" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All devices</SelectItem>
+                {deviceOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         )}
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className="min-w-[240px] justify-start text-left font-normal"
-            >
-              <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-              {dateRange?.start && dateRange?.end ? (
-                <>
-                  {format(new Date(dateRange.start), 'dd/MM/yyyy')} - {format(new Date(dateRange.end), 'dd/MM/yyyy')}
-                </>
-              ) : (
-                <span className="text-muted-foreground">Pick a date range</span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="range"
-              defaultMonth={dateRange?.start ? new Date(dateRange.start) : undefined}
-              selected={
-                dateRange?.start && dateRange?.end
-                  ? { from: new Date(dateRange.start), to: new Date(dateRange.end) }
-                  : undefined
-              }
-              onSelect={(range) => {
-                if (!range?.from) return;
-                const start = format(range.from, 'yyyy-MM-dd');
-                const end = range.to ? format(range.to, 'yyyy-MM-dd') : start;
-                setDateRange({ ...dateRange, start, end });
-              }}
-              numberOfMonths={2}
-            />
-          </PopoverContent>
-        </Popover>
+        <div className="w-[240px] shrink-0">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full min-w-0 justify-start text-left font-normal"
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 truncate">
+                  {dateRange?.start && dateRange?.end ? (
+                    <>
+                      {format(new Date(dateRange.start), 'dd/MM/yyyy')} - {format(new Date(dateRange.end), 'dd/MM/yyyy')}
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">Pick a date range</span>
+                  )}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                defaultMonth={dateRange?.start ? new Date(dateRange.start) : undefined}
+                selected={
+                  dateRange?.start && dateRange?.end
+                    ? { from: new Date(dateRange.start), to: new Date(dateRange.end) }
+                    : undefined
+                }
+                onSelect={(range) => {
+                  if (!range?.from) return;
+                  const start = format(range.from, 'yyyy-MM-dd');
+                  const end = range.to ? format(range.to, 'yyyy-MM-dd') : start;
+                  setDateRange({ ...dateRange, start, end });
+                }}
+                numberOfMonths={2}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
 
         {onResetDateRange && (
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="text-muted-foreground hover:text-foreground"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
             onClick={() => onResetDateRange()}
           >
             <RotateCcw className="mr-1.5 h-4 w-4" />
