@@ -41,6 +41,9 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 
+/** ELORA System company: users of this company see all customers/sites/vehicles in the create entry form only */
+const ELORA_SYSTEM_COMPANY_ID = '89d845f5-e06f-4d47-8137-b58c79245a6c';
+
 const ASSIGNEES = [
   'Bruce Cunningham',
   'Greg Hutchings',
@@ -137,13 +140,15 @@ export function NewEntryModal({
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const isEloraSystemForm = effectiveCompanyId === ELORA_SYSTEM_COMPANY_ID;
+
   const { data: customersFromQuery = [] } = useQuery({
-    ...customersOptions(effectiveCompanyId),
+    ...customersOptions(effectiveCompanyId, { allTenants: isEloraSystemForm }),
     enabled: open && !!effectiveCompanyId,
   });
   const customers = (customersFromQuery?.length ? customersFromQuery : customersProp) ?? [];
 
-  // Resolve company_id from selected customer when super_admin (effectiveCompanyId is 'all') so sites/vehicles APIs return tenant-scoped data (same as compliance page)
+  // Resolve company_id from selected customer when super_admin or ELORA System form (effectiveCompanyId is 'all' or ELORA System) so sites/vehicles can be scoped by customer
   const { data: companyForCustomer } = useQuery({
     queryKey: ['companyForEloraCustomer', customerRef],
     queryFn: async () => {
@@ -155,23 +160,29 @@ export function NewEntryModal({
         .maybeSingle();
       return data?.id ?? null;
     },
-    enabled: open && !!customerRef && (effectiveCompanyId === 'all' || !effectiveCompanyId),
+    enabled: open && !!customerRef && (effectiveCompanyId === 'all' || !effectiveCompanyId || isEloraSystemForm),
   });
 
   const companyForQueries = effectiveCompanyId && effectiveCompanyId !== 'all'
     ? effectiveCompanyId
     : (customerRef ? companyForCustomer : null);
 
+  const sitesFilters = { customerId: customerRef || undefined };
+  if (isEloraSystemForm) sitesFilters.allTenants = true;
+
   const { data: sitesForCustomerRaw = [] } = useQuery({
-    ...sitesOptions(companyForQueries ?? effectiveCompanyId, { customerId: customerRef || undefined }),
+    ...sitesOptions(companyForQueries ?? effectiveCompanyId, sitesFilters),
     enabled: open && !!(companyForQueries ?? effectiveCompanyId) && !!customerRef,
   });
 
+  const vehiclesFilters = {
+    customerId: customerRef || undefined,
+    siteId: siteRef || undefined,
+  };
+  if (isEloraSystemForm) vehiclesFilters.allTenants = true;
+
   const { data: vehiclesRaw = [], isLoading: vehiclesLoading } = useQuery({
-    ...vehiclesOptions(companyForQueries ?? effectiveCompanyId, {
-      customerId: customerRef || undefined,
-      siteId: siteRef || undefined,
-    }),
+    ...vehiclesOptions(companyForQueries ?? effectiveCompanyId, vehiclesFilters),
     enabled: open && !!(companyForQueries ?? effectiveCompanyId) && !!customerRef,
   });
 

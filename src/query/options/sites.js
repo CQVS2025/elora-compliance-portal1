@@ -13,11 +13,11 @@ import { queryKeys } from '../keys';
 /**
  * Fetch sites, optionally filtered by customer (sites belonging to that customer only).
  * @param {string} companyId
- * @param {{ customerId?: string }} filters - customerId = customer ref (e.g. C00001); when set, only sites for that customer are requested.
+ * @param {{ customerId?: string, allTenants?: boolean }} filters - customerId = customer ref; allTenants = skip tenant filter (e.g. ELORA System ops log create form).
  */
 export const sitesOptions = (companyId, filters = {}) =>
   queryOptions({
-    queryKey: queryKeys.tenant.sites(companyId, filters),
+    queryKey: [...queryKeys.tenant.sites(companyId, filters), filters.allTenants ? 'allTenants' : null].filter(Boolean),
     queryFn: async ({ signal }) => {
       const params = {};
       if (filters.customerId && filters.customerId !== 'all') {
@@ -27,8 +27,8 @@ export const sitesOptions = (companyId, filters = {}) =>
       const response = await callEdgeFunction('elora_sites', params);
       let data = response?.data ?? response ?? [];
       const { companyEloraCustomerRef, isSuperAdmin } = getEloraTenantContext();
-      // Include items with null customer ref (trust backend); only exclude when ref differs.
-      if (!isSuperAdmin && companyEloraCustomerRef && Array.isArray(data)) {
+      const skipTenantFilter = filters.allTenants || isSuperAdmin;
+      if (!skipTenantFilter && companyEloraCustomerRef && Array.isArray(data)) {
         data = data.filter((s) => {
           const ref = s.customerRef ?? s.customer_ref ?? s.customer ?? null;
           if (ref == null) return true;

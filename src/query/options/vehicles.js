@@ -12,16 +12,18 @@ import { queryKeys } from '../keys';
 
 /**
  * Fetch all vehicles with optional filters
+ * @param {{ customerId?: string, siteId?: string, allTenants?: boolean }} filters - allTenants = do not force tenant customer (e.g. ELORA System ops log create form).
  */
 export const vehiclesOptions = (companyId, filters = {}) =>
   queryOptions({
-    queryKey: queryKeys.tenant.vehicles(companyId, filters),
+    queryKey: [...queryKeys.tenant.vehicles(companyId, filters), filters.allTenants ? 'allTenants' : null].filter(Boolean),
     queryFn: async ({ signal }) => {
       const { companyEloraCustomerRef, isSuperAdmin } = getEloraTenantContext();
+      const skipTenantFilter = filters.allTenants || isSuperAdmin;
       const customerRef =
         filters.customerId && filters.customerId !== 'all'
           ? filters.customerId
-          : !isSuperAdmin && companyEloraCustomerRef
+          : !skipTenantFilter && companyEloraCustomerRef
             ? companyEloraCustomerRef
             : filters.customerId;
       const siteRef = filters.siteId && filters.siteId !== 'all' ? filters.siteId : undefined;

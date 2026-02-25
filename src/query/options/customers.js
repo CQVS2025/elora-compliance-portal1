@@ -12,16 +12,18 @@ import { queryKeys } from '../keys';
 
 /**
  * Fetch all customers
+ * @param {string} companyId
+ * @param {{ allTenants?: boolean }} opts - when allTenants is true, skip tenant filter (e.g. ELORA System ops log create form)
  */
-export const customersOptions = (companyId) =>
+export const customersOptions = (companyId, opts = {}) =>
   queryOptions({
-    queryKey: queryKeys.tenant.customers(companyId),
+    queryKey: [...queryKeys.tenant.customers(companyId), opts.allTenants ? 'allTenants' : null].filter(Boolean),
     queryFn: async ({ signal }) => {
       const response = await callEdgeFunction('elora_customers', {});
       let data = response?.data ?? response ?? [];
       const { companyEloraCustomerRef, isSuperAdmin } = getEloraTenantContext();
-      // Include items with null ref (trust backend); only exclude when ref differs.
-      if (!isSuperAdmin && companyEloraCustomerRef && Array.isArray(data)) {
+      const skipTenantFilter = opts.allTenants || isSuperAdmin;
+      if (!skipTenantFilter && companyEloraCustomerRef && Array.isArray(data)) {
         data = data.filter((c) => {
           const ref = c.ref ?? c.id ?? null;
           if (ref == null) return true;
