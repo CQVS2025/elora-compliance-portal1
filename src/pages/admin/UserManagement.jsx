@@ -6,12 +6,14 @@ import { supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import { getAccessibleTabs, getDefaultEmailReportTypes } from '@/lib/permissions';
 import { roleTabSettingsOptions, companyTabSettingsOptions } from '@/query/options';
+import { deliveryDriversOptions } from '@/query/options/deliveries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
@@ -71,6 +73,7 @@ const ROLES = [
   { value: 'manager', label: 'Manager', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' },
   { value: 'user', label: 'User', color: 'bg-muted text-muted-foreground' },
   { value: 'batcher', label: 'Batcher', color: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200' },
+  { value: 'delivery_manager', label: 'Delivery Manager', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' },
   { value: 'driver', label: 'Driver', color: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200' },
   { value: 'viewer', label: 'Viewer', color: 'bg-muted text-muted-foreground' },
 ];
@@ -122,6 +125,7 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [userForTabVisibility, setUserForTabVisibility] = useState(null);
   const [localTabVisibility, setLocalTabVisibility] = useState([]);
+  const [localVisibleDeliveryDriverIds, setLocalVisibleDeliveryDriverIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
   const [companyComboboxOpen, setCompanyComboboxOpen] = useState(false);
@@ -138,6 +142,7 @@ export default function UserManagement() {
     job_title: '',
     role: 'user',
     company_id: '',
+    assigned_delivery_drivers: [],
   });
 
   const isSuperAdmin = userProfile?.role === 'super_admin';
@@ -156,6 +161,10 @@ export default function UserManagement() {
   const { data: companyTabs = null } = useQuery({
     ...companyTabSettingsOptions(userForTabVisibility?.company_id),
     enabled: !!userForTabVisibility?.company_id,
+  });
+  const { data: deliveryDrivers = [] } = useQuery({
+    ...deliveryDriversOptions(),
+    enabled: ((showCreateModal || showEditModal) && formData.role === 'delivery_manager') || (!!userForTabVisibility && userForTabVisibility.role === 'delivery_manager'),
   });
 
   function getRoleDefaultTabs(role) {
@@ -181,7 +190,16 @@ export default function UserManagement() {
     const current = userForTabVisibility.visible_tabs;
     const base = Array.isArray(current) && current.length > 0 ? current : baseTabs;
     setLocalTabVisibility(base.filter((t) => baseTabs.includes(t)));
-  }, [userForTabVisibility?.id, userForTabVisibility?.role, userForTabVisibility?.company_id, userForTabVisibility?.visible_tabs, roleTabOverrides, companyTabs]);
+    if (userForTabVisibility.role === 'delivery_manager') {
+      const assigned = Array.isArray(userForTabVisibility.assigned_delivery_drivers) ? userForTabVisibility.assigned_delivery_drivers : [];
+      const visible = Array.isArray(userForTabVisibility.visible_delivery_driver_ids) && userForTabVisibility.visible_delivery_driver_ids.length > 0
+        ? userForTabVisibility.visible_delivery_driver_ids
+        : assigned;
+      setLocalVisibleDeliveryDriverIds(visible.filter((id) => assigned.includes(id)));
+    } else {
+      setLocalVisibleDeliveryDriverIds([]);
+    }
+  }, [userForTabVisibility?.id, userForTabVisibility?.role, userForTabVisibility?.company_id, userForTabVisibility?.visible_tabs, userForTabVisibility?.assigned_delivery_drivers, userForTabVisibility?.visible_delivery_driver_ids, roleTabOverrides, companyTabs]);
 
   // Update selected company tab when URL changes
   useEffect(() => {
@@ -295,6 +313,9 @@ export default function UserManagement() {
           job_title: userData.job_title,
           role: userData.role,
           company_id: companyId || undefined,
+          assigned_delivery_drivers: userData.role === 'delivery_manager' && Array.isArray(userData.assigned_delivery_drivers) && userData.assigned_delivery_drivers.length > 0
+            ? userData.assigned_delivery_drivers
+            : undefined,
         });
 
         // Edge function returns { success, message, user, profile } on success
@@ -364,6 +385,11 @@ export default function UserManagement() {
         ...(companyId == null && { company_name: null }),
         ...(companyId != null && userData.company_name != null && { company_name: userData.company_name }),
       };
+      if (userData.role === 'delivery_manager') {
+        payload.assigned_delivery_drivers = Array.isArray(userData.assigned_delivery_drivers) ? userData.assigned_delivery_drivers : [];
+      } else {
+        payload.assigned_delivery_drivers = null;
+      }
 
       const { data, error } = await supabase
         .from('user_profiles')
@@ -430,12 +456,15 @@ export default function UserManagement() {
 
   // Save user tab visibility override
   const saveUserTabVisibilityMutation = useMutation({
-    mutationFn: async ({ userId, visibleTabs }) => {
+    mutationFn: async ({ userId, visibleTabs, visibleDeliveryDriverIds }) => {
       const payload = { updated_at: new Date().toISOString() };
       if (visibleTabs === null) {
         payload.visible_tabs = null;
       } else {
         payload.visible_tabs = visibleTabs;
+      }
+      if (visibleDeliveryDriverIds !== undefined) {
+        payload.visible_delivery_driver_ids = visibleDeliveryDriverIds === null || (Array.isArray(visibleDeliveryDriverIds) && visibleDeliveryDriverIds.length === 0) ? null : visibleDeliveryDriverIds;
       }
       const { data, error } = await supabase
         .from('user_profiles')
@@ -491,6 +520,7 @@ export default function UserManagement() {
       job_title: '',
       role: 'user',
       company_id: selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' ? selectedCompanyTab : '',
+      assigned_delivery_drivers: [],
     });
   };
 
@@ -503,6 +533,7 @@ export default function UserManagement() {
       job_title: user.job_title || '',
       role: user.role,
       company_id: user.company_id ?? '',
+      assigned_delivery_drivers: Array.isArray(user.assigned_delivery_drivers) ? user.assigned_delivery_drivers : [],
     });
     setShowEditModal(true);
   };
@@ -1057,7 +1088,7 @@ export default function UserManagement() {
               <Label>Role</Label>
               <Select
                 value={formData.role}
-                onValueChange={(value) => setFormData({ ...formData, role: value })}
+                onValueChange={(value) => setFormData({ ...formData, role: value, assigned_delivery_drivers: value === 'delivery_manager' ? formData.assigned_delivery_drivers : [] })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -1069,6 +1100,45 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
+            {formData.role === 'delivery_manager' && (
+              <div className="space-y-2">
+                <Label>Assigned calendar views (delivery drivers)</Label>
+                <p className="text-xs text-muted-foreground">Select which driver calendars this user can see. &quot;All&quot; is only for Super Admin.</p>
+                <div className="border border-border rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
+                  {deliveryDrivers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No delivery drivers in system. Sync from Notion on Delivery Calendar page.</p>
+                  ) : (
+                    deliveryDrivers.map((driver) => (
+                      <div key={driver.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`create-driver-${driver.id}`}
+                          checked={formData.assigned_delivery_drivers.includes(driver.id)}
+                          onCheckedChange={(checked) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              assigned_delivery_drivers: checked
+                                ? [...prev.assigned_delivery_drivers, driver.id]
+                                : prev.assigned_delivery_drivers.filter((id) => id !== driver.id),
+                            }));
+                          }}
+                        />
+                        <label
+                          htmlFor={`create-driver-${driver.id}`}
+                          className="text-sm font-medium leading-none cursor-pointer"
+                        >
+                          {driver.name}
+                        </label>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {formData.assigned_delivery_drivers.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {formData.assigned_delivery_drivers.length} calendar view{formData.assigned_delivery_drivers.length !== 1 ? 's' : ''} selected
+                  </p>
+                )}
+              </div>
+            )}
             {isSuperAdmin && (
               <div className="space-y-2">
                 <Label>Company {!isSuperAdmin ? '*' : ''}</Label>
@@ -1154,7 +1224,7 @@ export default function UserManagement() {
               <Label>Role</Label>
               <Select
                 value={formData.role}
-                onValueChange={(value) => setFormData({ ...formData, role: value })}
+                onValueChange={(value) => setFormData({ ...formData, role: value, assigned_delivery_drivers: value === 'delivery_manager' ? formData.assigned_delivery_drivers : [] })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -1166,6 +1236,45 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
+            {formData.role === 'delivery_manager' && (
+              <div className="space-y-2">
+                <Label>Assigned calendar views (delivery drivers)</Label>
+                <p className="text-xs text-muted-foreground">Select which driver calendars this user can see.</p>
+                <div className="border border-border rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
+                  {deliveryDrivers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No delivery drivers in system.</p>
+                  ) : (
+                    deliveryDrivers.map((driver) => (
+                      <div key={driver.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`edit-driver-${driver.id}`}
+                          checked={formData.assigned_delivery_drivers.includes(driver.id)}
+                          onCheckedChange={(checked) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              assigned_delivery_drivers: checked
+                                ? [...prev.assigned_delivery_drivers, driver.id]
+                                : prev.assigned_delivery_drivers.filter((id) => id !== driver.id),
+                            }));
+                          }}
+                        />
+                        <label
+                          htmlFor={`edit-driver-${driver.id}`}
+                          className="text-sm font-medium leading-none cursor-pointer"
+                        >
+                          {driver.name}
+                        </label>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {formData.assigned_delivery_drivers.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {formData.assigned_delivery_drivers.length} calendar view{formData.assigned_delivery_drivers.length !== 1 ? 's' : ''} selected
+                  </p>
+                )}
+              </div>
+            )}
             {isSuperAdmin && (
               <div className="space-y-2">
                 <Label>Company</Label>
@@ -1429,6 +1538,37 @@ export default function UserManagement() {
                   })}
                 </div>
               </div>
+              {userForTabVisibility.role === 'delivery_manager' && baseTabs.includes('delivery-calendar') && localTabVisibility.includes('delivery-calendar') && (() => {
+                const assignedIds = Array.isArray(userForTabVisibility.assigned_delivery_drivers) ? userForTabVisibility.assigned_delivery_drivers : [];
+                const driversForAssigned = deliveryDrivers.filter((d) => assignedIds.includes(d.id));
+                if (driversForAssigned.length === 0) return null;
+                return (
+                  <div>
+                    <h4 className="text-sm font-medium text-foreground mb-3">Delivery calendar views</h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Restrict which of the assigned driver calendars this user can see. Uncheck to hide a calendar view.
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {driversForAssigned.map((driver) => (
+                        <div key={driver.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`tabvis-driver-${driver.id}`}
+                            checked={localVisibleDeliveryDriverIds.includes(driver.id)}
+                            onCheckedChange={(checked) => {
+                              setLocalVisibleDeliveryDriverIds((prev) =>
+                                checked ? [...prev, driver.id] : prev.filter((id) => id !== driver.id)
+                              );
+                            }}
+                          />
+                          <label htmlFor={`tabvis-driver-${driver.id}`} className="text-sm font-medium cursor-pointer">
+                            {driver.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               <div>
                 <h4 className="text-sm font-medium text-foreground mb-3">Email Report Types (Select Reports to Include)</h4>
                 <p className="text-xs text-muted-foreground mb-3">
@@ -1470,6 +1610,7 @@ export default function UserManagement() {
                     saveUserTabVisibilityMutation.mutate({
                       userId: userForTabVisibility.id,
                       visibleTabs: null,
+                      visibleDeliveryDriverIds: userForTabVisibility.role === 'delivery_manager' ? null : undefined,
                     })
                   }
                   disabled={saveUserTabVisibilityMutation.isPending}
@@ -1485,9 +1626,13 @@ export default function UserManagement() {
                   onClick={() => {
                     const baseTabs = getBaseTabsForUser(userForTabVisibility);
                     const toSave = localTabVisibility.filter((t) => baseTabs.includes(t));
+                    const hasDeliveryCalendar = toSave.includes('delivery-calendar');
                     saveUserTabVisibilityMutation.mutate({
                       userId: userForTabVisibility.id,
                       visibleTabs: toSave.length > 0 ? toSave : null,
+                      visibleDeliveryDriverIds: userForTabVisibility.role === 'delivery_manager'
+                        ? (hasDeliveryCalendar && localVisibleDeliveryDriverIds.length > 0 ? localVisibleDeliveryDriverIds : null)
+                        : undefined,
                     });
                   }}
                   disabled={saveUserTabVisibilityMutation.isPending || localTabVisibility.length === 0}

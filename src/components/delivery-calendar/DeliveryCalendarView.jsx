@@ -37,6 +37,51 @@ const STATUS_COLORS = {
   Cancelled: 'bg-muted text-muted-foreground border-border',
 };
 
+/** Stable palette for drivers (sync-safe: new/removed drivers get consistent colors by order) */
+const DRIVER_PALETTE = [
+  { bg: 'rgba(59, 130, 246, 0.15)', border: '#3b82f6', text: '#1d4ed8' },   // blue
+  { bg: 'rgba(34, 197, 94, 0.15)', border: '#22c55e', text: '#15803d' },   // green
+  { bg: 'rgba(234, 179, 8, 0.15)', border: '#eab308', text: '#a16207' },   // amber
+  { bg: 'rgba(168, 85, 247, 0.15)', border: '#a855f7', text: '#7e22ce' },   // purple
+  { bg: 'rgba(236, 72, 153, 0.15)', border: '#ec4899', text: '#be185d' },   // pink
+  { bg: 'rgba(14, 165, 233, 0.15)', border: '#0ea5e9', text: '#0369a1' },   // sky
+  { bg: 'rgba(245, 158, 11, 0.15)', border: '#f59e0b', text: '#b45309' },   // orange
+  { bg: 'rgba(20, 184, 166, 0.15)', border: '#14b8a6', text: '#0f766e' },   // teal
+  { bg: 'rgba(239, 68, 68, 0.15)', border: '#ef4444', text: '#b91c1c' },   // red
+  { bg: 'rgba(99, 102, 241, 0.15)', border: '#6366f1', text: '#4f46e5' },   // indigo
+];
+
+function parseDriverColor(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  const h = hex.trim();
+  if (!/^#[0-9A-Fa-f]{6}$/.test(h)) return null;
+  const r = parseInt(h.slice(1, 3), 16);
+  const g = parseInt(h.slice(3, 5), 16);
+  const b = parseInt(h.slice(5, 7), 16);
+  return {
+    bg: `rgba(${r}, ${g}, ${b}, 0.15)`,
+    border: h,
+    text: `rgb(${Math.max(0, r - 40)}, ${Math.max(0, g - 40)}, ${Math.max(0, b - 40)})`,
+  };
+}
+
+function getDriverColorMap(drivers = []) {
+  const map = new Map();
+  const sorted = [...drivers].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  sorted.forEach((d, i) => {
+    const color = d?.color ? parseDriverColor(d.color) : null;
+    map.set(d.id, color || DRIVER_PALETTE[i % DRIVER_PALETTE.length]);
+    if (d.name) map.set(d.name, map.get(d.id));
+  });
+  return map;
+}
+
+function hashString(s) {
+  let h = 0;
+  for (let i = 0; i < (s || '').length; i++) h = ((h << 5) - h) + (s || '').charCodeAt(i) | 0;
+  return Math.abs(h);
+}
+
 function getStatusStyle(status) {
   if (!status) return 'bg-muted/50 text-muted-foreground border-border';
   return STATUS_COLORS[status] ?? 'bg-muted/50 text-muted-foreground border-border';
@@ -57,24 +102,22 @@ function getDeliveryTime(delivery) {
   return { hours: getHours(d), minutes: getMinutes(d) };
 }
 
-function DeliveryEventCard({ delivery, compact = false, style = {}, onSelect }) {
+function DeliveryEventCard({ delivery, compact = false, style = {}, onSelect, driverColor }) {
   const handleClick = () => onSelect?.(delivery);
+  const colorStyle = driverColor
+    ? { backgroundColor: driverColor.bg, borderLeftColor: driverColor.border, color: driverColor.text }
+    : {};
+
   const cardClass = compact
-    ? cn(
-        'w-full min-w-0 max-w-full rounded-md px-2 py-1.5 text-left text-xs border-l-4 mb-1 cursor-pointer transition-opacity hover:opacity-90',
-        'bg-[hsl(var(--chart-1)/0.12)] text-[hsl(var(--chart-1))] border-l-[hsl(var(--chart-1))]'
-      )
-    : cn(
-        'w-full rounded-lg px-3 py-2 text-left text-sm border-l-4 shadow-sm mb-2 cursor-pointer transition-opacity hover:opacity-90',
-        'bg-[hsl(var(--chart-1)/0.12)] text-[hsl(var(--chart-1))] border-l-[hsl(var(--chart-1))]'
-      );
+    ? 'w-full min-w-0 max-w-full rounded-md px-2 py-1.5 text-left text-xs border-l-4 mb-1 cursor-pointer transition-opacity hover:opacity-90'
+    : 'w-full rounded-lg px-3 py-2 text-left text-sm border-l-4 shadow-sm mb-2 cursor-pointer transition-opacity hover:opacity-90';
 
   if (compact) {
     return (
       <button
         type="button"
         className={cardClass}
-        style={style}
+        style={{ ...style, ...colorStyle }}
         onClick={handleClick}
       >
         <div className="font-medium truncate">{delivery.title || 'Delivery'}</div>
@@ -91,7 +134,7 @@ function DeliveryEventCard({ delivery, compact = false, style = {}, onSelect }) 
     <button
       type="button"
       className={cardClass}
-      style={style}
+      style={{ ...style, ...colorStyle }}
       onClick={handleClick}
     >
       <div className="font-semibold truncate">{delivery.title || 'Delivery'}</div>
@@ -109,10 +152,20 @@ function DeliveryEventCard({ delivery, compact = false, style = {}, onSelect }) 
   );
 }
 
-export function DeliveryCalendarView({ deliveries = [] }) {
+export function DeliveryCalendarView({ deliveries = [], drivers = [] }) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [calendarView, setCalendarView] = useState('month');
   const [selectedDelivery, setSelectedDelivery] = useState(null);
+
+  const driverColorMap = useMemo(() => getDriverColorMap(drivers), [drivers]);
+
+  const getDeliveryDriverColor = (delivery) => {
+    const key = delivery.driver_id || delivery.driver_name || 'Unassigned';
+    let color = driverColorMap.get(key);
+    if (color) return color;
+    const idx = hashString(key) % DRIVER_PALETTE.length;
+    return DRIVER_PALETTE[idx];
+  };
 
   const entriesByDate = useMemo(() => {
     const map = {};
@@ -209,7 +262,12 @@ export function DeliveryCalendarView({ deliveries = [] }) {
                   style={{ minHeight: MIN_ROW_HEIGHT }}
                 >
                   {slotDeliveries.map((delivery) => (
-                    <DeliveryEventCard key={delivery.id} delivery={delivery} onSelect={setSelectedDelivery} />
+                    <DeliveryEventCard
+                      key={delivery.id}
+                      delivery={delivery}
+                      driverColor={getDeliveryDriverColor(delivery)}
+                      onSelect={setSelectedDelivery}
+                    />
                   ))}
                 </div>
               </React.Fragment>
@@ -279,6 +337,7 @@ export function DeliveryCalendarView({ deliveries = [] }) {
                           key={delivery.id}
                           delivery={delivery}
                           compact
+                          driverColor={getDeliveryDriverColor(delivery)}
                           onSelect={setSelectedDelivery}
                           style={{
                             position: 'absolute',
@@ -299,12 +358,18 @@ export function DeliveryCalendarView({ deliveries = [] }) {
     );
   };
 
+  const MONTH_CARD_HEIGHT = 32;
+
   const renderMonthView = () => {
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
     const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
     const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
     const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+    const weekRows = [];
+    for (let i = 0; i < days.length; i += 7) {
+      weekRows.push(days.slice(i, i + 7));
+    }
     return (
       <div className="rounded-lg border overflow-hidden bg-card min-w-0 w-full">
         <div className="grid grid-cols-7 border-b bg-muted/50">
@@ -317,40 +382,57 @@ export function DeliveryCalendarView({ deliveries = [] }) {
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 auto-rows-fr" style={{ minHeight: 400 }}>
-          {days.map((day) => {
-            const key = format(day, 'yyyy-MM-dd');
-            const dayEntries = entriesByDate[key] ?? [];
-            const isCurrentMonth = isSameMonth(day, currentDate);
-            const isTodayDate = isToday(day);
+        <div className="flex flex-col">
+          {weekRows.map((weekDaysInRow, rowIndex) => {
+            const maxEntries = Math.max(
+              1,
+              ...weekDaysInRow.map((day) => (entriesByDate[format(day, 'yyyy-MM-dd')] ?? []).length)
+            );
+            const rowMinHeight = 28 + maxEntries * MONTH_CARD_HEIGHT;
             return (
               <div
-                key={key}
-                className={cn(
-                  'min-h-[80px] sm:min-h-[100px] border-b border-r last:border-r-0 p-1 sm:p-2 flex flex-col min-w-0 overflow-hidden',
-                  !isCurrentMonth && 'bg-muted/30'
-                )}
+                key={rowIndex}
+                className="grid grid-cols-7 border-b"
+                style={{ minHeight: rowMinHeight }}
               >
-                <div className="mb-1 flex justify-center shrink-0">
-                  <span
-                    className={cn(
-                      'text-xs sm:text-sm font-medium flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full',
-                      isTodayDate && 'bg-primary text-primary-foreground'
-                    )}
-                  >
-                    {format(day, 'd')}
-                  </span>
-                </div>
-                <div className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden min-h-0 min-w-0">
-                  {dayEntries.slice(0, 3).map((delivery) => (
-                    <DeliveryEventCard key={delivery.id} delivery={delivery} compact onSelect={setSelectedDelivery} />
-                  ))}
-                  {dayEntries.length > 3 && (
-                    <div className="text-[10px] text-muted-foreground w-full text-center py-0.5 shrink-0">
-                      +{dayEntries.length - 3} more
+                {weekDaysInRow.map((day) => {
+                  const key = format(day, 'yyyy-MM-dd');
+                  const dayEntries = entriesByDate[key] ?? [];
+                  const isCurrentMonth = isSameMonth(day, currentDate);
+                  const isTodayDate = isToday(day);
+                  return (
+                    <div
+                      key={key}
+                      className={cn(
+                        'border-r last:border-r-0 p-1 sm:p-2 flex flex-col min-w-0 overflow-hidden',
+                        !isCurrentMonth && 'bg-muted/30'
+                      )}
+                      style={{ minHeight: rowMinHeight }}
+                    >
+                      <div className="mb-1 flex justify-center shrink-0">
+                        <span
+                          className={cn(
+                            'text-xs sm:text-sm font-medium flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-full',
+                            isTodayDate && 'bg-primary text-primary-foreground'
+                          )}
+                        >
+                          {format(day, 'd')}
+                        </span>
+                      </div>
+                      <div className="flex-1 space-y-1 overflow-x-hidden min-h-0 min-w-0 flex flex-col">
+                        {dayEntries.map((delivery) => (
+                          <DeliveryEventCard
+                            key={delivery.id}
+                            delivery={delivery}
+                            compact
+                            driverColor={getDeliveryDriverColor(delivery)}
+                            onSelect={setSelectedDelivery}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  )}
-                </div>
+                  );
+                })}
               </div>
             );
           })}

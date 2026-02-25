@@ -12,6 +12,7 @@ export const ROLE_HIERARCHY = {
   manager: 60,
   user: 20,
   batcher: 15,
+  delivery_manager: 12,
   driver: 10,
   viewer: 5,
 };
@@ -56,6 +57,12 @@ export const ROLE_CONFIG = {
     color: 'bg-green-100 text-green-800',
     description: 'Vehicle operator with limited access',
     icon: '🚗',
+  },
+  delivery_manager: {
+    label: 'Delivery Manager',
+    color: 'bg-amber-100 text-amber-800',
+    description: 'Access to Delivery Calendar for assigned drivers only',
+    icon: '📅',
   },
   viewer: {
     label: 'Viewer',
@@ -223,6 +230,11 @@ export function getAccessibleTabs(userProfile) {
     return ['dashboard', 'compliance', 'leaderboard', 'delivery-calendar'];
   }
 
+  // Delivery Manager: Delivery Calendar only (assigned driver tabs); no "All" tab
+  if (role === 'delivery_manager') {
+    return ['dashboard', 'delivery-calendar'];
+  }
+
   // Viewer sees read-only tabs (no operations-log-edit)
   if (role === 'viewer') {
     return ['dashboard', 'compliance', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
@@ -326,6 +338,11 @@ export function getRolePermissions(role) {
       'View assigned vehicles only',
       'View compliance status',
       'Limited to compliance tab',
+    ],
+    delivery_manager: [
+      'View Delivery Calendar only',
+      'Assigned delivery driver tabs (no All)',
+      'Restrictible via Tab visibility',
     ],
     viewer: [
       'Read-only dashboard access',

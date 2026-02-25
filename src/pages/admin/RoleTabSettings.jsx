@@ -41,6 +41,7 @@ const ROLES = [
   { value: 'manager', label: 'Manager' },
   { value: 'user', label: 'User' },
   { value: 'batcher', label: 'Batcher' },
+  { value: 'delivery_manager', label: 'Delivery Manager' },
   { value: 'driver', label: 'Driver' },
   { value: 'viewer', label: 'Viewer' },
 ];
@@ -51,6 +52,7 @@ const ROLE_COLORS = {
   manager: 'bg-blue-500',
   user: 'bg-primary',
   batcher: 'bg-teal-500',
+  delivery_manager: 'bg-amber-500',
   driver: 'bg-green-500',
   viewer: 'bg-muted-foreground',
 };

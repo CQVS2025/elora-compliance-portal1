@@ -9,6 +9,7 @@ interface CreateUserRequest {
   job_title?: string;
   role?: string;
   company_id?: string;
+  assigned_delivery_drivers?: string[];
 }
 
 Deno.serve(async (req) => {
@@ -30,6 +31,7 @@ Deno.serve(async (req) => {
       job_title = '',
       role = 'user',
       company_id,
+      assigned_delivery_drivers,
     } = body;
 
     // Validation
@@ -98,19 +100,24 @@ Deno.serve(async (req) => {
     }
 
     // Create User Profile
+    const profileInsert: Record<string, unknown> = {
+      id: authData.user!.id,
+      company_id: company_id || null,
+      email,
+      full_name,
+      phone,
+      job_title,
+      role,
+      company_name: companyName,
+      is_active: true,
+    };
+    if (role === 'delivery_manager' && Array.isArray(assigned_delivery_drivers) && assigned_delivery_drivers.length > 0) {
+      profileInsert.assigned_delivery_drivers = assigned_delivery_drivers;
+    }
+
     const { data: profile, error: profileError } = await adminSupabase
       .from('user_profiles')
-      .insert({
-        id: authData.user!.id,
-        company_id: company_id || null,
-        email,
-        full_name,
-        phone,
-        job_title,
-        role,
-        company_name: companyName,
-        is_active: true,
-      })
+      .insert(profileInsert)
       .select()
       .single();
 

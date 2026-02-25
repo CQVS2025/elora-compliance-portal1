@@ -53,6 +53,12 @@ const ROLE_CONFIG = {
     description: 'Vehicle operator',
     permissions: ['Assigned vehicles only', 'Compliance tab only', 'Mobile access', 'No editing']
   },
+  delivery_manager: {
+    label: 'Delivery Manager',
+    color: 'bg-amber-500',
+    description: 'Delivery calendar (assigned drivers only)',
+    permissions: ['Assigned delivery drivers', 'Delivery Calendar tab only', 'No All view', 'Restrictible via Tab visibility']
+  },
   viewer: {
     label: 'Viewer',
     color: 'bg-muted-foreground',
@@ -147,6 +153,7 @@ export default function RoleManagement({ vehicles, sites }) {
                   <SelectItem value="user">Users</SelectItem>
                   <SelectItem value="batcher">Batchers</SelectItem>
                   <SelectItem value="driver">Drivers</SelectItem>
+                  <SelectItem value="delivery_manager">Delivery Managers</SelectItem>
                   <SelectItem value="viewer">Viewers</SelectItem>
                 </SelectContent>
               </Select>
@@ -180,6 +187,11 @@ export default function RoleManagement({ vehicles, sites }) {
                         {user.role === 'driver' && user.assigned_vehicles?.length > 0 && (
                           <p className="text-xs text-muted-foreground mt-1">
                             {user.assigned_vehicles.length} vehicle{user.assigned_vehicles.length !== 1 ? 's' : ''} assigned
+                          </p>
+                        )}
+                        {user.role === 'delivery_manager' && user.assigned_delivery_drivers?.length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {user.assigned_delivery_drivers.length} calendar view{user.assigned_delivery_drivers.length !== 1 ? 's' : ''} assigned
                           </p>
                         )}
                       </div>

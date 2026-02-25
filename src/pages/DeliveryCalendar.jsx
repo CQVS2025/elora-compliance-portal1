@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek } from 'date-fns';
 import { CalendarDays, Loader2, RefreshCw, List, LayoutGrid } from 'lucide-react';
@@ -79,10 +79,36 @@ export default function DeliveryCalendar() {
   });
 
   const driverTabs = useMemo(() => {
-    const list = [{ value: 'all', label: 'All' }];
+    const isSuperAdmin = userProfile?.role === 'super_admin';
+    const isDeliveryManager = userProfile?.role === 'delivery_manager';
+    const assignedIds = Array.isArray(userProfile?.assigned_delivery_drivers) ? userProfile.assigned_delivery_drivers : [];
+
+    if (isDeliveryManager) {
+      if (assignedIds.length === 0) return [];
+      const visibleIds = Array.isArray(userProfile?.visible_delivery_driver_ids) && userProfile.visible_delivery_driver_ids.length > 0
+        ? userProfile.visible_delivery_driver_ids
+        : assignedIds;
+      const allowedDrivers = drivers.filter((d) => visibleIds.includes(d.id));
+      return allowedDrivers.map((d) => ({ value: d.slug, label: d.name }));
+    }
+
+    const list = [];
+    if (isSuperAdmin) list.push({ value: 'all', label: 'All' });
     drivers.forEach((d) => list.push({ value: d.slug, label: d.name }));
     return list;
-  }, [drivers]);
+  }, [drivers, userProfile?.role, userProfile?.assigned_delivery_drivers, userProfile?.visible_delivery_driver_ids]);
+
+  const effectiveTabValue = useMemo(() => {
+    if (driverSlug != null) return driverSlug;
+    const first = driverTabs[0];
+    return first?.value ?? 'all';
+  }, [driverSlug, driverTabs]);
+
+  useEffect(() => {
+    if (userProfile?.role === 'delivery_manager' && driverTabs.length > 0 && driverTabs[0]?.value !== 'all' && driverSlug === null) {
+      setDriverSlug(driverTabs[0].value);
+    }
+  }, [userProfile?.role, driverTabs, driverSlug]);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -110,15 +136,21 @@ export default function DeliveryCalendar() {
         )}
       </div>
 
-      <Tabs value={driverSlug ?? 'all'} onValueChange={(v) => setDriverSlug(v === 'all' ? null : v)}>
+      <Tabs value={effectiveTabValue} onValueChange={(v) => setDriverSlug(v === 'all' ? null : v)}>
         <TabsList className="flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
-          {driverTabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="text-sm">
-              {tab.label}
-            </TabsTrigger>
-          ))}
+          {driverTabs.length === 0 && userProfile?.role === 'delivery_manager' ? (
+            <p className="text-sm text-muted-foreground px-3 py-2">No calendar views assigned. Ask an admin to assign delivery drivers to your account.</p>
+          ) : (
+            driverTabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value} className="text-sm">
+                {tab.label}
+              </TabsTrigger>
+            ))
+          )}
         </TabsList>
 
+        {(driverTabs.length > 0 || userProfile?.role !== 'delivery_manager') && (
+          <>
         <div className="mt-4 flex flex-wrap gap-2">
           {VIEWS.map((v) => (
             <Button
@@ -148,7 +180,7 @@ export default function DeliveryCalendar() {
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : (
-                  <DeliveryCalendarView deliveries={deliveriesCalendar} />
+                  <DeliveryCalendarView deliveries={deliveriesCalendar} drivers={drivers} />
                 )}
               </div>
             )}
@@ -247,6 +279,8 @@ export default function DeliveryCalendar() {
                 </CardContent>
               </Card>
             )}
+          </>
+        )}
           </>
         )}
       </Tabs>

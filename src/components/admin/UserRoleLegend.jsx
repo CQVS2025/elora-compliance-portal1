@@ -39,6 +39,12 @@ const ROLE_CONFIG = {
     description: 'Vehicle operator',
     permissions: ['Assigned vehicles only', 'Compliance tab only', 'Mobile access', 'No editing']
   },
+  delivery_manager: {
+    label: 'Delivery Manager',
+    color: 'bg-amber-500',
+    description: 'Delivery calendar (assigned drivers only)',
+    permissions: ['Assigned delivery drivers', 'Delivery Calendar tab only', 'No All view', 'Restrictible via Tab visibility']
+  },
   viewer: {
     label: 'Viewer',
     color: 'bg-muted-foreground',
