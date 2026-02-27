@@ -223,11 +223,12 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
   }, [reportData]);
 
   const buildReportHtml = useCallback(
-    (forPdf = true) => {
+    (forPdf = true, eloraLogoDataUrl = null) => {
       const { totalFleetSize, activeSites, totalWashes, avgCostPerTruck, avgCostPerWash, totalProgramCost, complianceRate } = reportData;
       const reportCompanyName = formatReportCompanyName(customerName);
-      // For PDF: no external images to avoid canvas taint
-      const showEloraLogo = !forPdf;
+      // For PDF: use embedded data URL for ELORA logo to avoid canvas taint; otherwise use external URL
+      const eloraLogoSrc = forPdf ? (eloraLogoDataUrl || '') : ELORA_LOGO_URL;
+      const showEloraLogo = !forPdf || !!eloraLogoDataUrl;
 
       const tableRows = [
         ['Total Fleet Size', `${totalFleetSize} vehicles`],
@@ -272,8 +273,8 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
           <td style="width:28%;vertical-align:middle;text-align:center;">
   <div style="display:inline-block;text-align:center;">
     <div style="margin-bottom:6px;">
-      ${showEloraLogo
-          ? `<img src="${ELORA_LOGO_URL}" alt="ELORA" style="height:32px;width:auto;object-fit:contain;display:block;margin:0 auto;"/>`
+      ${showEloraLogo && eloraLogoSrc
+          ? `<img src="${eloraLogoSrc}" alt="ELORA" style="height:32px;width:auto;object-fit:contain;display:block;margin:0 auto;"/>`
           : `<span style="display:inline-block;padding:4px 12px;border-radius:999px;background:rgba(0,221,57,0.2);color:#bbf7d0;font-size:11px;font-weight:700;">ELORA</span>`}
     </div>
     <div style="color:rgba(255,255,255,0.85);font-size:11px;">
@@ -323,7 +324,22 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
   const handleExportPdf = useCallback(async () => {
     setExportPdfLoading(true);
     try {
-      const fullHtml = buildReportHtml(true);
+      let eloraLogoDataUrl = null;
+      try {
+        const res = await fetch(ELORA_LOGO_URL, { mode: 'cors' });
+        if (res.ok) {
+          const blob = await res.blob();
+          eloraLogoDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
+      } catch (_) {
+        // Keep null; PDF will show text "ELORA" fallback
+      }
+      const fullHtml = buildReportHtml(true, eloraLogoDataUrl);
       const innerMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
       const htmlToRender = innerMatch ? innerMatch[1].trim() : fullHtml;
       const wrapper = document.createElement('div');
@@ -411,7 +427,10 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
     try {
       const { error } = await supabaseClient.tables.companies.update({ scheduled_email_reports_enabled: !company.scheduled_email_reports_enabled }).eq('id', company.id);
       if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: queryKeys.tenant.companies(companyId) });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: queryKeys.tenant.companies(companyId) }),
+        queryClient.refetchQueries({ queryKey: queryKeys.tenant.company(companyId, company.id) }),
+      ]);
       setScheduleDialogOpen(false);
       toast.success(company.scheduled_email_reports_enabled ? 'Scheduled reports disabled' : 'Scheduled reports enabled', { description: 'Monthly client report emails will ' + (company.scheduled_email_reports_enabled ? 'no longer' : '') + ' be sent.' });
     } catch (e) {
