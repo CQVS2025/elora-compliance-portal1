@@ -409,7 +409,7 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
     }
     setScheduleLoading(true);
     try {
-      const { error } = await supabaseClient.from('companies').update({ scheduled_email_reports_enabled: !company.scheduled_email_reports_enabled }).eq('id', company.id);
+      const { error } = await supabaseClient.tables.companies.update({ scheduled_email_reports_enabled: !company.scheduled_email_reports_enabled }).eq('id', company.id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: queryKeys.tenant.companies(companyId) });
       setScheduleDialogOpen(false);
@@ -534,15 +534,32 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
       </Dialog>
 
       <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Schedule Monthly Report</DialogTitle>
-            <DialogDescription>
-              {companyToSchedule
-                ? (companyToSchedule.scheduled_email_reports_enabled
-                  ? 'This client is currently receiving monthly client report emails. Disable to stop sending.'
-                  : 'Enable monthly client report emails for this client. Reports will be sent automatically each month.')
-                : 'Select a specific customer (company) to enable or disable scheduled monthly client reports.'}
+            <DialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                {companyToSchedule ? (
+                  <>
+                    <p>
+                      {companyToSchedule.scheduled_email_reports_enabled
+                        ? 'This client is set to receive monthly client report emails. Disable to stop all monthly client reports for this company.'
+                        : 'Enable to send the Fleet Wash Program Report automatically each month.'}
+                    </p>
+                    <p className="font-medium text-foreground/90">How it works:</p>
+                    <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                      <li>Runs on the <strong>1st of each month</strong> (Australia/Sydney).</li>
+                      <li>Report covers the <strong>previous calendar month</strong>.</li>
+                      <li>Emails go to everyone who has an <strong>enabled schedule</strong> in Reports → Email Reports for this company (their email plus any extra recipients they added).</li>
+                    </ul>
+                    {companyToSchedule.scheduled_email_reports_enabled && (
+                      <p className="text-amber-600 dark:text-amber-500">Disabling will stop monthly client report emails for this company only.</p>
+                    )}
+                  </>
+                ) : (
+                  <p>Select a specific customer (company) in the dashboard filters, then open this dialog to enable or disable scheduled monthly client reports for that company.</p>
+                )}
+              </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

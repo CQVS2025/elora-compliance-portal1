@@ -3,13 +3,17 @@ name: Monthly Client Report
 on:
   schedule:
     # Run on the 1st of each month at 09:00 UTC (evening 1st in Australia)
+    # Scheduled runs use the workflow from the default branch (main)
     - cron: '0 9 1 * *'
   workflow_dispatch:
+    # Manual run: choose branch in Actions UI (e.g. feature/usuage-cost-new-tabs or main)
 
 jobs:
   run-client-reports:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Run only on these branches: feature branch for now, and main after merge
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/usuage-cost-new-tabs'
 
     steps:
       - name: Checkout code
