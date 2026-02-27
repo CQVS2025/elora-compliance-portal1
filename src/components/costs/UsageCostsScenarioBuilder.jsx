@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FileText, Copy, Save, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,9 +36,24 @@ import { callEdgeFunction, supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import { toast } from '@/lib/toast';
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { CardsAndChartsGlassySkeleton, ActionLoaderOverlay } from './UsageCostsSkeletons';
 
 const DEFAULT_DISPENSING_RATE_L_PER_60S = 5;
+const ELORA_LOGO_URL = 'https://yyqspdpk0yebvddv.public.blob.vercel-storage.com/233633501.png';
+
+function hexToRgb(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return null;
+  const num = parseInt(clean, 16);
+  if (Number.isNaN(num)) return null;
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255,
+  };
+}
 
 function buildSiteRowsFromVehicles(vehicles, customerName, customerRef) {
   if (!Array.isArray(vehicles) || vehicles.length === 0) return [];
@@ -85,6 +100,8 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
   const [exportPdfLoading, setExportPdfLoading] = useState(false);
   const [applyToAllOpen, setApplyToAllOpen] = useState(false);
   const [applyToAllValues, setApplyToAllValues] = useState({ proposedWashTime: 60, proposedWashesPerWeek: 6 });
+  const [pdfHtml, setPdfHtml] = useState('');
+  const pdfContainerRef = useRef(null);
 
   const { data: customers = [] } = useQuery(customersOptions(companyId, { allTenants: isSuperAdmin }));
   const { data: vehiclesData, isLoading: vehiclesLoading } = useQuery({
@@ -170,6 +187,16 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
       totalTrucks,
     };
   }, [siteRowsWithPricing]);
+
+  const extractBodyHtml = (html) => {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      return doc.body?.innerHTML || html;
+    } catch {
+      return html;
+    }
+  };
 
   const updateRow = useCallback((siteRef, updates) => {
     setSiteRows((prev) =>
@@ -276,153 +303,255 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
     }
   }, [companyId, userEmail, localCustomer, siteRowsWithPricing]);
 
-  const buildPdfDoc = useCallback(() => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 36;
-    const contentWidth = pageWidth - margin * 2;
-    let y = 0;
+  const buildScenarioReportHtml = useCallback((branding, rowsForPage) => {
+    const primaryColor = branding?.primary_color || '#004E2B';
+    const secondaryColor = branding?.secondary_color || '#00DD39';
+    const companyName = branding?.company_name || 'ELORA System';
+    const companyLogoUrl = branding?.logo_url || '';
+    const generated = new Date().toLocaleString();
 
-    // Header bar (ELORA green)
-    doc.setFillColor(124, 179, 66);
-    doc.rect(0, 0, pageWidth, 56, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Multi-Site Scenario Builder', margin, 32);
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${customerName || 'Customer'} · ${summary.siteCount} sites · ${summary.totalTrucks} trucks`, margin, 46);
-    y = 72;
+    const headerSummary = `${summary.siteCount} site${summary.siteCount === 1 ? '' : 's'} · ${summary.totalTrucks} truck${summary.totalTrucks === 1 ? '' : 's'}`;
 
-    // Generated line
-    doc.setTextColor(100, 116, 139);
-    doc.setFontSize(9);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
-    y += 24;
+    const cardsHtml = `
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 16px 0;border-collapse:separate;border-spacing:12px 0;">
+        <tr>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Current Total / Month</div>
+              <div style="color:#0f172a;font-size:18px;font-weight:700;margin:0 0 2px 0;">$${summary.totalCurrentMo.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div style="color:#94a3b8;font-size:11px;margin:0;">${headerSummary}</div>
+            </div>
+          </td>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Proposed Total / Month</div>
+              <div style="color:#0f172a;font-size:18px;font-weight:700;margin:0 0 2px 0;">$${summary.totalProposedMo.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div style="color:#94a3b8;font-size:11px;margin:0;">After parameter changes</div>
+            </div>
+          </td>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#16a34a;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Monthly Saving</div>
+              <div style="color:#166534;font-size:18px;font-weight:700;margin:0 0 2px 0;">$${summary.monthlySaving.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div style="color:#4b5563;font-size:11px;margin:0;">${summary.pctReduction}% reduction</div>
+            </div>
+          </td>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#16a34a;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Annual Saving</div>
+              <div style="color:#166534;font-size:18px;font-weight:700;margin:0 0 2px 0;">$${summary.annualSaving.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div style="color:#4b5563;font-size:11px;margin:0;">Projected yearly saving</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    `;
 
-    // Summary cards: 4 boxes with border and spacing
-    const cardW = (contentWidth - 12) / 4;
-    const cardH = 44;
-    const borderColor = { r: 226, g: 232, b: 240 };
-    doc.setDrawColor(borderColor.r, borderColor.g, borderColor.b);
-    doc.setLineWidth(0.5);
-
-    const cards = [
-      { label: 'Current Total / Month', value: `$${summary.totalCurrentMo.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: `${summary.totalTrucks} trucks · ${summary.siteCount} sites` },
-      { label: 'Proposed Total / Month', value: `$${summary.totalProposedMo.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: 'After parameter changes' },
-      { label: 'Monthly Saving', value: `$${summary.monthlySaving.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: `${summary.pctReduction}% reduction`, green: true },
-      { label: 'Annual Saving', value: `$${summary.annualSaving.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: 'Projected yearly saving', green: true },
-    ];
-    cards.forEach((card, i) => {
-      const x = margin + i * (cardW + 4);
-      doc.setFillColor(248, 250, 252);
-      doc.rect(x, y, cardW, cardH, 'FD');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text(card.label, x + 10, y + 14);
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      if (card.green) doc.setTextColor(4, 120, 87);
-      else doc.setTextColor(15, 23, 42);
-      doc.text(card.value, x + 10, y + 28);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text(card.sub, x + 10, y + 38);
-    });
-    y += cardH + 20;
-
-    // Section title
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text('Site-by-Site Parameters', margin, y);
-    y += 20;
-
-    // Table: wider columns and taller rows so headers and currency don't wrap
-    const headerRowH = 32;
-    const dataRowH = 28;
-    const pad = 12;
-    // Column widths (pt) – sum = contentWidth; extra width for money columns to avoid wrap
-    const colW = [88, 42, 52, 52, 46, 46, 70, 70, 67];
-    const headers = ['Site', 'Trucks', 'Curr Wash', 'Prop Wash', 'Curr W/Wk', 'Prop W/Wk', 'Current / Mo', 'Proposed / Mo', 'Saving'];
-    const tableLeft = margin;
-    const tableWidth = Math.min(contentWidth, colW.reduce((a, b) => a + b, 0));
-    const colX = [tableLeft];
-    for (let i = 1; i < colW.length; i++) colX[i] = colX[i - 1] + colW[i - 1];
-
-    // Header row – extra height so labels stay on one line
-    doc.setFillColor(241, 245, 249);
-    doc.rect(tableLeft, y, tableWidth, headerRowH, 'FD');
-    doc.setDrawColor(borderColor.r, borderColor.g, borderColor.b);
-    doc.rect(tableLeft, y, tableWidth, headerRowH, 'S');
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(51, 65, 85);
-    const headerY = y + headerRowH / 2 + 3;
-    headers.forEach((h, i) => {
-      if (i >= 6) {
-        doc.text(h, colX[i] + colW[i] - pad, headerY, { align: 'right' });
-      } else {
-        doc.text(h, colX[i] + pad, headerY);
-      }
-    });
-    y += headerRowH;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    siteRowsWithPricing.forEach((row, idx) => {
-      if (y + dataRowH > pageHeight - 52) {
-        doc.addPage();
-        y = margin;
-      }
-      const fill = idx % 2 === 1 ? [248, 250, 252] : [255, 255, 255];
-      doc.setFillColor(...fill);
-      doc.rect(tableLeft, y, tableWidth, dataRowH, 'FD');
-      doc.rect(tableLeft, y, tableWidth, dataRowH, 'S');
-      const cellY = y + dataRowH / 2 + 3;
-      doc.setTextColor(15, 23, 42);
-      doc.text((row.siteName || row.siteRef).substring(0, 20), colX[0] + pad, cellY);
-      doc.text(String(row.trucks), colX[1] + pad, cellY);
-      doc.text(`${row.currentWashTime}s`, colX[2] + pad, cellY);
-      doc.text(`${row.proposedWashTime}s`, colX[3] + pad, cellY);
-      doc.text(String(row.currentWashesPerWeek), colX[4] + pad, cellY);
-      doc.text(String(row.proposedWashesPerWeek), colX[5] + pad, cellY);
-      // Money: right-align without maxWidth to prevent wrapping (column width is sufficient)
-      doc.text(`$${Number(row.currentCostMo).toFixed(2)}`, colX[6] + colW[6] - pad, cellY, { align: 'right' });
-      doc.text(`$${Number(row.proposedCostMo).toFixed(2)}`, colX[7] + colW[7] - pad, cellY, { align: 'right' });
+    const rows = rowsForPage && rowsForPage.length ? rowsForPage : siteRowsWithPricing;
+    const rowsHtml = rows.map((row, index) => {
       const saving = row.monthlySaving;
-      if (saving < 0) doc.setTextColor(185, 28, 28);
-      else doc.setTextColor(4, 120, 87);
-      doc.text(`$${Number(saving).toFixed(2)}`, colX[8] + colW[8] - pad, cellY, { align: 'right' });
-      y += dataRowH;
-    });
-    y += 24;
+      const savingColor = saving < 0 ? '#b91c1c' : '#047857';
+      const bg = index % 2 === 0 ? '#ffffff' : '#f9fafb';
+      return `
+        <tr style="background:${bg};">
+          <td style="padding:10px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">${row.siteName || row.siteRef}</td>
+          <td style="padding:10px 12px;font-size:12px;color:#0f172a;text-align:right;border-bottom:1px solid #e5e7eb;">${row.trucks}</td>
+          <td style="padding:10px 12px;font-size:12px;color:#64748b;text-align:right;border-bottom:1px solid #e5e7eb;">${row.currentWashTime}s</td>
+          <td style="padding:10px 12px;font-size:12px;color:#0f172a;text-align:right;border-bottom:1px solid #e5e7eb;">${row.proposedWashTime}s</td>
+          <td style="padding:10px 12px;font-size:12px;color:#64748b;text-align:right;border-bottom:1px solid #e5e7eb;">${row.currentWashesPerWeek}</td>
+          <td style="padding:10px 12px;font-size:12px;color:#0f172a;text-align:right;border-bottom:1px solid #e5e7eb;">${row.proposedWashesPerWeek}</td>
+          <td style="padding:10px 12px;font-size:12px;color:#0f172a;text-align:right;border-bottom:1px solid #e5e7eb;">$${Number(row.currentCostMo).toFixed(2)}</td>
+          <td style="padding:10px 12px;font-size:12px;color:#0f172a;font-weight:600;text-align:right;border-bottom:1px solid #e5e7eb;">$${Number(row.proposedCostMo).toFixed(2)}</td>
+          <td style="padding:10px 12px;font-size:12px;color:${savingColor};font-weight:600;text-align:right;border-bottom:1px solid #e5e7eb;">$${Number(saving).toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
 
-    // Footer
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(1);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 14;
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`ELORA Scenario Builder · ${new Date().toLocaleString()}`, margin, y);
-    doc.text('This report is generated from the Usage Costs module.', pageWidth - margin, y, { align: 'right' });
-    return doc;
+    const tableHtml = `
+      <div style="margin-top:20px;">
+        <h2 style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 8px 0;">Site-by-Site Parameters</h2>
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:left;text-transform:uppercase;letter-spacing:0.5px;">Site</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:right;text-transform:uppercase;letter-spacing:0.5px;">Trucks</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:right;text-transform:uppercase;letter-spacing:0.5px;">Current Wash</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:right;text-transform:uppercase;letter-spacing:0.5px;">Proposed Wash</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:right;text-transform:uppercase;letter-spacing:0.5px;">Current W/Wk</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:right;text-transform:uppercase;letter-spacing:0.5px;">Proposed W/Wk</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:right;text-transform:uppercase;letter-spacing:0.5px;">Current / Mo</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:right;text-transform:uppercase;letter-spacing:0.5px;">Proposed / Mo</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:right;text-transform:uppercase;letter-spacing:0.5px;">Monthly Saving</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi-Site Scenario Builder</title>
+</head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <div style="max-width:820px;margin:28px auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.08);">
+    <header style="background:linear-gradient(160deg,#004E2B 0%,#003d22 50%,#002a17 100%);padding:0;">
+      <div style="padding:28px 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+          <tr>
+            <td style="width:28%;vertical-align:middle;text-align:center;">
+              <div style="display:inline-flex;flex-direction:column;align-items:center;gap:6px;">
+                ${
+                  companyLogoUrl
+                    ? `<img src="${companyLogoUrl}" alt="${companyName}" style="height:32px;width:auto;object-fit:contain;display:block;" />`
+                    : `<div style="height:32px;width:32px;border-radius:999px;background:#ffffff;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                        <span style="font-size:11px;font-weight:700;color:#004E2B;">${(companyName || 'ELORA').slice(0, 3).toUpperCase()}</span>
+                       </div>`
+                }
+                <span style="color:rgba(255,255,255,0.98);font-size:12px;font-weight:600;">${companyName}</span>
+              </div>
+            </td>
+            <td style="width:44%;vertical-align:middle;text-align:center;">
+              <h1 style="color:rgba(255,255,255,0.98);margin:0;font-size:24px;font-weight:800;letter-spacing:-0.5px;">Multi-Site Scenario Builder</h1>
+              <p style="color:rgba(255,255,255,0.7);margin:4px 0 0 0;font-size:12px;">${customerName || 'Customer'} · ${summary.siteCount} sites · ${summary.totalTrucks} trucks</p>
+              <div style="display:inline-block;margin-top:10px;padding:4px 14px;border-radius:999px;border:1px solid rgba(0,221,57,0.25);background:rgba(0,221,57,0.12);color:#bbf7d0;font-size:10px;font-weight:600;letter-spacing:0.3px;">
+                ${generated}
+              </div>
+            </td>
+            <td style="width:28%;vertical-align:middle;text-align:center;">
+              <div style="display:inline-flex;flex-direction:column;align-items:center;gap:6px;opacity:0.95;">
+                <img src="${ELORA_LOGO_URL}" alt="Elora" style="height:32px;width:auto;object-fit:contain;display:block;" />
+                <span style="color:rgba(255,255,255,0.85);font-size:12px;font-weight:600;letter-spacing:0.3px;">Elora Solutions</span>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div style="height:3px;background:linear-gradient(90deg,#00DD39,#7cc43e);"></div>
+    </header>
+    <div style="background:#f0faf5;padding:10px 24px;border-bottom:1px solid #d1e8da;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span style="color:#004E2B;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Scenario Summary</span>
+      <span style="color:#004E2B;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${headerSummary}</span>
+    </div>
+    <main style="padding:40px 44px;">
+      ${cardsHtml}
+      ${tableHtml}
+    </main>
+    <footer style="background:linear-gradient(180deg,#f7f8fa,#f0faf5);padding:24px 32px;border-top:1px solid #d1e8da;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <p style="color:#64748b;font-size:12px;margin:0;">This is an automated report from ${companyName} Compliance Portal</p>
+      <div style="display:inline-flex;align-items:center;gap:8px;">
+        <img src="${ELORA_LOGO_URL}" alt="" style="height:22px;width:auto;object-fit:contain;flex-shrink:0;display:inline-block;" />
+        <span style="color:#64748b;font-size:11px;font-weight:500;white-space:nowrap;">Powered by ELORA · © ${new Date().getFullYear()}</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>
+    `;
   }, [customerName, summary, siteRowsWithPricing]);
 
-  const handleExportPdf = useCallback(() => {
+  const buildPdfFromHtml = useCallback(async (branding) => {
+    const addCanvasToPdf = (pdf, canvas) => {
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 24;
+      const contentWidth = pageWidth - margin * 2;
+      const imgWidth = contentWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgData = canvas.toDataURL('image/png', 0.95);
+      let heightLeft = imgHeight;
+      let position = margin;
+
+      pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= (pageHeight - margin * 2);
+
+      while (heightLeft > 0) {
+        position = -(imgHeight - heightLeft) + margin;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= (pageHeight - margin * 2);
+      }
+    };
+
+    const captureContainerToCanvas = async () => {
+      if (!pdfContainerRef.current) throw new Error('PDF container not available. Please try again.');
+      return await html2canvas(pdfContainerRef.current, {
+        scale: 2.5,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#f1f5f9',
+        logging: false,
+        width: 860,
+        height: pdfContainerRef.current.scrollHeight || 1200,
+        x: 0,
+        y: 0,
+      });
+    };
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true });
+    const pageSize = 13;
+    const totalRows = siteRowsWithPricing.length || 0;
+    const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+
+    for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+      const start = pageIndex * pageSize;
+      const end = start + pageSize;
+      const chunk = siteRowsWithPricing.slice(start, end);
+
+      const html = buildScenarioReportHtml(branding, chunk);
+      setPdfHtml(extractBodyHtml(html));
+      // allow React DOM to apply innerHTML
+      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      if (pageIndex > 0) {
+        pdf.addPage();
+      }
+      const canvas = await captureContainerToCanvas();
+      addCanvasToPdf(pdf, canvas);
+    }
+
+    const filename = `scenario-builder-${(customerName || 'customer').replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    return { pdf, filename };
+  }, [buildScenarioReportHtml, extractBodyHtml, customerName, siteRowsWithPricing]);
+
+  const handleExportPdf = useCallback(async () => {
     setExportPdfLoading(true);
     try {
-      const doc = buildPdfDoc();
-      doc.save(`scenario-builder-${(customerName || 'customer').replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      let branding = null;
+      if (companyId) {
+        const { data: brandingRows } = await supabaseClient.tables.companies
+          .select('name, logo_url, primary_color, secondary_color')
+          .eq('id', companyId)
+          .limit(1);
+        branding = brandingRows?.[0]
+          ? {
+              company_name: brandingRows[0].name || 'ELORA Solutions',
+              logo_url: brandingRows[0].logo_url || undefined,
+              primary_color: brandingRows[0].primary_color || '#004E2B',
+              secondary_color: brandingRows[0].secondary_color || '#00DD39',
+            }
+          : null;
+      }
+      const effectiveBranding = branding || {
+        company_name: 'ELORA Solutions',
+        logo_url: undefined,
+        primary_color: '#004E2B',
+        secondary_color: '#00DD39',
+      };
+      const { pdf, filename } = await buildPdfFromHtml(effectiveBranding);
+      pdf.save(filename);
       toast.success('PDF exported', { description: 'Scenario report downloaded.' });
     } finally {
       setExportPdfLoading(false);
     }
-  }, [customerName, buildPdfDoc]);
+  }, [companyId, buildPdfFromHtml]);
 
   if (vehiclesLoading) {
     return <CardsAndChartsGlassySkeleton />;
@@ -731,6 +860,26 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Hidden PDF container for html2canvas capture */}
+      <div
+        ref={pdfContainerRef}
+        style={{
+          position: 'fixed',
+          width: '860px',
+          minHeight: pdfHtml ? '900px' : '0px',
+          padding: '28px',
+          background: 'linear-gradient(135deg, hsl(220, 13%, 91%) 0%, #e2e8f0 100%)',
+          top: '-99999px',
+          left: '0',
+          pointerEvents: 'none',
+          zIndex: -9999,
+          overflow: 'visible',
+          visibility: pdfHtml ? 'visible' : 'hidden',
+        }}
+        aria-hidden="true"
+        dangerouslySetInnerHTML={{ __html: pdfHtml }}
+      />
     </div>
   );
 }

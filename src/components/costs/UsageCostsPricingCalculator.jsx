@@ -20,6 +20,7 @@ import { callEdgeFunction, supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import { toast } from '@/lib/toast';
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { PricingCalculatorGlassySkeleton, ActionLoaderOverlay } from './UsageCostsSkeletons';
 
 const ELORA_LOGO_URL = 'https://yyqspdpk0yebvddv.public.blob.vercel-storage.com/233633501.png';
@@ -29,6 +30,19 @@ const DEFAULT_SECONDARY = '#9CCC65';
 
 const DEFAULT_DISPENSING_RATE_L_PER_60S = 5;
 const WEEKS_PER_MONTH = 52 / 12;
+
+function hexToRgb(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return null;
+  const num = parseInt(clean, 16);
+  if (Number.isNaN(num)) return null;
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255,
+  };
+}
 
 function round2(n) {
   return Math.round(n * 100) / 100;
@@ -71,6 +85,8 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
   const [sendProposalLoading, setSendProposalLoading] = useState(false);
   const [emailReportLoading, setEmailReportLoading] = useState(false);
   const [exportPdfLoading, setExportPdfLoading] = useState(false);
+  const [pdfHtml, setPdfHtml] = useState('');
+  const pdfContainerRef = useRef(null);
   const lastInitializedSiteKey = useRef('');
   const lastLoadedProposalKey = useRef('');
   const queryClient = useQueryClient();
@@ -247,6 +263,16 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
       : 0;
     return { perTruckMonth, perSiteMonth, perSiteDay, perSiteYear, pct };
   }, [currentCalc, proposedCalc, truckCount]);
+
+  const extractBodyHtml = (html) => {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      return doc.body?.innerHTML || html;
+    } catch {
+      return html;
+    }
+  };
 
   const runReverseCalculator = () => {
     const effectiveTruckCount = Math.max(1, truckCount);
@@ -429,41 +455,91 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     }
   }, [companyId, userEmail, submitProposalPayload, resolveBrandingForPricingReport, queryClient, localCustomer, localSite]);
 
-  /** Build email HTML matching sendEmailReport.ts theme: same colors, gradient, footer. */
-  const buildReportHtml = useCallback((branding) => {
-    const primaryColor = branding?.primary_color || DEFAULT_PRIMARY;
-    const secondaryColor = branding?.secondary_color || DEFAULT_SECONDARY;
-    const companyName = branding?.company_name || 'ELORA Solutions';
-    const logoUrl = branding?.logo_url || null;
+  /** Build email HTML for Pricing Calculator report (used in email body only). */
+  const buildEmailHtml = useCallback((branding) => {
+    const primaryColor = branding?.primary_color || '#004E2B';
+    const secondaryColor = branding?.secondary_color || '#00DD39';
+    const companyName = branding?.company_name || 'ELORA System';
+    const logoUrl = branding?.logo_url || '';
     const generated = new Date().toLocaleString();
-    const content = `
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);border-left:4px solid #e2e8f0;border-collapse:collapse;">
-        <tr><td style="padding:16px 20px;">
-          <p style="color:#64748b;font-size:12px;margin:0;">Site context</p>
-          <p style="color:#0f172a;font-size:15px;font-weight:600;margin:4px 0 0 0;">${truckCount} trucks · $${pricePerLitre.toFixed(2)}/L · ${dispensingRate}L/60s</p>
-        </td></tr>
+
+    const cardsHtml = `
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 12px 0;border-collapse:separate;border-spacing:12px 0;">
+        <tr>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Site context</div>
+              <div style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 2px 0;">${truckCount} trucks</div>
+              <div style="color:#94a3b8;font-size:11px;margin:0;">$${pricePerLitre.toFixed(2)}/L · ${dispensingRate}L/60s</div>
+            </div>
+          </td>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Current / Month</div>
+              <div style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 2px 0;">$${currentCalc.maxCostPerMonthSite.toFixed(2)}</div>
+              <div style="color:#94a3b8;font-size:11px;margin:0;">Max cost this site</div>
+            </div>
+          </td>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Proposed / Month</div>
+              <div style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 2px 0;">$${proposedCalc.maxCostPerMonthSite.toFixed(2)}</div>
+              <div style="color:#94a3b8;font-size:11px;margin:0;">After changes</div>
+            </div>
+          </td>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#16a34a;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Projected Savings</div>
+              <div style="color:#166534;font-size:16px;font-weight:700;margin:0 0 2px 0;">$${savings.perSiteMonth.toFixed(2)}</div>
+              <div style="color:#4b5563;font-size:11px;margin:0;">Per month · ${savings.pct}%</div>
+            </div>
+          </td>
+        </tr>
       </table>
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);border-left:4px solid #94a3b8;">
-        <tr><td style="padding:18px 20px;">
-          <p style="color:#475569;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px 0;">Current parameters</p>
-          <p style="color:#0f172a;font-size:15px;margin:0;">Wash time <strong>${currentWashTime}s</strong> · Washes/day <strong>${currentWashesPerDay}</strong> · Washes/week <strong>${currentWashesPerWeek}</strong></p>
-          <p style="color:#64748b;font-size:13px;margin:10px 0 0 0;">Max cost/month (site): <strong style="color:#0f172a;">$${currentCalc.maxCostPerMonthSite.toFixed(2)}</strong> · Max cost/year: <strong style="color:#0f172a;">$${currentCalc.maxCostPerYearSite.toFixed(2)}</strong></p>
-        </td></tr>
-      </table>
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);border-left:4px solid ${primaryColor};">
-        <tr><td style="padding:18px 20px;">
-          <p style="color:#334155;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px 0;">Proposed parameters</p>
-          <p style="color:#0f172a;font-size:15px;margin:0;">Wash time <strong>${proposedWashTime}s</strong> · Washes/day <strong>${proposedWashesPerDay}</strong> · Washes/week <strong>${proposedWashesPerWeek}</strong></p>
-          <p style="color:#64748b;font-size:13px;margin:10px 0 0 0;">Max cost/month (site): <strong style="color:${primaryColor};">$${proposedCalc.maxCostPerMonthSite.toFixed(2)}</strong> · Max cost/year: <strong style="color:${primaryColor};">$${proposedCalc.maxCostPerYearSite.toFixed(2)}</strong></p>
-        </td></tr>
-      </table>
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);border-left:4px solid ${secondaryColor};">
-        <tr><td style="padding:18px 20px;">
-          <p style="color:#334155;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px 0;">Projected savings</p>
-          <p style="color:#0f172a;font-size:15px;margin:0;">Per site/month <strong style="color:#059669;">$${savings.perSiteMonth.toFixed(2)}</strong> · Per site/year <strong style="color:#059669;">$${savings.perSiteYear.toFixed(2)}</strong></p>
-          <p style="color:#047857;font-size:14px;font-weight:700;margin:8px 0 0 0;">Total saving: ${savings.pct}%</p>
-        </td></tr>
-      </table>`;
+    `;
+
+    const detailHtml = `
+      <div style="margin-top:16px;">
+        <h2 style="color:#0f172a;font-size:15px;font-weight:700;margin:5px 0 8px 10px;">Parameters</h2>
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:8px 12px;font-size:11px;color:#6b7280;text-align:left;text-transform:uppercase;letter-spacing:0.5px;">Metric</th>
+              <th style="padding:8px 12px;font-size:11px;color:#6b7280;text-align:left;text-transform:uppercase;letter-spacing:0.5px;">Current</th>
+              <th style="padding:8px 12px;font-size:11px;color:#6b7280;text-align:left;text-transform:uppercase;letter-spacing:0.5px;">Proposed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="background:#ffffff;">
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">Wash time (seconds)</td>
+              <td style="padding:8px 12px;font-size:12px;color:#4b5563;border-bottom:1px solid #e5e7eb;">${currentWashTime}s</td>
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;font-weight:600;border-bottom:1px solid #e5e7eb;">${proposedWashTime}s</td>
+            </tr>
+            <tr style="background:#f9fafb;">
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">Washes per day</td>
+              <td style="padding:8px 12px;font-size:12px;color:#4b5563;border-bottom:1px solid #e5e7eb;">${currentWashesPerDay}</td>
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;font-weight:600;border-bottom:1px solid #e5e7eb;">${proposedWashesPerDay}</td>
+            </tr>
+            <tr style="background:#ffffff;">
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">Washes per week</td>
+              <td style="padding:8px 12px;font-size:12px;color:#4b5563;border-bottom:1px solid #e5e7eb;">${currentWashesPerWeek}</td>
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;font-weight:600;border-bottom:1px solid #e5e7eb;">${proposedWashesPerWeek}</td>
+            </tr>
+            <tr style="background:#f9fafb;">
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">Max cost / month / site</td>
+              <td style="padding:8px 12px;font-size:12px;color:#4b5563;border-bottom:1px solid #e5e7eb;">$${currentCalc.maxCostPerMonthSite.toFixed(2)}</td>
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;font-weight:600;border-bottom:1px solid #e5e7eb;">$${proposedCalc.maxCostPerMonthSite.toFixed(2)}</td>
+            </tr>
+            <tr style="background:#ffffff;">
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;">Max cost / year / site</td>
+              <td style="padding:8px 12px;font-size:12px;color:#4b5563;">$${currentCalc.maxCostPerYearSite.toFixed(2)}</td>
+              <td style="padding:8px 12px;font-size:12px;color:#0f172a;font-weight:600;">$${proposedCalc.maxCostPerYearSite.toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -472,151 +548,304 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pricing Calculator Report</title>
 </head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:680px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
-    <div style="background:linear-gradient(135deg,${primaryColor} 0%,${secondaryColor} 100%);padding:24px 20px;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <div style="max-width:680px;margin:24px auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 6px 20px rgba(15,23,42,0.18);">
+    <header style="background:linear-gradient(160deg,#004E2B 0%,#003d22 50%,#002a17 100%);padding:0;">
+      <div style="padding:20px 24px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+          <tr>
+            <td style="width:28%;vertical-align:middle;text-align:center;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding-bottom:4px;">
+                    ${
+                      logoUrl
+                        ? `<img src="${logoUrl}" alt="${companyName}" style="height:28px;width:auto;object-fit:contain;display:block;margin:0 auto;" />`
+                        : `<div style="height:28px;width:28px;border-radius:999px;background:#ffffff;display:block;margin:0 auto;overflow:hidden;">
+                            <table role="presentation" width="100%" height="100%"><tr><td align="center" valign="middle" style="font-size:10px;font-weight:700;color:#004E2B;">${(companyName || 'ELORA').slice(0, 3).toUpperCase()}</td></tr></table>
+                           </div>`
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center">
+                    <span style="color:rgba(255,255,255,0.98);font-size:11px;font-weight:600;">${companyName}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+            <td style="width:44%;vertical-align:middle;text-align:center;">
+              <h1 style="color:rgba(255,255,255,0.98);margin:0;font-size:20px;font-weight:800;letter-spacing:-0.4px;">Pricing Calculator Report</h1>
+              <p style="color:rgba(255,255,255,0.74);margin:4px 0 0 0;font-size:12px;">${customerName} · ${siteName}</p>
+              <div style="display:inline-block;margin-top:8px;padding:3px 12px;border-radius:999px;border:1px solid rgba(0,221,57,0.25);background:rgba(0,221,57,0.12);color:#bbf7d0;font-size:10px;font-weight:600;letter-spacing:0.3px;">
+                ${generated}
+              </div>
+            </td>
+            <td style="width:28%;vertical-align:middle;text-align:center;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding-bottom:4px;">
+                    <img src="${ELORA_LOGO_URL}" alt="Elora" style="height:28px;width:auto;object-fit:contain;display:block;margin:0 auto;" />
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center">
+                    <span style="color:rgba(255,255,255,0.9);font-size:11px;font-weight:600;letter-spacing:0.3px;">Elora Solutions</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div style="height:3px;background:linear-gradient(90deg,#00DD39,#7cc43e);"></div>
+    </header>
+    <main style="padding:24px 56px 32px 56px;">
+      <p style="color:#475569;font-size:14px;line-height:1.6;margin:5px 0 16px 10px;">
+        Here is your pricing calculator snapshot for <span style="font-weight:600;color:#0f172a;">${customerName} · ${siteName}</span>.
+      </p>
+      ${cardsHtml}
+      ${detailHtml}
+    </main>
+    <footer style="background:linear-gradient(180deg,#f7f8fa,#f0faf5);padding:18px 24px;border-top:1px solid #d1e8da;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
         <tr>
-          <td style="width:28%;vertical-align:middle;text-align:left;">
-            <div style="display:inline-flex;align-items:center;gap:12px;">
-              ${logoUrl ? `<img src="${logoUrl}" alt="" style="max-height:36px;max-width:120px;object-fit:contain;filter:brightness(0) invert(1);" />` : ''}
-              <span style="color:rgba(255,255,255,0.98);font-size:14px;font-weight:600;">${companyName}</span>
+          <td align="left" style="vertical-align:middle;padding:4px 0;">
+            <p style="color:#64748b;font-size:12px;margin:0;">This automated email was sent from the ${companyName} Compliance Portal.</p>
+          </td>
+          <td align="right" style="vertical-align:middle;padding:4px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;display:inline-table;">
+              <tr>
+                <td style="vertical-align:middle;padding-right:6px;">
+                  <img src="${ELORA_LOGO_URL}" alt="Elora" style="height:18px;width:auto;object-fit:contain;display:block;" />
+                </td>
+                <td style="vertical-align:middle;">
+                  <span style="color:#64748b;font-size:11px;font-weight:500;white-space:nowrap;">Powered by ELORA · © ${new Date().getFullYear()}</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </footer>
+  </div>
+</body>
+</html>
+    `;
+  }, [customerName, siteName, truckCount, pricePerLitre, dispensingRate, currentWashTime, currentWashesPerDay, currentWashesPerWeek, currentCalc, proposedWashTime, proposedWashesPerDay, proposedWashesPerWeek, proposedCalc, savings]);
+
+  /** Build report HTML for PDF capture (matches Scenario Builder PDF theme). */
+  const buildReportHtml = useCallback((branding) => {
+    const primaryColor = branding?.primary_color || '#004E2B';
+    const secondaryColor = branding?.secondary_color || '#00DD39';
+    const companyName = branding?.company_name || 'ELORA System';
+    const logoUrl = branding?.logo_url || '';
+    const generated = new Date().toLocaleString();
+
+    const cardsHtml = `
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 16px 0;border-collapse:separate;border-spacing:12px 0;">
+        <tr>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Site context</div>
+              <div style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 2px 0;">${truckCount} trucks</div>
+              <div style="color:#94a3b8;font-size:11px;margin:0;">$${pricePerLitre.toFixed(2)}/L · ${dispensingRate}L/60s</div>
             </div>
           </td>
-          <td style="width:44%;vertical-align:middle;text-align:center;">
-            <h1 style="color:rgba(255,255,255,0.98);margin:0;font-size:24px;font-weight:700;">Pricing Calculator Report</h1>
-            <p style="color:rgba(255,255,255,0.75);margin:4px 0 0 0;font-size:12px;">${customerName} · ${siteName}</p>
-            <p style="color:rgba(255,255,255,0.7);margin:2px 0 0 0;font-size:11px;">Generated ${generated}</p>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Current / Month</div>
+              <div style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 2px 0;">$${currentCalc.maxCostPerMonthSite.toFixed(2)}</div>
+              <div style="color:#94a3b8;font-size:11px;margin:0;">Max cost this site</div>
+            </div>
           </td>
-          <td style="width:28%;vertical-align:middle;text-align:center;">
-            <div style="display:inline-block;text-align:center;">
-              <div style="margin-bottom:6px;"><img src="${ELORA_LOGO_URL}" alt="" style="height:32px;width:auto;object-fit:contain;display:block;margin:0 auto;" /></div>
-              <span style="color:rgba(255,255,255,0.85);font-size:11px;font-weight:600;">Powered by Elora Solutions</span>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Proposed / Month</div>
+              <div style="color:#0f172a;font-size:16px;font-weight:700;margin:0 0 2px 0;">$${proposedCalc.maxCostPerMonthSite.toFixed(2)}</div>
+              <div style="color:#94a3b8;font-size:11px;margin:0;">After changes</div>
+            </div>
+          </td>
+          <td style="width:25%;vertical-align:top;">
+            <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;">
+              <div style="color:#16a34a;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin:0 0 4px 0;">Projected Savings</div>
+              <div style="color:#166534;font-size:16px;font-weight:700;margin:0 0 2px 0;">$${savings.perSiteMonth.toFixed(2)}</div>
+              <div style="color:#4b5563;font-size:11px;margin:0;">Per month · ${savings.pct}%</div>
             </div>
           </td>
         </tr>
       </table>
-      <div style="margin-top:12px;text-align:center;">
-        <div style="height:3px;width:60px;background:linear-gradient(90deg,${primaryColor} 0%,${secondaryColor} 100%);border-radius:2px;margin:0 auto;display:inline-block;"></div>
+    `;
+
+    const detailHtml = `
+      <div style="margin-top:20px;">
+        <h2 style="color:#0f172a;font-size:16px;font-weight:700;margin:5px 0 8px 10px;">Parameters</h2>
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:left;text-transform:uppercase;letter-spacing:0.5px;">Metric</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:left;text-transform:uppercase;letter-spacing:0.5px;">Current</th>
+              <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:left;text-transform:uppercase;letter-spacing:0.5px;">Proposed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="background:#ffffff;">
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">Wash time (seconds)</td>
+              <td style="padding:10px 12px;font-size:12px;color:#4b5563;border-bottom:1px solid #e5e7eb;">${currentWashTime}s</td>
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;font-weight:600;border-bottom:1px solid #e5e7eb;">${proposedWashTime}s</td>
+            </tr>
+            <tr style="background:#f9fafb;">
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">Washes per day</td>
+              <td style="padding:10px 12px;font-size:12px;color:#4b5563;border-bottom:1px solid #e5e7eb;">${currentWashesPerDay}</td>
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;font-weight:600;border-bottom:1px solid #e5e7eb;">${proposedWashesPerDay}</td>
+            </tr>
+            <tr style="background:#ffffff;">
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">Washes per week</td>
+              <td style="padding:10px 12px;font-size:12px;color:#4b5563;border-bottom:1px solid #e5e7eb;">${currentWashesPerWeek}</td>
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;font-weight:600;border-bottom:1px solid #e5e7eb;">${proposedWashesPerWeek}</td>
+            </tr>
+            <tr style="background:#f9fafb;">
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">Max cost / month / site</td>
+              <td style="padding:10px 12px;font-size:12px;color:#4b5563;border-bottom:1px solid #e5e7eb;">$${currentCalc.maxCostPerMonthSite.toFixed(2)}</td>
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;font-weight:600;border-bottom:1px solid #e5e7eb;">$${proposedCalc.maxCostPerMonthSite.toFixed(2)}</td>
+            </tr>
+            <tr style="background:#ffffff;">
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;">Max cost / year / site</td>
+              <td style="padding:10px 12px;font-size:12px;color:#4b5563;">$${currentCalc.maxCostPerYearSite.toFixed(2)}</td>
+              <td style="padding:10px 12px;font-size:12px;color:#0f172a;font-weight:600;">$${proposedCalc.maxCostPerYearSite.toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
+    `;
+
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing Calculator Report</title>
+</head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <div style="max-width:820px;margin:28px auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.08);">
+    <header style="background:linear-gradient(160deg,#004E2B 0%,#003d22 50%,#002a17 100%);padding:0;">
+      <div style="padding:28px 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+          <tr>
+            <td style="width:28%;vertical-align:middle;text-align:center;">
+              <div style="display:inline-flex;flex-direction:column;align-items:center;gap:6px;">
+                ${
+                  logoUrl
+                    ? `<img src="${logoUrl}" alt="${companyName}" style="height:32px;width:auto;object-fit:contain;display:block;" />`
+                    : `<div style="height:32px;width:32px;border-radius:999px;background:#ffffff;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                        <span style="font-size:11px;font-weight:700;color:#004E2B;">${(companyName || 'ELORA').slice(0, 3).toUpperCase()}</span>
+                       </div>`
+                }
+                <span style="color:rgba(255,255,255,0.98);font-size:12px;font-weight:600;">${companyName}</span>
+              </div>
+            </td>
+            <td style="width:44%;vertical-align:middle;text-align:center;">
+              <h1 style="color:rgba(255,255,255,0.98);margin:0;font-size:24px;font-weight:800;letter-spacing:-0.5px;">Pricing Calculator Report</h1>
+              <p style="color:rgba(255,255,255,0.7);margin:4px 0 0 0;font-size:12px;">${customerName} · ${siteName}</p>
+              <div style="display:inline-block;margin-top:10px;padding:4px 14px;border-radius:999px;border:1px solid rgba(0,221,57,0.25);background:rgba(0,221,57,0.12);color:#bbf7d0;font-size:10px;font-weight:600;letter-spacing:0.3px;">
+                ${generated}
+              </div>
+            </td>
+            <td style="width:28%;vertical-align:middle;text-align:center;">
+              <div style="display:inline-flex;flex-direction:column;align-items:center;gap:6px;opacity:0.95;">
+                <img src="${ELORA_LOGO_URL}" alt="Elora" style="height:32px;width:auto;object-fit:contain;display:block;" />
+                <span style="color:rgba(255,255,255,0.85);font-size:12px;font-weight:600;letter-spacing:0.3px;">Elora Solutions</span>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div style="height:3px;background:linear-gradient(90deg,#00DD39,#7cc43e);"></div>
+    </header>
+    <div style="background:#f0faf5;padding:10px 24px;border-bottom:1px solid #d1e8da;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span style="color:#004E2B;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Pricing Calculator</span>
+      <span style="color:#004E2B;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">${truckCount} trucks</span>
     </div>
-    <div style="padding:40px 30px;">${content}</div>
-    <div style="background:#f8fafc;padding:30px 20px;text-align:center;border-top:2px solid #e2e8f0;">
-      <p style="color:#64748b;font-size:14px;margin:0 0 10px 0;">This is an automated report from ${companyName} Compliance Portal</p>
-      <p style="color:#94a3b8;font-size:12px;margin:0;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
-    </div>
+    <main style="padding:40px 44px;">
+      ${cardsHtml}
+      ${detailHtml}
+    </main>
+    <footer style="background:linear-gradient(180deg,#f7f8fa,#f0faf5);padding:24px 32px;border-top:1px solid #d1e8da;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <p style="color:#64748b;font-size:12px;margin:0;">This is an automated report from ${companyName} Compliance Portal</p>
+      <div style="display:inline-flex;align-items:center;gap:8px;">
+        <img src="${ELORA_LOGO_URL}" alt="Elora" style="height:22px;width:auto;object-fit:contain;flex-shrink:0;display:inline-block;" />
+        <span style="color:#64748b;font-size:11px;font-weight:500;white-space:nowrap;">Powered by ELORA · © ${new Date().getFullYear()}</span>
+      </div>
+    </footer>
   </div>
 </body>
-</html>`;
+</html>
+    `;
   }, [customerName, siteName, truckCount, pricePerLitre, dispensingRate, currentWashTime, currentWashesPerDay, currentWashesPerWeek, currentCalc, proposedWashTime, proposedWashesPerDay, proposedWashesPerWeek, proposedCalc, savings]);
 
-  const buildPdfDoc = useCallback(() => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 36;
-    let y = 0;
+  const buildPdfFromHtml = useCallback(async (branding) => {
+    const addCanvasToPdf = (pdf, canvas) => {
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 24;
+      const contentWidth = pageWidth - margin * 2;
+      const imgWidth = contentWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgData = canvas.toDataURL('image/png', 0.95);
+      let heightLeft = imgHeight;
+      let position = margin;
 
-    // Header bar (match sendEmailReport.ts: #7CB342 primary)
-    doc.setFillColor(124, 179, 66);
-    doc.rect(0, 0, pageWidth, 52, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Pricing Calculator Report', margin, 28);
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${customerName} · ${siteName}`, margin, 44);
-    y = 68;
+      pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= (pageHeight - margin * 2);
 
-    // Generated line
-    doc.setTextColor(100, 116, 139);
-    doc.setFontSize(9);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
-    y += 22;
+      while (heightLeft > 0) {
+        position = -(imgHeight - heightLeft) + margin;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= (pageHeight - margin * 2);
+      }
+    };
 
-    const borderColor = { r: 226, g: 232, b: 240 };
-    doc.setDrawColor(borderColor.r, borderColor.g, borderColor.b);
-    doc.setLineWidth(0.5);
+    const captureContainerToCanvas = async () => {
+      if (!pdfContainerRef.current) throw new Error('PDF container not available. Please try again.');
+      return await html2canvas(pdfContainerRef.current, {
+        scale: 2.5,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#f1f5f9',
+        logging: false,
+        width: 860,
+        height: pdfContainerRef.current.scrollHeight || 1200,
+        x: 0,
+        y: 0,
+      });
+    };
 
-    // Site context box
-    doc.setFillColor(248, 250, 252);
-    doc.rect(margin, y, pageWidth - margin * 2, 36, 'FD');
-    doc.setTextColor(15, 23, 42);
-    doc.setFontSize(10);
-    doc.text(`Site context: ${truckCount} trucks · $${pricePerLitre.toFixed(2)}/L · ${dispensingRate}L/60s`, margin + 12, y + 14);
-    doc.setFont('helvetica', 'normal');
-    y += 48;
+    const html = buildReportHtml(branding);
+    setPdfHtml(extractBodyHtml(html));
+    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-    // Current parameters box
-    doc.setFillColor(248, 250, 252);
-    doc.rect(margin, y, pageWidth - margin * 2, 50, 'FD');
-    doc.setTextColor(71, 85, 105);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('CURRENT PARAMETERS', margin + 12, y + 16);
-    doc.setTextColor(15, 23, 42);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text(`Wash time ${currentWashTime}s · Washes/day ${currentWashesPerDay} · Washes/week ${currentWashesPerWeek}`, margin + 12, y + 32);
-    doc.text(`Max cost/month (site): $${currentCalc.maxCostPerMonthSite.toFixed(2)} · Max cost/year: $${currentCalc.maxCostPerYearSite.toFixed(2)}`, margin + 12, y + 46);
-    y += 62;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true });
+    const canvas = await captureContainerToCanvas();
+    addCanvasToPdf(pdf, canvas);
 
-    // Proposed parameters box
-    doc.setFillColor(239, 246, 255);
-    doc.rect(margin, y, pageWidth - margin * 2, 50, 'FD');
-    doc.setTextColor(124, 179, 66);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('PROPOSED PARAMETERS', margin + 12, y + 16);
-    doc.setTextColor(15, 23, 42);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.text(`Wash time ${proposedWashTime}s · Washes/day ${proposedWashesPerDay} · Washes/week ${proposedWashesPerWeek}`, margin + 12, y + 32);
-    doc.setTextColor(124, 179, 66);
-    doc.setTextColor(124, 179, 66);
-    doc.text(`Max cost/month (site): $${proposedCalc.maxCostPerMonthSite.toFixed(2)} · Max cost/year: $${proposedCalc.maxCostPerYearSite.toFixed(2)}`, margin + 12, y + 46);
-    doc.setTextColor(15, 23, 42);
-    y += 62;
+    const filename = `pricing-calculator-${customerName.replace(/\s+/g, '-')}-${siteName.replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    return { pdf, filename };
+  }, [buildReportHtml, extractBodyHtml, customerName, siteName]);
 
-    // Projected savings box
-    doc.setFillColor(236, 253, 245);
-    doc.rect(margin, y, pageWidth - margin * 2, 44, 'FD');
-    doc.setTextColor(4, 120, 87);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('PROJECTED SAVINGS', margin + 12, y + 16);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    doc.setTextColor(15, 23, 42);
-    doc.text(`Per site/month: $${savings.perSiteMonth.toFixed(2)} · Per site/year: $${savings.perSiteYear.toFixed(2)}`, margin + 12, y + 32);
-    doc.setTextColor(5, 150, 105);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Total saving: ${savings.pct}%`, margin + 12, y + 46);
-    y += 58;
-
-    // Footer
-    doc.setDrawColor(226, 232, 240);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 16;
-    doc.setTextColor(100, 116, 139);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Pricing Calculator Report', margin, y);
-    doc.text(`© ${new Date().getFullYear()} ELORA Solutions. All rights reserved.`, margin, y + 12);
-
-    return doc;
-  }, [customerName, siteName, truckCount, pricePerLitre, dispensingRate, currentWashTime, currentWashesPerDay, currentWashesPerWeek, currentCalc, proposedWashTime, proposedWashesPerDay, proposedWashesPerWeek, proposedCalc, savings]);
-
-  const handleExportPdf = useCallback(() => {
+  const handleExportPdf = useCallback(async () => {
     setExportPdfLoading(true);
     try {
-      const doc = buildPdfDoc();
-      doc.save(`pricing-calculator-${customerName.replace(/\s+/g, '-')}-${siteName.replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`);
+      const branding = await resolveBrandingForPricingReport();
+      const { pdf, filename } = await buildPdfFromHtml(branding);
+      pdf.save(filename);
       toast.success('PDF exported', { description: 'Calculator report downloaded.' });
     } finally {
       setExportPdfLoading(false);
     }
-  }, [customerName, siteName, buildPdfDoc]);
+  }, [buildPdfFromHtml, resolveBrandingForPricingReport]);
 
   const handleEmailReport = useCallback(async () => {
     if (!userEmail) {
@@ -626,13 +855,13 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     setEmailReportLoading(true);
     try {
       const branding = await resolveBrandingForPricingReport();
-      const doc = buildPdfDoc();
-      const pdfBase64 = doc.output('datauristring').split(',')[1];
-      const pdfFilename = `pricing-calculator-${customerName.replace(/\s+/g, '-')}-${siteName.replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      const { pdf, filename } = await buildPdfFromHtml(branding);
+      const pdfBase64 = pdf.output('datauristring').split(',')[1];
+      const pdfFilename = filename;
       await callEdgeFunction('sendPricingCalculatorReport', {
         to: userEmail,
         subject: `Pricing Calculator Report — ${customerName} · ${siteName}`,
-        html: buildReportHtml(branding),
+        html: buildEmailHtml(branding),
         pdfBase64,
         pdfFilename,
       });
@@ -642,7 +871,7 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     } finally {
       setEmailReportLoading(false);
     }
-  }, [userEmail, customerName, siteName, resolveBrandingForPricingReport, buildPdfDoc, buildReportHtml]);
+  }, [userEmail, customerName, siteName, resolveBrandingForPricingReport, buildPdfFromHtml, buildEmailHtml]);
 
   if (hasSite && isLoading) {
     return <PricingCalculatorGlassySkeleton />;
@@ -777,11 +1006,11 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Wash Time (seconds)</Label>
-                    <Input 
-                      type="number" 
-                      min={15} 
-                      max={600} 
-                      value={proposedWashTime} 
+                    <Input
+                      type="number"
+                      min={15}
+                      max={600}
+                      value={proposedWashTime}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val === '' || val === null) {
@@ -804,11 +1033,11 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                   </div>
                   <div className="space-y-2">
                     <Label>Max Washes / Day</Label>
-                    <Input 
-                      type="number" 
-                      min={1} 
-                      max={20} 
-                      value={proposedWashesPerDay} 
+                    <Input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={proposedWashesPerDay}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val === '' || val === null) {
@@ -826,11 +1055,11 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                   </div>
                   <div className="space-y-2">
                     <Label>Max Washes / Week</Label>
-                    <Input 
-                      type="number" 
-                      min={1} 
-                      max={50} 
-                      value={proposedWashesPerWeek} 
+                    <Input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={proposedWashesPerWeek}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val === '' || val === null) {
@@ -937,43 +1166,43 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
               </div>
               {reverseOptions && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                <Card
-                  className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
-                  onClick={() => applyReverseOption(reverseOptions.optionA)}
-                >
+                  <Card
+                    className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
+                    onClick={() => applyReverseOption(reverseOptions.optionA)}
+                  >
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Option A — Reduce Wash Time</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground">{reverseOptions.optionA.washTime}s wash time · {reverseOptions.optionA.washesPerDay}/day · {reverseOptions.optionA.washesPerWeek}/week</p>
                       <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionA.cost.toFixed(0)}/mo</p>
-                    <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
+                      <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
                     </CardContent>
                   </Card>
-                <Card
-                  className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
-                  onClick={() => applyReverseOption(reverseOptions.optionB)}
-                >
+                  <Card
+                    className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
+                    onClick={() => applyReverseOption(reverseOptions.optionB)}
+                  >
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Option B — Reduce Washes/Week</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground">{reverseOptions.optionB.washTime}s wash time · {reverseOptions.optionB.washesPerDay}/day · {reverseOptions.optionB.washesPerWeek}/week</p>
                       <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionB.cost.toFixed(0)}/mo</p>
-                    <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
+                      <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
                     </CardContent>
                   </Card>
-                <Card
-                  className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
-                  onClick={() => applyReverseOption(reverseOptions.optionC)}
-                >
+                  <Card
+                    className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
+                    onClick={() => applyReverseOption(reverseOptions.optionC)}
+                  >
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Option C — Combined</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground">{reverseOptions.optionC.washTime}s wash time · {reverseOptions.optionC.washesPerDay}/day · {reverseOptions.optionC.washesPerWeek}/week</p>
                       <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionC.cost.toFixed(0)}/mo</p>
-                    <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
+                      <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
                     </CardContent>
                   </Card>
                 </div>
@@ -999,6 +1228,26 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
           <p className="text-muted-foreground">Select a customer and site above to use the pricing calculator.</p>
         </div>
       )}
+
+      {/* Hidden PDF container for html2canvas capture */}
+      <div
+        ref={pdfContainerRef}
+        style={{
+          position: 'fixed',
+          width: '860px',
+          minHeight: pdfHtml ? '800px' : '0px',
+          padding: '28px',
+          background: 'linear-gradient(135deg, hsl(220, 13%, 91%) 0%, #e2e8f0 100%)',
+          top: '-99999px',
+          left: '0',
+          pointerEvents: 'none',
+          zIndex: -9999,
+          overflow: 'visible',
+          visibility: pdfHtml ? 'visible' : 'hidden',
+        }}
+        aria-hidden="true"
+        dangerouslySetInnerHTML={{ __html: pdfHtml }}
+      />
     </div>
   );
 }
