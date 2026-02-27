@@ -14,8 +14,8 @@ import {
 } from '@/components/ui/select';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { useAuth } from '@/lib/AuthContext';
-import { customersOptions, sitesOptions, vehiclesOptions } from '@/query/options';
-import { getStateFromSite, getPricingDetails } from './usageCostUtils';
+import { customersOptions, sitesOptions, vehiclesOptions, pricingConfigOptions } from '@/query/options';
+import { getStateFromSite, getPricingDetails, buildSitePricingMaps, calculateScanCostFromScan } from './usageCostUtils';
 import { callEdgeFunction, supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import { toast } from '@/lib/toast';
@@ -89,6 +89,9 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     enabled: !!companyId && !!localCustomer && !!localSite,
   });
 
+  // Pricing configuration from DB: tank_configurations + products
+  const { data: pricingConfig } = useQuery(pricingConfigOptions());
+
   const { data: savedProposal } = useQuery({
     queryKey: ['pricingProposal', companyId, localCustomer, localSite],
     queryFn: async () => {
@@ -126,16 +129,61 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
 
   const truckCount = vehicles.length;
   const state = useMemo(() => getStateFromSite(siteName, customerName), [siteName, customerName]);
-  const pricing = useMemo(() => getPricingDetails(customerName, state), [customerName, state]);
-  const pricePerLitre = pricing.pricePerLitre ?? 3.85;
-  const dispensingRate = DEFAULT_DISPENSING_RATE_L_PER_60S;
 
-  const siteMetrics = useMemo(() => ({
-    truckCount,
-    dispensingRate,
-    pricePerLitre,
-    dispensingLabel: `${dispensingRate}L / 60s`,
-  }), [truckCount, pricePerLitre]);
+  // Build site-level pricing maps (flow rate + product price) from DB config
+  const sitePricingMaps = useMemo(
+    () =>
+      buildSitePricingMaps(
+        pricingConfig?.tankConfigs ?? [],
+        pricingConfig?.products ?? [],
+      ),
+    [pricingConfig],
+  );
+
+  const fallbackPricing = useMemo(
+    () => getPricingDetails(customerName, state),
+    [customerName, state],
+  );
+
+  // Resolve dispensing rate (L/60s) + price per litre from DB when available,
+  // falling back to regional PRICING_RULES (backward compatible).
+  const dbPricingSample = useMemo(() => {
+    const hasMaps =
+      sitePricingMaps &&
+      (Object.keys(sitePricingMaps.byDeviceSerial || {}).length > 0 ||
+        Object.keys(sitePricingMaps.bySiteRef || {}).length > 0 ||
+        (sitePricingMaps.products || []).length > 0);
+    if (!hasMaps) return null;
+    if (!customerName && !siteName) return null;
+    // Synthetic scan row – calculateScanCostFromScan will use sitePricingMaps
+    // to resolve litresPerMinute and pricePerLitre for this customer/site.
+    return calculateScanCostFromScan(
+      {
+        customerName,
+        customer_name: customerName,
+        siteName,
+        site_name: siteName,
+      },
+      null,
+      sitePricingMaps,
+    );
+  }, [sitePricingMaps, customerName, siteName]);
+
+  const pricePerLitre = dbPricingSample?.pricePerLitre ?? fallbackPricing.pricePerLitre ?? 3.85;
+  const dispensingRate =
+    dbPricingSample?.litresPerMinute ??
+    fallbackPricing.litres ??
+    DEFAULT_DISPENSING_RATE_L_PER_60S;
+
+  const siteMetrics = useMemo(
+    () => ({
+      truckCount,
+      dispensingRate,
+      pricePerLitre,
+      dispensingLabel: `${dispensingRate}L / 60s`,
+    }),
+    [truckCount, dispensingRate, pricePerLitre],
+  );
 
   const siteKey = `${localCustomer}|${localSite}`;
   useEffect(() => {
