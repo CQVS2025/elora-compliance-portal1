@@ -44,15 +44,11 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
         </TabsList>
         {USAGE_COST_TABS.map((tab) => (
           <TabsContent key={tab.value} value={tab.value} className="mt-4 focus-visible:outline-none">
-            {['overview', 'per-truck', 'per-site', 'site-comparison', 'pricing-calculator', 'scenario-builder', 'budget-tracker'].includes(tab.value) ? (
-              <tab.Component
-                selectedCustomer={selectedCustomer}
-                selectedSite={selectedSite}
-                dateRange={dateRange}
-              />
-            ) : (
-              <tab.Component />
-            )}
+            <tab.Component
+              selectedCustomer={selectedCustomer}
+              selectedSite={selectedSite}
+              dateRange={dateRange}
+            />
           </TabsContent>
         ))}
       </Tabs>
