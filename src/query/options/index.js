@@ -31,6 +31,9 @@ export * from './operationsLog';
 // Delivery calendar (Notion-synced)
 export * from './deliveries';
 
+// Pricing config (tank calibration + product prices → replaces hard-coded PRICING_RULES)
+export * from './pricingConfig';
+
 // Admin options
 export * from './users';
 export * from './companies';

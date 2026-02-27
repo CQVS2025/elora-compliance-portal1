@@ -220,6 +220,8 @@ export const queryKeys = {
     operationsLogCategories: () => ['operationsLogCategories'],
     // Products (read for dropdown; super_admin manages)
     products: () => ['products'],
+    // Pricing config: tank_configurations + products for data-driven cost calculation
+    pricingConfig: () => ['pricingConfig'],
     // Current user's operations log permissions (can_create, etc.)
     operationsLogMyPermissions: (userId) => ['operationsLogMyPermissions', userId],
     // Delivery calendar (Notion-synced)
