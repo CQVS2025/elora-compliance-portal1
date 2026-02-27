@@ -287,6 +287,20 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     setReverseOptions({ optionA, optionB, optionC });
   };
 
+  // When the user clicks one of the suggested reverse-calculator options,
+  // apply those parameters into the Proposed section so they can be saved
+  // or sent as a proposal.
+  const applyReverseOption = useCallback(
+    (option) => {
+      if (!option) return;
+      setProposedWashTime(option.washTime);
+      setProposedWashesPerDay(option.washesPerDay);
+      setProposedWashesPerWeek(option.washesPerWeek);
+      // proposedCalc + savings are derived from these state values via useMemo
+    },
+    [],
+  );
+
   /** Resolve branding for email/PDF: company by company_id (same as Email Report Settings). */
   const resolveBrandingForPricingReport = useCallback(async () => {
     const cid = permissions.userProfile?.company_id;
@@ -923,31 +937,43 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
               </div>
               {reverseOptions && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                  <Card>
+                <Card
+                  className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
+                  onClick={() => applyReverseOption(reverseOptions.optionA)}
+                >
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Option A — Reduce Wash Time</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground">{reverseOptions.optionA.washTime}s wash time · {reverseOptions.optionA.washesPerDay}/day · {reverseOptions.optionA.washesPerWeek}/week</p>
                       <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionA.cost.toFixed(0)}/mo</p>
+                    <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
                     </CardContent>
                   </Card>
-                  <Card>
+                <Card
+                  className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
+                  onClick={() => applyReverseOption(reverseOptions.optionB)}
+                >
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Option B — Reduce Washes/Week</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground">{reverseOptions.optionB.washTime}s wash time · {reverseOptions.optionB.washesPerDay}/day · {reverseOptions.optionB.washesPerWeek}/week</p>
                       <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionB.cost.toFixed(0)}/mo</p>
+                    <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
                     </CardContent>
                   </Card>
-                  <Card>
+                <Card
+                  className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
+                  onClick={() => applyReverseOption(reverseOptions.optionC)}
+                >
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Option C — Combined</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground">{reverseOptions.optionC.washTime}s wash time · {reverseOptions.optionC.washesPerDay}/day · {reverseOptions.optionC.washesPerWeek}/week</p>
                       <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionC.cost.toFixed(0)}/mo</p>
+                    <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
                     </CardContent>
                   </Card>
                 </div>
