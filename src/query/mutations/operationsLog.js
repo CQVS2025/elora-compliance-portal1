@@ -191,3 +191,49 @@ export function useDeleteOperationsLogAttachment() {
     },
   });
 }
+
+/**
+ * Delete an operations log entry (super_admin only).
+ * Removes storage files for attachments, then deletes the entry (cascade removes links and attachment records).
+ */
+export function useDeleteOperationsLogEntry() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ entryId }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.role !== 'super_admin') {
+        throw new Error('Only super admins can delete operations log entries');
+      }
+
+      const { data: attachments } = await supabase
+        .from('operations_log_attachments')
+        .select('storage_path')
+        .eq('entry_id', entryId);
+
+      const paths = (attachments ?? []).map((a) => a.storage_path).filter(Boolean);
+      for (const path of paths) {
+        await supabase.storage.from('operations-log').remove([path]);
+      }
+
+      const { error } = await supabase
+        .from('operations_log_entries')
+        .delete()
+        .eq('id', entryId);
+
+      if (error) throw error;
+      return { entryId };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['tenant'], exact: false });
+    },
+  });
+}

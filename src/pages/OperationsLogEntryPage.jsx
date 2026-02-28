@@ -14,6 +14,7 @@ import {
   Pencil,
   CloudUpload,
   X,
+  Trash2,
 } from 'lucide-react';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
@@ -34,7 +35,7 @@ import {
   operationsLogCategoriesOptions,
   productsOptions,
 } from '@/query/options';
-import { useUpdateOperationsLogStatus, useUpdateOperationsLogEntry, useAddOperationsLogAttachment, useDeleteOperationsLogAttachment } from '@/query/mutations';
+import { useUpdateOperationsLogStatus, useUpdateOperationsLogEntry, useAddOperationsLogAttachment, useDeleteOperationsLogAttachment, useDeleteOperationsLogEntry } from '@/query/mutations';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
@@ -43,6 +44,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const STATUS_OPTIONS = [
   { value: 'open', label: 'Open' },
@@ -98,6 +109,7 @@ export default function OperationsLogEntryPage() {
   const [editDragOver, setEditDragOver] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [deletingAttachmentId, setDeletingAttachmentId] = useState(null);
+  const [deleteEntryConfirmOpen, setDeleteEntryConfirmOpen] = useState(false);
 
   const { data: entry, isLoading } = useQuery({
     ...operationsLogEntryOptions(effectiveCompanyId, entryId),
@@ -183,6 +195,7 @@ export default function OperationsLogEntryPage() {
   const updateEntry = useUpdateOperationsLogEntry();
   const addAttachmentMutation = useAddOperationsLogAttachment();
   const deleteAttachmentMutation = useDeleteOperationsLogAttachment();
+  const deleteEntryMutation = useDeleteOperationsLogEntry();
 
   const handleStatusChange = (newStatus) => {
     if (!entryId || newStatus === entry?.status) return;
@@ -369,6 +382,22 @@ export default function OperationsLogEntryPage() {
                     <Button variant="outline" size="sm" onClick={startEdit}>
                       <Pencil className="size-4 mr-2" />
                       Edit
+                    </Button>
+                  )}
+                  {permissions.isSuperAdmin && !editMode && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setDeleteEntryConfirmOpen(true)}
+                      disabled={deleteEntryMutation.isPending}
+                    >
+                      {deleteEntryMutation.isPending ? (
+                        <Loader2 className="size-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-4 mr-2" />
+                      )}
+                      Delete entry
                     </Button>
                   )}
                 </div>
@@ -712,6 +741,41 @@ export default function OperationsLogEntryPage() {
             {entry.updated_at && entry.updated_at !== entry.created_at &&
               ` · Updated ${format(new Date(entry.updated_at), 'PPpp')}`}
           </p>
+
+          <AlertDialog open={deleteEntryConfirmOpen} onOpenChange={setDeleteEntryConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete entry</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently remove this operations log entry and all its attachments. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleteEntryMutation.isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={deleteEntryMutation.isPending}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    deleteEntryMutation.mutate(
+                      { entryId },
+                      {
+                        onSuccess: () => {
+                          setDeleteEntryConfirmOpen(false);
+                          toastSuccess('Entry deleted');
+                          navigate('/operations-log');
+                        },
+                        onError: (err) => toastError(err, 'deleting entry'),
+                      }
+                    );
+                  }}
+                >
+                  {deleteEntryMutation.isPending ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
     </div>
