@@ -1,12 +1,15 @@
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { createSupabaseAdminClient } from '../_shared/supabase.ts';
+import { callEloraAPI } from '../_shared/elora-api.ts';
+import { computeReportData, type ReportData } from '../_shared/reportCostUtils.ts';
 
 /**
  * Send Client-Facing Cost Report (Reports → Email Reports → Client Usage Cost Report tab).
  * - Normal: body has recipients, reportHtml, customerName, reportMonthLabel; sends that HTML.
- * - Cron: body has cronMode: true, companyId, dateRange; fetches company + recipients, builds minimal HTML, sends.
+ * - Cron: body has cronMode: true, companyId, dateRange; fetches company + recipients, fetches scans/vehicles/pricing,
+ *   computes report data (same as 2nd tab), builds full HTML with metrics, sends.
  *
- * Required Supabase secrets: MAILGUN_API_KEY, MAILGUN_DOMAIN (optional: MAILGUN_BASE_URL)
+ * Required Supabase secrets: MAILGUN_API_KEY, MAILGUN_DOMAIN (optional: MAILGUN_BASE_URL), ELORA_API_KEY (for cron)
  */
 
 async function sendViaMailgun(
@@ -71,52 +74,109 @@ function formatReportCompanyName(name: string): string {
     .join(' ');
 }
 
-function buildMinimalCronReportHtml(companyName: string, reportMonthLabel: string): string {
+/** Build full report HTML for cron (same header/footer as UI; body has usage cost data per company). */
+function buildFullCronReportHtml(
+  companyName: string,
+  reportMonthLabel: string,
+  dateRangeLabel: string,
+  reportData: ReportData,
+  siteLabel: string
+): string {
   const reportCompanyName = formatReportCompanyName(companyName);
+  const {
+    totalFleetSize,
+    activeSites,
+    totalWashes,
+    avgCostPerTruck,
+    avgCostPerWash,
+    totalProgramCost,
+    complianceRate,
+  } = reportData;
+
+  const valueStatement =
+    totalFleetSize === 0 && totalWashes === 0
+      ? 'No wash activity in the selected period. Select a customer and date range to see your fleet wash program summary.'
+      : `Your wash program protected ${totalFleetSize} vehicles this month at an average cost of $${avgCostPerTruck.toFixed(2)} per truck. Industry estimates place concrete damage repair costs at $800–$2,500 per incident. With ${totalWashes} washes completed, your program is delivering significant protection against fleet deterioration and maintaining vehicle resale value.`;
+
+  const tableRows = [
+    ['Total Fleet Size', `${totalFleetSize} vehicles`],
+    ['Active Sites', String(activeSites)],
+    ['Total Washes', String(totalWashes)],
+    ['Average Cost Per Truck', `$${avgCostPerTruck.toFixed(2)}`],
+    ['Average Cost Per Wash', `$${avgCostPerWash.toFixed(2)}`],
+    ['Total Program Cost', `$${totalProgramCost.toFixed(2)}`],
+  ];
+
+  const tableHtml = `
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:left;text-transform:uppercase;">METRIC</th>
+          <th style="padding:10px 12px;font-size:11px;color:#6b7280;text-align:left;text-transform:uppercase;">VALUE</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows.map(([metric, value], i) => `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};"><td style="padding:10px 12px;font-size:12px;color:#0f172a;border-bottom:1px solid #e5e7eb;">${metric}</td><td style="padding:10px 12px;font-size:12px;color:#374151;border-bottom:1px solid #e5e7eb;">${value}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"/><title>Fleet Wash Program Report</title></head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:640px;margin:24px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
-    <header style="background:linear-gradient(160deg,#004E2B 0%,#003d22 100%);padding:24px 32px;">
+  <div style="max-width:820px;margin:28px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.12);">
+    <header style="background:linear-gradient(160deg,#004E2B 0%,#003d22 50%,#002a17 100%);padding:28px 32px;">
       <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
         <tr>
           <td style="width:28%;vertical-align:middle;text-align:center;">
             <span style="color:rgba(255,255,255,0.98);font-size:18px;font-weight:700;letter-spacing:0.02em;">${reportCompanyName}</span>
           </td>
           <td style="width:44%;vertical-align:middle;text-align:center;">
-            <h1 style="color:rgba(255,255,255,0.98);margin:0;font-size:20px;font-weight:700;">Fleet Wash Program Report</h1>
-            <p style="color:rgba(255,255,255,0.7);margin:6px 0 0 0;font-size:12px;">${reportMonthLabel}</p>
+            <h1 style="color:rgba(255,255,255,0.98);margin:0;font-size:22px;font-weight:800;">Fleet Wash Program Report</h1>
+            <p style="color:rgba(255,255,255,0.8);margin:6px 0 0 0;font-size:13px;">${reportCompanyName}</p>
+            <p style="color:rgba(255,255,255,0.7);margin:2px 0 0 0;font-size:12px;">${reportMonthLabel} · ${siteLabel}</p>
           </td>
           <td style="width:28%;vertical-align:middle;text-align:center;">
   <div style="display:inline-block;text-align:center;">
-    
     <div style="margin-bottom:6px;">
-      <img 
-        src="${ELORA_LOGO_URL}" 
-        alt="ELORA" 
-        style="height:32px;width:auto;object-fit:contain;display:block;margin:0 auto;"
-      />
+      <img src="${ELORA_LOGO_URL}" alt="ELORA" style="height:32px;width:auto;object-fit:contain;display:block;margin:0 auto;"/>
     </div>
-
-    <div style="color:rgba(255,255,255,0.85);font-size:11px;">
-      Prepared by ELORA
-    </div>
-
+    <div style="color:rgba(255,255,255,0.85);font-size:11px;">Prepared by ELORA</div>
   </div>
 </td>
         </tr>
       </table>
       <div style="height:3px;background:linear-gradient(90deg,#00DD39,#7cc43e);margin-top:12px;"></div>
     </header>
-    <main style="padding:24px;">
-      <p style="color:#475569;font-size:14px;line-height:1.6;margin:0;">
-        This is your scheduled monthly client report from the ELORA Fleet Compliance Portal.
-        For detailed metrics (compliance rate, total washes, cost summary), please log in to the portal and open Reports → Email Reports → Client Usage Cost Report.
-      </p>
+    <main style="padding:32px 40px;">
+      <div style="display:table;width:100%;border-collapse:separate;border-spacing:16px 0;margin-bottom:24px;">
+        <div style="display:table-cell;width:48%;vertical-align:top;">
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px;">
+            <div style="color:#166534;font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Compliance Rate</div>
+            <div style="color:#15803d;font-size:28px;font-weight:800;">${complianceRate != null ? complianceRate + '%' : '—'}</div>
+            <div style="color:#166534;font-size:12px;">Based on wash scans in period</div>
+            ${dateRangeLabel ? `<div style="color:#166534;font-size:11px;margin-top:4px;">${dateRangeLabel}</div>` : ''}
+          </div>
+        </div>
+        <div style="display:table-cell;width:48%;vertical-align:top;">
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px;">
+            <div style="color:#1e40af;font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Total Washes</div>
+            <div style="color:#1d4ed8;font-size:28px;font-weight:800;">${totalWashes}</div>
+            <div style="color:#1e40af;font-size:12px;">Across ${activeSites} sites</div>
+            ${dateRangeLabel ? `<div style="color:#1e40af;font-size:11px;margin-top:4px;">${dateRangeLabel}</div>` : ''}
+          </div>
+        </div>
+      </div>
+      <h2 style="color:#0f172a;font-size:14px;font-weight:700;margin:0 0 12px 10px;">Monthly Cost Summary · ${dateRangeLabel}</h2>
+      ${tableHtml}
+      <h2 style="color:#16a34a;font-size:14px;font-weight:700;margin:24px 0 8px 10px;">Value Statement</h2>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px;">
+        <p style="color:#166534;font-size:13px;line-height:1.6;margin:0;">${valueStatement}</p>
+      </div>
     </main>
-    <footer style="background:#f8fafc;padding:12px 24px;border-top:1px solid #e2e8f0;">
+    <footer style="background:#f8fafc;padding:16px 24px;border-top:1px solid #e2e8f0;">
       <p style="color:#64748b;font-size:11px;margin:0;">Report generated by ELORA Fleet Compliance Portal · elora.com.au</p>
     </footer>
   </div>
@@ -183,7 +243,46 @@ Deno.serve(async (req) => {
       reportMonthLabel = startDate.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
       if (start !== end) reportMonthLabel += ` (${start} – ${end})`;
       customerName = company.name || 'Client';
-      reportHtml = buildMinimalCronReportHtml(customerName, reportMonthLabel);
+
+      const dateRangeLabel = start === end ? start : `${start} – ${end}`;
+      const siteLabel = 'All Sites';
+
+      let reportData: ReportData;
+      try {
+        const customerRef = (company as { elora_customer_ref?: string }).elora_customer_ref;
+        const scanParams: Record<string, string> = {
+          fromDate: start,
+          toDate: end,
+          status: 'success,exceeded',
+          export: 'true',
+        };
+        if (customerRef && customerRef !== 'all') scanParams.customer = customerRef;
+
+        const scansRaw = await callEloraAPI('/scans', scanParams);
+        const scans = Array.isArray(scansRaw) ? scansRaw : (scansRaw?.data ?? []);
+
+        const vehicleParams: Record<string, string> = { status: '1' };
+        if (customerRef && customerRef !== 'all') vehicleParams.customer = customerRef;
+        const vehiclesRaw = await callEloraAPI('/vehicles', vehicleParams);
+        const vehicles = Array.isArray(vehiclesRaw) ? vehiclesRaw : (vehiclesRaw?.data ?? []);
+
+        const [tankRes, productsRes] = await Promise.all([
+          supabase.from('tank_configurations').select('site_ref, device_ref, device_serial, product_type, calibration_rate_per_60s').eq('active', true),
+          supabase.from('products').select('name, price_cents, status').eq('status', 'active'),
+        ]);
+        const tankConfigs = tankRes.data ?? [];
+        const products = productsRes.data ?? [];
+
+        reportData = computeReportData(scans, vehicles, tankConfigs, products);
+      } catch (fetchErr) {
+        console.error('Cron report data fetch error:', fetchErr);
+        return new Response(
+          JSON.stringify({ error: fetchErr instanceof Error ? fetchErr.message : 'Failed to fetch report data' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      reportHtml = buildFullCronReportHtml(customerName, reportMonthLabel, dateRangeLabel, reportData, siteLabel);
     } else {
       const {
         recipients = [],
