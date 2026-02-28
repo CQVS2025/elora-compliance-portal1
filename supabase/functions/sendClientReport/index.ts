@@ -1,0 +1,267 @@
+import { corsHeaders, handleCors } from '../_shared/cors.ts';
+import { createSupabaseAdminClient } from '../_shared/supabase.ts';
+
+/**
+ * Send Client-Facing Cost Report (Reports → Email Reports → Client Usage Cost Report tab).
+ * - Normal: body has recipients, reportHtml, customerName, reportMonthLabel; sends that HTML.
+ * - Cron: body has cronMode: true, companyId, dateRange; fetches company + recipients, builds minimal HTML, sends.
+ *
+ * Required Supabase secrets: MAILGUN_API_KEY, MAILGUN_DOMAIN (optional: MAILGUN_BASE_URL)
+ */
+
+async function sendViaMailgun(
+  to: string,
+  subject: string,
+  html: string,
+  from: string
+): Promise<{ id?: string; message?: string }> {
+  const apiKey = Deno.env.get('MAILGUN_API_KEY');
+  const domain = Deno.env.get('MAILGUN_DOMAIN');
+  const baseUrl = Deno.env.get('MAILGUN_BASE_URL') || 'https://api.mailgun.net';
+
+  if (!apiKey || !domain) {
+    throw new Error('MAILGUN_API_KEY and MAILGUN_DOMAIN must be set as Supabase secrets');
+  }
+
+  const url = `${baseUrl.replace(/\/$/, '')}/v3/${domain}/messages`;
+  const formData = new FormData();
+  formData.append('from', from);
+  formData.append('to', to);
+  formData.append('subject', subject);
+  formData.append('html', html);
+
+  const auth = btoa(`api:${apiKey}`);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}` },
+    body: formData,
+  });
+
+  const text = await response.text();
+  let json: { id?: string; message?: string; error?: string };
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`Mailgun error: ${response.status} ${text}`);
+  }
+  if (!response.ok) {
+    throw new Error(json.message || json.error || text);
+  }
+  return json;
+}
+
+function isMailgunUnauthorizedRecipientError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes('authorized recipients') ||
+    lower.includes('free accounts') ||
+    lower.includes('sandbox') ||
+    lower.includes('add the address to your authorized')
+  );
+}
+
+const ELORA_LOGO_URL = 'https://yyqspdpk0yebvddv.public.blob.vercel-storage.com/233633501.png';
+
+function formatReportCompanyName(name: string): string {
+  if (!name || typeof name !== 'string') return name || '';
+  return name
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function buildMinimalCronReportHtml(companyName: string, reportMonthLabel: string): string {
+  const reportCompanyName = formatReportCompanyName(companyName);
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>Fleet Wash Program Report</title></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:640px;margin:24px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+    <header style="background:linear-gradient(160deg,#004E2B 0%,#003d22 100%);padding:24px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <tr>
+          <td style="width:28%;vertical-align:middle;text-align:center;">
+            <span style="color:rgba(255,255,255,0.98);font-size:18px;font-weight:700;letter-spacing:0.02em;">${reportCompanyName}</span>
+          </td>
+          <td style="width:44%;vertical-align:middle;text-align:center;">
+            <h1 style="color:rgba(255,255,255,0.98);margin:0;font-size:20px;font-weight:700;">Fleet Wash Program Report</h1>
+            <p style="color:rgba(255,255,255,0.7);margin:6px 0 0 0;font-size:12px;">${reportMonthLabel}</p>
+          </td>
+          <td style="width:28%;vertical-align:middle;text-align:center;">
+  <div style="display:inline-block;text-align:center;">
+    
+    <div style="margin-bottom:6px;">
+      <img 
+        src="${ELORA_LOGO_URL}" 
+        alt="ELORA" 
+        style="height:32px;width:auto;object-fit:contain;display:block;margin:0 auto;"
+      />
+    </div>
+
+    <div style="color:rgba(255,255,255,0.85);font-size:11px;">
+      Prepared by ELORA
+    </div>
+
+  </div>
+</td>
+        </tr>
+      </table>
+      <div style="height:3px;background:linear-gradient(90deg,#00DD39,#7cc43e);margin-top:12px;"></div>
+    </header>
+    <main style="padding:24px;">
+      <p style="color:#475569;font-size:14px;line-height:1.6;margin:0;">
+        This is your scheduled monthly client report from the ELORA Fleet Compliance Portal.
+        For detailed metrics (compliance rate, total washes, cost summary), please log in to the portal and open Reports → Email Reports → Client Usage Cost Report.
+      </p>
+    </main>
+    <footer style="background:#f8fafc;padding:12px 24px;border-top:1px solid #e2e8f0;">
+      <p style="color:#64748b;font-size:11px;margin:0;">Report generated by ELORA Fleet Compliance Portal · elora.com.au</p>
+    </footer>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
+
+  try {
+    const body = await req.json();
+    const cronMode = body.cronMode === true && body.companyId && body.dateRange?.start != null && body.dateRange?.end != null;
+
+    let validEmails: string[];
+    let reportHtml: string;
+    let customerName: string;
+    let reportMonthLabel: string;
+
+    if (cronMode) {
+      const supabase = createSupabaseAdminClient();
+      const { companyId, dateRange } = body;
+      const { data: company, error: companyError } = await supabase
+        .from('companies')
+        .select('id, name, logo_url, elora_customer_ref')
+        .eq('id', companyId)
+        .eq('is_active', true)
+        .single();
+
+      if (companyError || !company) {
+        return new Response(
+          JSON.stringify({ error: 'Company not found or inactive' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: prefs } = await supabase
+        .from('email_report_preferences')
+        .select('user_email, recipients')
+        .eq('company_id', companyId)
+        .eq('enabled', true);
+
+      const emails = new Set<string>();
+      if (prefs) {
+        for (const p of prefs) {
+          if (p.user_email) emails.add(p.user_email);
+          const extra = Array.isArray(p.recipients) ? p.recipients : [];
+          extra.forEach((e: unknown) => { if (typeof e === 'string' && e.includes('@')) emails.add(e); });
+        }
+      }
+      validEmails = [...emails];
+      if (validEmails.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'No recipients found for this company (email_report_preferences)' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const start = body.dateRange.start as string;
+      const end = body.dateRange.end as string;
+      const startDate = new Date(start);
+      reportMonthLabel = startDate.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+      if (start !== end) reportMonthLabel += ` (${start} – ${end})`;
+      customerName = company.name || 'Client';
+      reportHtml = buildMinimalCronReportHtml(customerName, reportMonthLabel);
+    } else {
+      const {
+        recipients = [],
+        reportHtml: html,
+        customerName: name = 'Client',
+        reportMonthLabel: monthLabel = '',
+      } = body;
+
+      if (!html || typeof html !== 'string') {
+        return new Response(
+          JSON.stringify({ error: 'reportHtml (string) is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const toList = Array.isArray(recipients) ? recipients : [recipients];
+      validEmails = toList.filter((e: unknown) => typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e as string));
+
+      if (validEmails.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'At least one valid recipient email is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      reportHtml = html;
+      customerName = name;
+      reportMonthLabel = monthLabel;
+    }
+
+    const mailgunDomain = Deno.env.get('MAILGUN_DOMAIN') || 'sandbox.mailgun.org';
+    const fromAddr = `ELORA Compliance <postmaster@${mailgunDomain}>`;
+    const subject = `Fleet Wash Program Report – ${customerName}${reportMonthLabel ? ` – ${reportMonthLabel}` : ''}`;
+
+    const sentTo: string[] = [];
+    const skipped: string[] = [];
+
+    for (const to of validEmails) {
+      try {
+        await sendViaMailgun(to, subject, reportHtml, fromAddr);
+        sentTo.push(to);
+      } catch (err) {
+        if (isMailgunUnauthorizedRecipientError(err)) {
+          console.warn(`Skipping recipient ${to} (Mailgun sandbox/authorized list):`, err instanceof Error ? err.message : err);
+          skipped.push(to);
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (sentTo.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error: 'Could not send to any recipient. All may be outside Mailgun authorized list (sandbox).',
+          skipped,
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: sentTo.length === validEmails.length
+          ? 'Client report sent successfully'
+          : `Sent to ${sentTo.length} recipient(s); ${skipped.length} skipped.`,
+        sentTo,
+        skipped: skipped.length ? skipped : undefined,
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error: unknown) {
+    console.error('sendClientReport error:', error);
+    const err = error instanceof Error ? error : new Error(String(error));
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

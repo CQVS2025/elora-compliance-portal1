@@ -13,11 +13,15 @@ export const companyTabSettingsOptions = (companyId) =>
     queryFn: async () => {
       const { data, error } = await supabase
         .from('companies')
-        .select('visible_tabs')
+        .select('visible_tabs, visible_cost_subtabs, visible_email_report_subtabs')
         .eq('id', companyId)
         .single();
       if (error) throw error;
-      return data?.visible_tabs ?? null;
+      return {
+        visible_tabs: data?.visible_tabs ?? null,
+        visible_cost_subtabs: data?.visible_cost_subtabs ?? null,
+        visible_email_report_subtabs: data?.visible_email_report_subtabs ?? null,
+      };
     },
     enabled: !!companyId,
     staleTime: 2 * 60 * 1000,

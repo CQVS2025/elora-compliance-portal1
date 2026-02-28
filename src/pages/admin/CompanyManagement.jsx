@@ -55,6 +55,9 @@ import {
 import { toast, toastError, toastSuccess } from '@/lib/toast';
 import { uploadCompanyLogo, removeCompanyLogoFromStorage } from '@/lib/companyLogoUpload';
 import { queryKeys } from '@/query/keys';
+import { getDefaultCostSubtabs, getDefaultEmailReportSubtabs } from '@/lib/permissions';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronRight } from 'lucide-react';
 
 const TAB_VISIBILITY_OPTIONS = [
   { value: 'dashboard', label: 'Dashboard' },
@@ -75,6 +78,21 @@ const TAB_VISIBILITY_OPTIONS = [
   { value: 'sms-alerts', label: 'SMS Alerts' },
 ];
 
+const COST_SUBTABS = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'per-truck', label: 'Per Truck Costs' },
+  { value: 'per-site', label: 'Per Site Costs' },
+  { value: 'site-comparison', label: 'Site Comparison' },
+  { value: 'pricing-calculator', label: 'Pricing Calculator' },
+  { value: 'scenario-builder', label: 'Scenario Builder' },
+  { value: 'budget-tracker', label: 'Budget Tracker' },
+];
+
+const EMAIL_REPORT_SUBTABS_CM = [
+  { value: 'email-reports', label: 'Email Reports' },
+  { value: 'client-usage-cost-report', label: 'Client Usage Cost Report' },
+];
+
 export default function CompanyManagement() {
   const navigate = useNavigate();
   const { userProfile } = useAuth();
@@ -90,6 +108,8 @@ export default function CompanyManagement() {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [companyForTabVisibility, setCompanyForTabVisibility] = useState(null);
   const [localCompanyTabVisibility, setLocalCompanyTabVisibility] = useState([]);
+  const [localCompanyCostSubtabs, setLocalCompanyCostSubtabs] = useState(null);
+  const [localCompanyEmailReportSubtabs, setLocalCompanyEmailReportSubtabs] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isUploadingQuickSetupLogo, setIsUploadingQuickSetupLogo] = useState(false);
@@ -262,18 +282,34 @@ export default function CompanyManagement() {
     },
   });
 
-  // Open company tab visibility dialog and init from company (empty = no restriction)
+  // Open company tab visibility dialog and init from company. null = no restriction (all on); [] = all off; [...] = specific list.
   useEffect(() => {
     if (!companyForTabVisibility) return;
     const current = companyForTabVisibility.visible_tabs;
     setLocalCompanyTabVisibility(Array.isArray(current) ? [...current] : []);
-  }, [companyForTabVisibility?.id, companyForTabVisibility?.visible_tabs]);
+    setLocalCompanyCostSubtabs(
+      companyForTabVisibility.visible_cost_subtabs === null || companyForTabVisibility.visible_cost_subtabs === undefined
+        ? null
+        : Array.isArray(companyForTabVisibility.visible_cost_subtabs)
+          ? [...companyForTabVisibility.visible_cost_subtabs]
+          : null
+    );
+    setLocalCompanyEmailReportSubtabs(
+      companyForTabVisibility.visible_email_report_subtabs === null || companyForTabVisibility.visible_email_report_subtabs === undefined
+        ? null
+        : Array.isArray(companyForTabVisibility.visible_email_report_subtabs)
+          ? [...companyForTabVisibility.visible_email_report_subtabs]
+          : null
+    );
+  }, [companyForTabVisibility?.id, companyForTabVisibility?.visible_tabs, companyForTabVisibility?.visible_cost_subtabs, companyForTabVisibility?.visible_email_report_subtabs]);
 
   // Save company tab visibility
   const saveCompanyTabVisibilityMutation = useMutation({
-    mutationFn: async ({ companyId, visibleTabs }) => {
+    mutationFn: async ({ companyId, visibleTabs, visibleCostSubtabs, visibleEmailReportSubtabs }) => {
       const payload = { updated_at: new Date().toISOString() };
       payload.visible_tabs = visibleTabs === null ? null : visibleTabs;
+      if (visibleCostSubtabs !== undefined) payload.visible_cost_subtabs = visibleCostSubtabs;
+      if (visibleEmailReportSubtabs !== undefined) payload.visible_email_report_subtabs = visibleEmailReportSubtabs;
       const { data, error } = await supabase
         .from('companies')
         .update(payload)
@@ -921,7 +957,7 @@ export default function CompanyManagement() {
 
       {/* Company Tab Visibility Dialog */}
       <Dialog open={!!companyForTabVisibility} onOpenChange={(open) => { if (!open) setCompanyForTabVisibility(null); }}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Tab visibility</DialogTitle>
             {companyForTabVisibility && (
@@ -931,7 +967,7 @@ export default function CompanyManagement() {
             )}
           </DialogHeader>
           {companyForTabVisibility && (
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 overflow-y-auto min-h-0 flex-1 pr-1">
               <div>
                 <h4 className="text-sm font-medium text-foreground mb-3">Tabs allowed for this company</h4>
                 <p className="text-xs text-muted-foreground mb-3">
@@ -941,17 +977,77 @@ export default function CompanyManagement() {
                   {TAB_VISIBILITY_OPTIONS.map((tab) => (
                     <div
                       key={tab.value}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border"
+                      className={tab.value === 'costs' || tab.value === 'email-reports' ? 'col-span-2 sm:col-span-4 space-y-2' : ''}
                     >
-                      <span className="text-sm font-medium text-foreground">{tab.label}</span>
-                      <Switch
-                        checked={localCompanyTabVisibility.includes(tab.value)}
-                        onCheckedChange={(checked) => {
-                          setLocalCompanyTabVisibility((prev) =>
-                            checked ? [...prev, tab.value] : prev.filter((t) => t !== tab.value)
-                          );
-                        }}
-                      />
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-border">
+                        <span className="text-sm font-medium text-foreground">{tab.label}</span>
+                        <Switch
+                          checked={localCompanyTabVisibility.includes(tab.value)}
+                          onCheckedChange={(checked) => {
+                            setLocalCompanyTabVisibility((prev) =>
+                              checked ? [...prev, tab.value] : prev.filter((t) => t !== tab.value)
+                            );
+                          }}
+                        />
+                      </div>
+                      {(tab.value === 'costs' || tab.value === 'email-reports') && localCompanyTabVisibility.includes(tab.value) && (
+                        <Collapsible defaultOpen={false} className="rounded-lg border border-border border-t-0 rounded-t-none -mt-px">
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="sm" className="w-full justify-between px-3 py-2 h-auto text-muted-foreground hover:text-foreground">
+                              <span className="text-xs font-medium">Sub-tabs (restrict sections)</span>
+                              <ChevronRight className="h-4 w-4 data-[state=open]:rotate-90" />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="px-3 pb-3 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-2 border-t border-border">
+                              {tab.value === 'costs' && COST_SUBTABS.map((sub) => {
+                                const allDefault = getDefaultCostSubtabs();
+                                const currentList = localCompanyCostSubtabs ?? allDefault;
+                                const checked = currentList.includes(sub.value);
+                                return (
+                                  <div key={sub.value} className="flex items-center justify-between py-2 px-2 rounded bg-muted/40">
+                                    <span className="text-xs font-medium text-foreground">{sub.label}</span>
+                                    <Switch
+                                      checked={checked}
+                                      onCheckedChange={(on) => {
+                                        if (on) {
+                                          const next = currentList.includes(sub.value) ? currentList : [...currentList, sub.value];
+                                          setLocalCompanyCostSubtabs(next.length === allDefault.length ? null : next);
+                                        } else {
+                                          const next = currentList.filter((v) => v !== sub.value);
+                                          setLocalCompanyCostSubtabs(next.length === 0 ? [] : next);
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                              {tab.value === 'email-reports' && EMAIL_REPORT_SUBTABS_CM.map((sub) => {
+                                const allDefault = getDefaultEmailReportSubtabs();
+                                const currentList = localCompanyEmailReportSubtabs ?? allDefault;
+                                const checked = currentList.includes(sub.value);
+                                return (
+                                  <div key={sub.value} className="flex items-center justify-between py-2 px-2 rounded bg-muted/40">
+                                    <span className="text-xs font-medium text-foreground">{sub.label}</span>
+                                    <Switch
+                                      checked={checked}
+                                      onCheckedChange={(on) => {
+                                        if (on) {
+                                          const next = currentList.includes(sub.value) ? currentList : [...currentList, sub.value];
+                                          setLocalCompanyEmailReportSubtabs(next.length === allDefault.length ? null : next);
+                                        } else {
+                                          const next = currentList.filter((v) => v !== sub.value);
+                                          setLocalCompanyEmailReportSubtabs(next.length === 0 ? [] : next);
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -968,6 +1064,8 @@ export default function CompanyManagement() {
                     saveCompanyTabVisibilityMutation.mutate({
                       companyId: companyForTabVisibility.id,
                       visibleTabs: null,
+                      visibleCostSubtabs: null,
+                      visibleEmailReportSubtabs: null,
                     })
                   }
                   disabled={saveCompanyTabVisibilityMutation.isPending}
@@ -984,6 +1082,8 @@ export default function CompanyManagement() {
                     saveCompanyTabVisibilityMutation.mutate({
                       companyId: companyForTabVisibility.id,
                       visibleTabs: localCompanyTabVisibility.length > 0 ? localCompanyTabVisibility : null,
+                      visibleCostSubtabs: localCompanyCostSubtabs,
+                      visibleEmailReportSubtabs: localCompanyEmailReportSubtabs,
                     })
                   }
                   disabled={saveCompanyTabVisibilityMutation.isPending}

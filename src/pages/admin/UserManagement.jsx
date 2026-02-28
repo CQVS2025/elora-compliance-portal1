@@ -6,6 +6,9 @@ import { supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import { getAccessibleTabs, getDefaultEmailReportTypes } from '@/lib/permissions';
 import { roleTabSettingsOptions, companyTabSettingsOptions } from '@/query/options';
+import { getDefaultCostSubtabs, getDefaultEmailReportSubtabs } from '@/lib/permissions';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronRight } from 'lucide-react';
 import { deliveryDriversOptions } from '@/query/options/deliveries';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -102,6 +105,21 @@ const EMAIL_REPORT_TYPES = [
   { id: 'costs', label: 'Cost Analysis' },
 ];
 
+const COST_SUBTABS_UM = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'per-truck', label: 'Per Truck Costs' },
+  { value: 'per-site', label: 'Per Site Costs' },
+  { value: 'site-comparison', label: 'Site Comparison' },
+  { value: 'pricing-calculator', label: 'Pricing Calculator' },
+  { value: 'scenario-builder', label: 'Scenario Builder' },
+  { value: 'budget-tracker', label: 'Budget Tracker' },
+];
+
+const EMAIL_REPORT_SUBTABS_UM = [
+  { value: 'email-reports', label: 'Email Reports' },
+  { value: 'client-usage-cost-report', label: 'Client Usage Cost Report' },
+];
+
 export default function UserManagement() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -125,6 +143,8 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [userForTabVisibility, setUserForTabVisibility] = useState(null);
   const [localTabVisibility, setLocalTabVisibility] = useState([]);
+  const [localUserCostSubtabs, setLocalUserCostSubtabs] = useState(null);
+  const [localUserEmailReportSubtabs, setLocalUserEmailReportSubtabs] = useState(null);
   const [localVisibleDeliveryDriverIds, setLocalVisibleDeliveryDriverIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
@@ -177,8 +197,9 @@ export default function UserManagement() {
   /** Tabs allowed for this user = role ∩ company (company can further restrict). */
   function getBaseTabsForUser(user) {
     const roleDefault = getRoleDefaultTabs(user?.role);
-    if (companyTabs && companyTabs.length > 0) {
-      return roleDefault.filter((t) => companyTabs.includes(t));
+    const companyTabList = Array.isArray(companyTabs) ? companyTabs : companyTabs?.visible_tabs;
+    if (companyTabList && companyTabList.length > 0) {
+      return roleDefault.filter((t) => companyTabList.includes(t));
     }
     return roleDefault;
   }
@@ -190,6 +211,20 @@ export default function UserManagement() {
     const current = userForTabVisibility.visible_tabs;
     const base = Array.isArray(current) && current.length > 0 ? current : baseTabs;
     setLocalTabVisibility(base.filter((t) => baseTabs.includes(t)));
+    setLocalUserCostSubtabs(
+      userForTabVisibility.visible_cost_subtabs === null || userForTabVisibility.visible_cost_subtabs === undefined
+        ? null
+        : Array.isArray(userForTabVisibility.visible_cost_subtabs)
+          ? [...userForTabVisibility.visible_cost_subtabs]
+          : null
+    );
+    setLocalUserEmailReportSubtabs(
+      userForTabVisibility.visible_email_report_subtabs === null || userForTabVisibility.visible_email_report_subtabs === undefined
+        ? null
+        : Array.isArray(userForTabVisibility.visible_email_report_subtabs)
+          ? [...userForTabVisibility.visible_email_report_subtabs]
+          : null
+    );
     if (userForTabVisibility.role === 'delivery_manager') {
       const assigned = Array.isArray(userForTabVisibility.assigned_delivery_drivers) ? userForTabVisibility.assigned_delivery_drivers : [];
       const visible = Array.isArray(userForTabVisibility.visible_delivery_driver_ids) && userForTabVisibility.visible_delivery_driver_ids.length > 0
@@ -199,7 +234,7 @@ export default function UserManagement() {
     } else {
       setLocalVisibleDeliveryDriverIds([]);
     }
-  }, [userForTabVisibility?.id, userForTabVisibility?.role, userForTabVisibility?.company_id, userForTabVisibility?.visible_tabs, userForTabVisibility?.assigned_delivery_drivers, userForTabVisibility?.visible_delivery_driver_ids, roleTabOverrides, companyTabs]);
+  }, [userForTabVisibility?.id, userForTabVisibility?.role, userForTabVisibility?.company_id, userForTabVisibility?.visible_tabs, userForTabVisibility?.visible_cost_subtabs, userForTabVisibility?.visible_email_report_subtabs, userForTabVisibility?.assigned_delivery_drivers, userForTabVisibility?.visible_delivery_driver_ids, roleTabOverrides, companyTabs]);
 
   // Update selected company tab when URL changes
   useEffect(() => {
@@ -456,7 +491,7 @@ export default function UserManagement() {
 
   // Save user tab visibility override
   const saveUserTabVisibilityMutation = useMutation({
-    mutationFn: async ({ userId, visibleTabs, visibleDeliveryDriverIds }) => {
+    mutationFn: async ({ userId, visibleTabs, visibleDeliveryDriverIds, visibleCostSubtabs, visibleEmailReportSubtabs }) => {
       const payload = { updated_at: new Date().toISOString() };
       if (visibleTabs === null) {
         payload.visible_tabs = null;
@@ -466,6 +501,8 @@ export default function UserManagement() {
       if (visibleDeliveryDriverIds !== undefined) {
         payload.visible_delivery_driver_ids = visibleDeliveryDriverIds === null || (Array.isArray(visibleDeliveryDriverIds) && visibleDeliveryDriverIds.length === 0) ? null : visibleDeliveryDriverIds;
       }
+      if (visibleCostSubtabs !== undefined) payload.visible_cost_subtabs = visibleCostSubtabs;
+      if (visibleEmailReportSubtabs !== undefined) payload.visible_email_report_subtabs = visibleEmailReportSubtabs;
       const { data, error } = await supabase
         .from('user_profiles')
         .update(payload)
@@ -1488,7 +1525,7 @@ export default function UserManagement() {
 
       {/* Tab visibility per user */}
       <Dialog open={!!userForTabVisibility} onOpenChange={(open) => { if (!open) setUserForTabVisibility(null); }}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Tab visibility</DialogTitle>
             {userForTabVisibility && (
@@ -1505,7 +1542,7 @@ export default function UserManagement() {
               : getDefaultEmailReportTypes({ role: userForTabVisibility.role });
             const defaultEmailReports = getDefaultEmailReportTypes({ role: userForTabVisibility.role });
             return (
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 overflow-y-auto min-h-0 flex-1 pr-1">
               <div>
                 <h4 className="text-sm font-medium text-foreground mb-3">Tab Visibility</h4>
                 <p className="text-xs text-muted-foreground mb-3">
@@ -1518,21 +1555,81 @@ export default function UserManagement() {
                     return (
                       <div
                         key={tab.value}
-                        className={`flex items-center justify-between p-3 rounded-lg border border-border ${!roleAllows ? 'opacity-60' : ''}`}
+                        className={tab.value === 'costs' || tab.value === 'email-reports' ? 'col-span-2 sm:col-span-4 space-y-2' : ''}
                       >
-                        <span className="text-sm font-medium text-foreground">{tab.label}</span>
-                        <Switch
-                          checked={roleAllows && checked}
-                          disabled={!roleAllows}
-                          onCheckedChange={(newChecked) => {
-                            if (!roleAllows) return;
-                            setLocalTabVisibility((prev) =>
-                              newChecked
-                                ? [...prev, tab.value]
-                                : prev.filter((t) => t !== tab.value)
-                            );
-                          }}
-                        />
+                        <div className={`flex items-center justify-between p-3 rounded-lg border border-border ${!roleAllows ? 'opacity-60' : ''}`}>
+                          <span className="text-sm font-medium text-foreground">{tab.label}</span>
+                          <Switch
+                            checked={roleAllows && checked}
+                            disabled={!roleAllows}
+                            onCheckedChange={(newChecked) => {
+                              if (!roleAllows) return;
+                              setLocalTabVisibility((prev) =>
+                                newChecked
+                                  ? [...prev, tab.value]
+                                  : prev.filter((t) => t !== tab.value)
+                              );
+                            }}
+                          />
+                        </div>
+                        {(tab.value === 'costs' || tab.value === 'email-reports') && roleAllows && checked && (
+                          <Collapsible defaultOpen={false} className="rounded-lg border border-border border-t-0 rounded-t-none -mt-px">
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="sm" className="w-full justify-between px-3 py-2 h-auto text-muted-foreground hover:text-foreground">
+                                <span className="text-xs font-medium">Sub-tabs (restrict sections)</span>
+                                <ChevronRight className="h-4 w-4 data-[state=open]:rotate-90" />
+                              </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="px-3 pb-3 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-2 border-t border-border">
+                                {tab.value === 'costs' && COST_SUBTABS_UM.map((sub) => {
+                                  const allDefault = getDefaultCostSubtabs();
+                                  const currentList = localUserCostSubtabs ?? allDefault;
+                                  const subChecked = currentList.includes(sub.value);
+                                  return (
+                                    <div key={sub.value} className="flex items-center justify-between py-2 px-2 rounded bg-muted/40">
+                                      <span className="text-xs font-medium text-foreground">{sub.label}</span>
+                                      <Switch
+                                        checked={subChecked}
+                                        onCheckedChange={(on) => {
+                                          if (on) {
+                                            const next = currentList.includes(sub.value) ? currentList : [...currentList, sub.value];
+                                            setLocalUserCostSubtabs(next.length === allDefault.length ? null : next);
+                                          } else {
+                                            const next = currentList.filter((v) => v !== sub.value);
+                                            setLocalUserCostSubtabs(next.length === 0 ? [] : next);
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                                {tab.value === 'email-reports' && EMAIL_REPORT_SUBTABS_UM.map((sub) => {
+                                  const allDefault = getDefaultEmailReportSubtabs();
+                                  const currentList = localUserEmailReportSubtabs ?? allDefault;
+                                  const subChecked = currentList.includes(sub.value);
+                                  return (
+                                    <div key={sub.value} className="flex items-center justify-between py-2 px-2 rounded bg-muted/40">
+                                      <span className="text-xs font-medium text-foreground">{sub.label}</span>
+                                      <Switch
+                                        checked={subChecked}
+                                        onCheckedChange={(on) => {
+                                          if (on) {
+                                            const next = currentList.includes(sub.value) ? currentList : [...currentList, sub.value];
+                                            setLocalUserEmailReportSubtabs(next.length === allDefault.length ? null : next);
+                                          } else {
+                                            const next = currentList.filter((v) => v !== sub.value);
+                                            setLocalUserEmailReportSubtabs(next.length === 0 ? [] : next);
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        )}
                       </div>
                     );
                   })}
@@ -1611,6 +1708,8 @@ export default function UserManagement() {
                       userId: userForTabVisibility.id,
                       visibleTabs: null,
                       visibleDeliveryDriverIds: userForTabVisibility.role === 'delivery_manager' ? null : undefined,
+                      visibleCostSubtabs: null,
+                      visibleEmailReportSubtabs: null,
                     })
                   }
                   disabled={saveUserTabVisibilityMutation.isPending}
@@ -1633,6 +1732,8 @@ export default function UserManagement() {
                       visibleDeliveryDriverIds: userForTabVisibility.role === 'delivery_manager'
                         ? (hasDeliveryCalendar && localVisibleDeliveryDriverIds.length > 0 ? localVisibleDeliveryDriverIds : null)
                         : undefined,
+                      visibleCostSubtabs: localUserCostSubtabs,
+                      visibleEmailReportSubtabs: localUserEmailReportSubtabs,
                     });
                   }}
                   disabled={saveUserTabVisibilityMutation.isPending || localTabVisibility.length === 0}

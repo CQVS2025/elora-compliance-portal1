@@ -19,56 +19,7 @@ import {
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import moment from 'moment';
 import { usePermissions, getUserSpecificConfig } from '@/components/auth/PermissionGuard';
-
-// Pricing calculation functions
-const PRICING_RULES = {
-  NSW: { litres: 2, pricePerLitre: 3.85 },
-  VIC: { litres: 2, pricePerLitre: 3.85 },
-  QLD: { litres: 4, pricePerLitre: 3.85 },
-  GUNLAKE: { litres: 2, pricePerLitre: 3.95 },
-  BORAL_QLD: { litres: 4, pricePerLitre: 3.65 }
-};
-
-const calculateCostPerScan = (customerName, state) => {
-  if (!customerName) return PRICING_RULES[state]?.litres * PRICING_RULES[state]?.pricePerLitre || 7.70;
-  const customerUpper = customerName.toUpperCase();
-  
-  if (customerUpper.includes('GUNLAKE')) {
-    return PRICING_RULES.GUNLAKE.litres * PRICING_RULES.GUNLAKE.pricePerLitre;
-  }
-  
-  if (state === 'QLD' && customerUpper.includes('BORAL')) {
-    return PRICING_RULES.BORAL_QLD.litres * PRICING_RULES.BORAL_QLD.pricePerLitre;
-  }
-  
-  const rule = PRICING_RULES[state] || PRICING_RULES.NSW;
-  return rule.litres * rule.pricePerLitre;
-};
-
-const getStateFromSite = (siteName, customerName = '') => {
-  if (!siteName) return 'NSW';
-  
-  // Check customer name for BORAL - QLD
-  const customerUpper = (customerName || '').toUpperCase();
-  if (customerUpper.includes('BORAL') && customerUpper.includes('QLD')) {
-    return 'QLD';
-  }
-  
-  // Specific QLD site names for BORAL
-  const siteUpper = siteName.toUpperCase();
-  const qldSites = ['BURLEIGH', 'ARCHERFIELD', 'BEENLEIGH', 'BENOWA', 'BROWNS PLAINS', 
-                    'CALOUNDRA', 'CAPALABA', 'CLEVELAND', 'EVERTON PARK', 'GEEBUNG',
-                    'IPSWICH', 'KINGSTON', 'LABRADOR', 'MORAYFIELD', 'MURARRIE',
-                    'NARANGBA', 'REDBANK PLAINS', 'SOUTHPORT', 'WACOL'];
-  
-  if (qldSites.some(site => siteUpper.includes(site))) {
-    return 'QLD';
-  }
-  
-  if (siteUpper.includes('QLD') || siteUpper.includes('BRISBANE')) return 'QLD';
-  if (siteUpper.includes('VIC') || siteUpper.includes('MELBOURNE')) return 'VIC';
-  return 'NSW';
-};
+import { getStateFromSite, calculateScanCostFromScan } from '@/components/costs/usageCostUtils';
 
 export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -125,14 +76,25 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
 
     const customerName = washHistory[0]?.customerName || '';
     const state = getStateFromSite(vehicle.site_name, customerName);
-    const costPerScan = calculateCostPerScan(customerName, state);
-    const totalCost = washHistory.length * costPerScan;
+    let totalCost = 0;
+    let totalLitres = 0;
+    let samplePricing = null;
+    washHistory.forEach((scan) => {
+      const pricing = calculateScanCostFromScan(scan);
+      totalCost += pricing.cost;
+      totalLitres += pricing.litresUsed;
+      if (!samplePricing) samplePricing = pricing;
+    });
+    const totalScans = washHistory.length;
+    const costPerScan = totalScans > 0 ? totalCost / totalScans : 0;
+    const litresPerWash = totalScans > 0 ? totalLitres / totalScans : 0;
+    const pricePerLitre = samplePricing?.pricePerLitre ?? 0;
 
     // Monthly costs
     const monthlyCosts = {};
     washHistory.forEach(scan => {
       const month = moment(scan.timestamp).format('MMM YY');
-      monthlyCosts[month] = (monthlyCosts[month] || 0) + costPerScan;
+      monthlyCosts[month] = (monthlyCosts[month] || 0) + calculateScanCostFromScan(scan).cost;
     });
 
     const costTrend = Object.entries(monthlyCosts)
@@ -144,8 +106,10 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
       state,
       costPerScan,
       totalCost,
-      totalScans: washHistory.length,
-      costTrend
+      totalScans,
+      costTrend,
+      litresPerWash,
+      pricePerLitre,
     };
   }, [washHistory, vehicle]);
 
@@ -481,13 +445,13 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
                       <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
                         <span className="text-sm text-slate-600">Litres per wash</span>
                         <span className="text-sm font-semibold text-slate-800">
-                          {PRICING_RULES[usageCosts.state]?.litres || 2}L
+                          {usageCosts.litresPerWash.toFixed(2)}L
                         </span>
                       </div>
                       <div className="flex justify-between p-3 bg-slate-50 rounded-lg">
                         <span className="text-sm text-slate-600">Price per litre</span>
                         <span className="text-sm font-semibold text-slate-800">
-                          ${(usageCosts.costPerScan / (PRICING_RULES[usageCosts.state]?.litres || 2)).toFixed(2)}
+                          ${usageCosts.pricePerLitre.toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between p-3 bg-[#7CB342]/10 rounded-lg">

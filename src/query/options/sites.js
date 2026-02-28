@@ -35,7 +35,7 @@ export const sitesOptions = (companyId, filters = {}) =>
           return ref === companyEloraCustomerRef;
         });
       }
-      return data.map((s) => ({
+      let mapped = data.map((s) => ({
         id: s.ref,
         name: s.siteName ?? s.site_name ?? s.name,
         ref: s.ref,
@@ -45,6 +45,11 @@ export const sitesOptions = (companyId, filters = {}) =>
         state: s.state,
         postcode: s.postcode,
       }));
+      // When a customer is requested, only return sites belonging to that customer (top-level filter behavior)
+      if (filters.customerId && filters.customerId !== 'all' && Array.isArray(mapped)) {
+        mapped = mapped.filter((s) => (s.customer_ref === filters.customerId));
+      }
+      return mapped;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes

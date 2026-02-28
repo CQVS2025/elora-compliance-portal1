@@ -256,6 +256,22 @@ export function getDefaultEmailReportTypes(userProfile) {
   return ['compliance', 'costs'];
 }
 
+/** All Usage Costs sub-tab ids (must match UsageCosts.jsx USAGE_COST_TABS values). */
+export const COST_SUBTAB_IDS = ['overview', 'per-truck', 'per-site', 'site-comparison', 'pricing-calculator', 'scenario-builder', 'budget-tracker'];
+
+/** All Email Reports sub-tab ids. */
+export const EMAIL_REPORT_SUBTAB_IDS = ['email-reports', 'client-usage-cost-report'];
+
+/** Default: all cost sub-tabs visible when costs tab is visible. */
+export function getDefaultCostSubtabs() {
+  return [...COST_SUBTAB_IDS];
+}
+
+/** Default: all email report sub-tabs visible when email-reports tab is visible. */
+export function getDefaultEmailReportSubtabs() {
+  return [...EMAIL_REPORT_SUBTAB_IDS];
+}
+
 /**
  * Check if user can access a specific tab
  */
