@@ -1141,7 +1141,7 @@ export default function Dashboard() {
             setSelectedDriverIds={setSelectedDriverIds}
             devicesForFilter={filterDevices}
             selectedDeviceId={selectedDeviceId}
-            setSelectedDeviceId={setSelectedDeviceId}
+            setSelectedDeviceId={activeTab === 'costs' ? undefined : setSelectedDeviceId}
             dateRange={dateRange}
             setDateRange={setDateRange}
             activePeriod={activePeriod}

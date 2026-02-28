@@ -11,7 +11,7 @@ import { queryKeys } from '../keys';
 
 export function useSaveRoleTabSettings() {
   return useMutation({
-    mutationFn: async ({ role, visibleTabs, visibleEmailReportTypes }) => {
+    mutationFn: async ({ role, visibleTabs, visibleEmailReportTypes, visibleCostSubtabs, visibleEmailReportSubtabs }) => {
       const payload = {
         role,
         visible_tabs: visibleTabs,
@@ -19,6 +19,12 @@ export function useSaveRoleTabSettings() {
       };
       if (visibleEmailReportTypes !== undefined) {
         payload.visible_email_report_types = visibleEmailReportTypes;
+      }
+      if (visibleCostSubtabs !== undefined) {
+        payload.visible_cost_subtabs = visibleCostSubtabs;
+      }
+      if (visibleEmailReportSubtabs !== undefined) {
+        payload.visible_email_report_subtabs = visibleEmailReportSubtabs;
       }
       const { data, error } = await supabase
         .from('role_tab_settings')

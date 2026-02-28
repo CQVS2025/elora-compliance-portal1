@@ -2,7 +2,7 @@ import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { createSupabaseAdminClient } from '../_shared/supabase.ts';
 
 /**
- * Send Client-Facing Cost Report (Usage Costs → Client Reports tab).
+ * Send Client-Facing Cost Report (Reports → Email Reports → Client Usage Cost Report tab).
  * - Normal: body has recipients, reportHtml, customerName, reportMonthLabel; sends that HTML.
  * - Cron: body has cronMode: true, companyId, dateRange; fetches company + recipients, builds minimal HTML, sends.
  *
@@ -113,7 +113,7 @@ function buildMinimalCronReportHtml(companyName: string, reportMonthLabel: strin
     <main style="padding:24px;">
       <p style="color:#475569;font-size:14px;line-height:1.6;margin:0;">
         This is your scheduled monthly client report from the ELORA Fleet Compliance Portal.
-        For detailed metrics (compliance rate, total washes, cost summary), please log in to the portal and open Usage Costs → Client Reports.
+        For detailed metrics (compliance rate, total washes, cost summary), please log in to the portal and open Reports → Email Reports → Client Usage Cost Report.
       </p>
     </main>
     <footer style="background:#f8fafc;padding:12px 24px;border-top:1px solid #e2e8f0;">

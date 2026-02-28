@@ -2,14 +2,17 @@
 
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { roleTabSettingsOptions } from '@/query/options';
 import { getDefaultEmailReportTypes, isAdmin } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
-import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, Calendar, Plus, X } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, Calendar, Plus, X, FileText } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import UsageCostsClientReports from '@/components/costs/UsageCostsClientReports';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,10 +34,17 @@ import { jsPDF } from 'jspdf';
 import { Chart } from 'chart.js/auto';
 import { toast } from '@/lib/toast';
 import { exportVehicleComplianceReportAsBase64 } from '@/utils/excelExport';
+import { usePermissions } from '@/components/auth/PermissionGuard';
+
+const EMAIL_REPORT_SUBTABS = [
+  { value: 'email-reports', label: 'Email Reports', icon: Mail },
+  { value: 'client-usage-cost-report', label: 'Client Usage Cost Report', icon: FileText },
+];
 
 export default function EmailReportSettings({ reportData, onSetDateRange, isReportDataUpdating = false }) {
   const queryClient = useQueryClient();
   const { user: currentUser, userProfile, isLoading: userLoading } = useAuth();
+  const { effectiveEmailReportSubtabs = [] } = usePermissions();
   const [userError, setUserError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -100,7 +110,32 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     reportTypes: [],
   });
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const allowedEmailSubtabs = useMemo(() => {
+    if (effectiveEmailReportSubtabs.length === 0) return [];
+    return EMAIL_REPORT_SUBTABS.filter((t) => effectiveEmailReportSubtabs.includes(t.value));
+  }, [effectiveEmailReportSubtabs]);
+  const emailReportSubTabRaw = searchParams.get('tab') === 'client-usage-cost-report' ? 'client-usage-cost-report' : 'email-reports';
+  const emailReportSubTab = useMemo(() => {
+    if (allowedEmailSubtabs.some((t) => t.value === emailReportSubTabRaw)) return emailReportSubTabRaw;
+    return allowedEmailSubtabs[0]?.value ?? 'email-reports';
+  }, [emailReportSubTabRaw, allowedEmailSubtabs]);
+  const setEmailReportSubTab = (value) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value === 'email-reports') next.delete('tab');
+      else next.set('tab', value);
+      return next;
+    }, { replace: true });
+  };
   const canManageSchedule = isAdmin(userProfile) || userProfile?.role === 'super_admin';
+
+  const defaultDateRange = useMemo(() => {
+    const end = new Date();
+    const start = new Date(end);
+    start.setMonth(start.getMonth() - 1);
+    return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  }, []);
 
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim().toLowerCase());
 
@@ -1580,8 +1615,38 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
 
   const actionDisabled = sendingNow || exportingPdf || userLoading || isReportDataUpdating || !userEmail || formData.report_types.length === 0;
 
+  if (allowedEmailSubtabs.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-6 text-center">
+        <p className="text-sm font-medium text-foreground">No email report sections are available</p>
+        <p className="text-xs text-muted-foreground mt-1">Your role or company has disabled all sections. Contact your administrator to enable Email Reports or Client Usage Cost Report.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full">
+      <Tabs value={emailReportSubTab} onValueChange={setEmailReportSubTab} className="w-full">
+        {allowedEmailSubtabs.length > 1 && (
+          <TabsList className="flex flex-wrap h-auto min-h-[3.25rem] gap-2 bg-muted/50 p-2 w-full rounded-xl mb-4">
+            {allowedEmailSubtabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  className="flex items-center gap-2 px-5 py-3 text-base font-medium min-h-[2.75rem] data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+                >
+                  <Icon className="w-5 h-5 shrink-0" />
+                  {tab.label}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        )}
+        {allowedEmailSubtabs.some((t) => t.value === 'email-reports') && (
+        <TabsContent value="email-reports" className="mt-4 focus-visible:outline-none">
+          <div className="w-full space-y-6">
       {/* Page header */}
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Email Report Settings</h1>
@@ -1975,6 +2040,19 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           <strong className="text-foreground">{userEmail || 'your email'}</strong>.
         </AlertDescription>
       </Alert>
+          </div>
+        </TabsContent>
+        )}
+        {allowedEmailSubtabs.some((t) => t.value === 'client-usage-cost-report') && (
+        <TabsContent value="client-usage-cost-report" className="mt-4 focus-visible:outline-none">
+          <UsageCostsClientReports
+            selectedCustomer={reportData?.selectedCustomer}
+            selectedSite={reportData?.selectedSite}
+            dateRange={reportData?.dateRange ?? defaultDateRange}
+          />
+        </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }

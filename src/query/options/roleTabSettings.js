@@ -15,14 +15,15 @@ export const roleTabSettingsOptions = () =>
     queryFn: async () => {
       const { data, error } = await supabase
         .from('role_tab_settings')
-        .select('role, visible_tabs, visible_email_report_types');
+        .select('role, visible_tabs, visible_email_report_types, visible_cost_subtabs, visible_email_report_subtabs');
       if (error) throw error;
-      // Convert to map: { role: { visible_tabs: [], visible_email_report_types: [] | null } }
       const map = {};
       (data || []).forEach((row) => {
         map[row.role] = {
           visible_tabs: row.visible_tabs || [],
           visible_email_report_types: row.visible_email_report_types ?? null,
+          visible_cost_subtabs: row.visible_cost_subtabs ?? null,
+          visible_email_report_subtabs: row.visible_email_report_subtabs ?? null,
         };
       });
       return map;

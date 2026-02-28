@@ -460,7 +460,7 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
         <CardHeader className="border-b bg-muted/30">
           <div className="flex items-center justify-between gap-4">
             <div className="flex flex-col justify-center text-center min-w-0 flex-1">
-              <p className="text-lg font-bold text-foreground truncate">{reportCompanyNameFormatted}</p>
+              <p className="text-lg font-bold text-foreground truncate">{reportCompanyNameFormatted.toUpperCase()}</p>
             </div>
             <div className="flex flex-col gap-1 text-center flex-[2] min-w-0">
               <CardTitle className="text-lg font-semibold uppercase tracking-wide">Fleet Wash Program Report</CardTitle>

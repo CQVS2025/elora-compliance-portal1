@@ -2,13 +2,14 @@ import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
-import { getAccessibleTabs, getDefaultEmailReportTypes } from '@/lib/permissions';
+import { getAccessibleTabs, getDefaultEmailReportTypes, getDefaultCostSubtabs, getDefaultEmailReportSubtabs } from '@/lib/permissions';
 import { roleTabSettingsOptions } from '@/query/options';
 import { useSaveRoleTabSettings, useResetRoleTabSettings } from '@/query/mutations/roleTabSettings';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Shield, Loader2, RotateCcw } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Shield, Loader2, RotateCcw, ChevronRight } from 'lucide-react';
 import { toast } from '@/lib/toast';
 
 const EMAIL_REPORT_TYPES = [
@@ -33,6 +34,21 @@ const ALL_TABS = [
   { value: 'leaderboard', label: 'Driver Leaderboard' },
   { value: 'ai-insights', label: 'AI Insights' },
   { value: 'sms-alerts', label: 'SMS Alerts' },
+];
+
+const COST_SUBTABS = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'per-truck', label: 'Per Truck Costs' },
+  { value: 'per-site', label: 'Per Site Costs' },
+  { value: 'site-comparison', label: 'Site Comparison' },
+  { value: 'pricing-calculator', label: 'Pricing Calculator' },
+  { value: 'scenario-builder', label: 'Scenario Builder' },
+  { value: 'budget-tracker', label: 'Budget Tracker' },
+];
+
+const EMAIL_REPORT_SUBTABS = [
+  { value: 'email-reports', label: 'Email Reports' },
+  { value: 'client-usage-cost-report', label: 'Client Usage Cost Report' },
 ];
 
 const ROLES = [
@@ -95,14 +111,44 @@ export default function RoleTabSettings() {
     [roleOverrides, localOverrides]
   );
 
+  const getCostSubtabsForRole = useCallback(
+    (role) => {
+      const local = localOverrides[role];
+      if (local?.costSubtabs !== undefined) return local.costSubtabs;
+      const stored = roleOverrides[role];
+      if (stored?.visible_cost_subtabs != null && stored.visible_cost_subtabs.length > 0) {
+        return stored.visible_cost_subtabs;
+      }
+      return getDefaultCostSubtabs();
+    },
+    [roleOverrides, localOverrides]
+  );
+
+  const getEmailReportSubtabsForRole = useCallback(
+    (role) => {
+      const local = localOverrides[role];
+      if (local?.emailReportSubtabs !== undefined) return local.emailReportSubtabs;
+      const stored = roleOverrides[role];
+      if (stored?.visible_email_report_subtabs != null && stored.visible_email_report_subtabs.length > 0) {
+        return stored.visible_email_report_subtabs;
+      }
+      return getDefaultEmailReportSubtabs();
+    },
+    [roleOverrides, localOverrides]
+  );
+
   const isTabEnabled = (role, tabValue) => getTabsForRole(role).includes(tabValue);
   const isEmailReportEnabled = (role, reportId) => getEmailReportTypesForRole(role).includes(reportId);
+  const isCostSubtabEnabled = (role, subTabValue) => getCostSubtabsForRole(role).includes(subTabValue);
+  const isEmailReportSubtabEnabled = (role, subTabValue) => getEmailReportSubtabsForRole(role).includes(subTabValue);
 
   const hasOverride = (role) => {
     const stored = roleOverrides[role];
     const hasStoredTabs = (Array.isArray(stored) ? stored : stored?.visible_tabs)?.length > 0;
     const hasStoredEmail = stored?.visible_email_report_types !== undefined && stored?.visible_email_report_types !== null;
-    return hasStoredTabs || hasStoredEmail || !!localOverrides[role];
+    const hasStoredCostSubtabs = stored?.visible_cost_subtabs != null && stored.visible_cost_subtabs.length > 0;
+    const hasStoredEmailReportSubtabs = stored?.visible_email_report_subtabs != null && stored.visible_email_report_subtabs.length > 0;
+    return hasStoredTabs || hasStoredEmail || hasStoredCostSubtabs || hasStoredEmailReportSubtabs || !!localOverrides[role];
   };
 
   const handleToggle = (role, tabValue, enabled) => {
@@ -124,11 +170,35 @@ export default function RoleTabSettings() {
     setLocalOverrides((prev) => ({ ...prev, [role]: { ...prev[role], emailReportTypes: newTypes } }));
   };
 
+  const handleCostSubtabToggle = (role, subTabValue, enabled) => {
+    const current = getCostSubtabsForRole(role);
+    const newSubtabs = enabled
+      ? [...current, subTabValue]
+      : current.filter((v) => v !== subTabValue);
+    setLocalOverrides((prev) => ({ ...prev, [role]: { ...prev[role], costSubtabs: newSubtabs } }));
+  };
+
+  const handleEmailReportSubtabToggle = (role, subTabValue, enabled) => {
+    const current = getEmailReportSubtabsForRole(role);
+    const newSubtabs = enabled
+      ? [...current, subTabValue]
+      : current.filter((v) => v !== subTabValue);
+    setLocalOverrides((prev) => ({ ...prev, [role]: { ...prev[role], emailReportSubtabs: newSubtabs } }));
+  };
+
   const handleSave = async (role) => {
     const tabs = getTabsForRole(role);
     const emailReportTypes = getEmailReportTypesForRole(role);
+    const costSubtabs = getCostSubtabsForRole(role);
+    const emailReportSubtabs = getEmailReportSubtabsForRole(role);
     try {
-      await saveMutation.mutateAsync({ role, visibleTabs: tabs, visibleEmailReportTypes: emailReportTypes });
+      await saveMutation.mutateAsync({
+        role,
+        visibleTabs: tabs,
+        visibleEmailReportTypes: emailReportTypes,
+        visibleCostSubtabs: costSubtabs,
+        visibleEmailReportSubtabs: emailReportSubtabs,
+      });
       setLocalOverrides((prev) => {
         const next = { ...prev };
         delete next[role];
@@ -243,15 +313,49 @@ export default function RoleTabSettings() {
                       {ALL_TABS.map((tab) => (
                         <div
                           key={tab.value}
-                          className="flex items-center justify-between p-3 rounded-lg border border-border"
+                          className={tab.value === 'costs' || tab.value === 'email-reports' ? 'col-span-2 sm:col-span-4 space-y-2' : ''}
                         >
-                          <span className="text-sm font-medium text-foreground">
-                            {tab.label}
-                          </span>
-                          <Switch
-                            checked={isTabEnabled(role, tab.value)}
-                            onCheckedChange={(checked) => handleToggle(role, tab.value, checked)}
-                          />
+                          <div className="flex items-center justify-between p-3 rounded-lg border border-border">
+                            <span className="text-sm font-medium text-foreground">
+                              {tab.label}
+                            </span>
+                            <Switch
+                              checked={isTabEnabled(role, tab.value)}
+                              onCheckedChange={(checked) => handleToggle(role, tab.value, checked)}
+                            />
+                          </div>
+                          {(tab.value === 'costs' || tab.value === 'email-reports') && isTabEnabled(role, tab.value) && (
+                            <Collapsible defaultOpen={false} className="rounded-lg border border-border border-t-0 rounded-t-none -mt-px">
+                              <CollapsibleTrigger asChild>
+                                <Button variant="ghost" size="sm" className="w-full justify-between px-3 py-2 h-auto text-muted-foreground hover:text-foreground">
+                                  <span className="text-xs font-medium">Sub-tabs (show/hide sections)</span>
+                                  <ChevronRight className="h-4 w-4 data-[state=open]:rotate-90" />
+                                </Button>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="px-3 pb-3 pt-1 grid grid-cols-1 sm:grid-cols-2 gap-2 border-t border-border">
+                                  {tab.value === 'costs' && COST_SUBTABS.map((sub) => (
+                                    <div key={sub.value} className="flex items-center justify-between py-2 px-2 rounded bg-muted/40">
+                                      <span className="text-xs font-medium text-foreground">{sub.label}</span>
+                                      <Switch
+                                        checked={isCostSubtabEnabled(role, sub.value)}
+                                        onCheckedChange={(checked) => handleCostSubtabToggle(role, sub.value, checked)}
+                                      />
+                                    </div>
+                                  ))}
+                                  {tab.value === 'email-reports' && EMAIL_REPORT_SUBTABS.map((sub) => (
+                                    <div key={sub.value} className="flex items-center justify-between py-2 px-2 rounded bg-muted/40">
+                                      <span className="text-xs font-medium text-foreground">{sub.label}</span>
+                                      <Switch
+                                        checked={isEmailReportSubtabEnabled(role, sub.value)}
+                                        onCheckedChange={(checked) => handleEmailReportSubtabToggle(role, sub.value, checked)}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          )}
                         </div>
                       ))}
                     </div>
