@@ -26,6 +26,7 @@ import {
   buildVehicleWashTimeMaps,
   buildSitePricingMaps,
   round2,
+  formatDateRangeDisplay,
 } from './usageCostUtils';
 import { CardsAndChartsGlassySkeleton, ActionLoaderOverlay } from './UsageCostsSkeletons';
 
@@ -499,8 +500,13 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
     );
   }
 
+  const dateRangeLabel = formatDateRangeDisplay(dateRange);
+
   return (
     <div className="space-y-6 relative">
+      {dateRangeLabel && (
+        <p className="text-sm text-muted-foreground font-medium">Data for period: {dateRangeLabel}</p>
+      )}
       <ActionLoaderOverlay show={exportLoading} message="Exporting CSV..." />
       {currentFetching && !currentLoading && (
         <div className="absolute inset-0 bg-background/60 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
@@ -562,6 +568,7 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
                 )}
                 {summary.pctDay >= 0 ? '↑' : '↓'} {Math.abs(summary.pctDay).toFixed(1)}% vs last period
               </p>
+              {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
             </CardContent>
           </Card>
         </motion.div>
@@ -576,6 +583,7 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
                 {summary.pctWeek >= 0 ? <TrendingUp className="w-3.5 h-3.5 text-green-600" /> : <TrendingDown className="w-3.5 h-3.5 text-red-600" />}
                 {summary.pctWeek >= 0 ? '↑' : '↓'} {Math.abs(summary.pctWeek).toFixed(1)}% vs last period
               </p>
+              {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
             </CardContent>
           </Card>
         </motion.div>
@@ -590,6 +598,7 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
                 {summary.pctMonth >= 0 ? <TrendingUp className="w-3.5 h-3.5 text-green-600" /> : <TrendingDown className="w-3.5 h-3.5 text-red-600" />}
                 {summary.pctMonth >= 0 ? '↑' : '↓'} {Math.abs(summary.pctMonth).toFixed(1)}% vs last period
               </p>
+              {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
             </CardContent>
           </Card>
         </motion.div>
@@ -604,6 +613,7 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
                   <div className="text-lg font-bold text-foreground">
                     {summary.highest.vehicleName} · {summary.highest.siteName}
                   </div>
+                  {dateRangeLabel && <p className="text-xs text-muted-foreground mt-1">{dateRangeLabel}</p>}
                   <p className="text-sm text-muted-foreground mt-1">
                     ${summary.highest.totalCost.toFixed(2)} this period · {summary.highest.totalScans} scans
                   </p>
@@ -620,6 +630,7 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
       <Card>
         <CardHeader>
           <CardTitle>Per-Truck Cost Trend</CardTitle>
+          {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
           <p className="text-sm text-muted-foreground">Average daily cost per truck across all sites</p>
         </CardHeader>
         <CardContent>
@@ -656,7 +667,10 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <CardTitle>Cost Breakdown by Vehicle</CardTitle>
+            <div>
+              <CardTitle>Cost Breakdown by Vehicle</CardTitle>
+              {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
+            </div>
             <div className="flex items-center gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -676,6 +690,9 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
           )}
         </CardHeader>
         <CardContent>
+          {dateRangeLabel && (
+            <p className="text-xs text-muted-foreground mb-3">Period: {dateRangeLabel}</p>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>

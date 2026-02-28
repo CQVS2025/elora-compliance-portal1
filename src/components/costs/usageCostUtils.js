@@ -60,6 +60,17 @@ export const SITE_STATE_MAPPING = {
   'WANGERS - Pinkenba': 'QLD', 'WANGERS - Toowoomba': 'QLD',
 };
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Format date range for display on cards (e.g. "1 Feb 2026 – 28 Feb 2026"). */
+export function formatDateRangeDisplay(dateRange) {
+  if (!dateRange || !dateRange.start || !dateRange.end) return '';
+  const s = new Date(dateRange.start);
+  const e = new Date(dateRange.end);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return `${dateRange.start} – ${dateRange.end}`;
+  return `${s.getDate()} ${MONTH_NAMES[s.getMonth()]} ${s.getFullYear()} – ${e.getDate()} ${MONTH_NAMES[e.getMonth()]} ${e.getFullYear()}`;
+}
+
 export function getStateFromSite(siteName, customerName = '') {
   if (!siteName) return 'NSW';
   if (SITE_STATE_MAPPING[siteName]) return SITE_STATE_MAPPING[siteName];

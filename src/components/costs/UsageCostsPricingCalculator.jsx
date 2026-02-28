@@ -14,8 +14,8 @@ import {
 } from '@/components/ui/select';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { useAuth } from '@/lib/AuthContext';
-import { customersOptions, sitesOptions, vehiclesOptions, pricingConfigOptions } from '@/query/options';
-import { getStateFromSite, getPricingDetails, buildSitePricingMaps, calculateScanCostFromScan } from './usageCostUtils';
+import { customersOptions, sitesOptions, vehiclesOptions, pricingConfigOptions, scansOptions } from '@/query/options';
+import { getStateFromSite, getPricingDetails, buildSitePricingMaps, buildVehicleWashTimeMaps, calculateScanCostFromScan, isBillableScan, formatDateRangeDisplay } from './usageCostUtils';
 import { callEdgeFunction, supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import { toast } from '@/lib/toast';
@@ -108,6 +108,33 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
   // Pricing configuration from DB: tank_configurations + products
   const { data: pricingConfig } = useQuery(pricingConfigOptions());
 
+  const hasSite = !!localCustomer && !!localSite;
+  const truckCount = vehicles?.length ?? 0;
+
+  const { data: scansData } = useQuery({
+    ...scansOptions(companyId, {
+      startDate: dateRange?.start,
+      endDate: dateRange?.end,
+      customerId: hasSite ? localCustomer : undefined,
+      siteId: hasSite ? localSite : undefined,
+      status: 'success,exceeded',
+      export: true,
+    }),
+    enabled: !!companyId && hasSite && !!dateRange?.start && !!dateRange?.end,
+  });
+
+  const scans = useMemo(() => {
+    const raw = scansData;
+    if (Array.isArray(raw)) return raw;
+    if (raw?.data) return raw.data;
+    return [];
+  }, [scansData]);
+
+  const entitlementMaps = useMemo(() => {
+    const list = vehicles ?? [];
+    return buildVehicleWashTimeMaps(list);
+  }, [vehicles]);
+
   const { data: savedProposal } = useQuery({
     queryKey: ['pricingProposal', companyId, localCustomer, localSite],
     queryFn: async () => {
@@ -143,7 +170,6 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     if (localCustomer && !sites.some((s) => (s.id || s.ref) === localSite)) setLocalSite('');
   }, [localCustomer, localSite, sites]);
 
-  const truckCount = vehicles.length;
   const state = useMemo(() => getStateFromSite(siteName, customerName), [siteName, customerName]);
 
   // Build site-level pricing maps (flow rate + product price) from DB config
@@ -243,6 +269,34 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     () => calcFromParams(currentWashTime, currentWashesPerDay, currentWashesPerWeek, dispensingRate, pricePerLitre, truckCount),
     [currentWashTime, currentWashesPerDay, currentWashesPerWeek, dispensingRate, pricePerLitre, truckCount]
   );
+
+  const pMaps = sitePricingMaps?.byDeviceSerial != null ? sitePricingMaps : null;
+  const hasMaps = entitlementMaps && (Object.keys(entitlementMaps.byRef || {}).length > 0 || Object.keys(entitlementMaps.byRfid || {}).length > 0);
+  const mapsForCost = hasMaps ? entitlementMaps : null;
+
+  const historicalActualVsMax = useMemo(() => {
+    if (!hasSite || !dateRange?.start || !dateRange?.end || currentCalc.maxCostPerMonthSite <= 0) return null;
+    const billable = scans.filter((s) => isBillableScan(s));
+    let actualSpend = 0;
+    billable.forEach((scan) => {
+      const pricing = calculateScanCostFromScan(scan, mapsForCost, pMaps);
+      actualSpend += pricing.cost ?? 0;
+    });
+    actualSpend = round2(actualSpend);
+    const start = new Date(dateRange.start);
+    const end = new Date(dateRange.end);
+    const daysInRange = Math.max(1, Math.round((end - start) / (24 * 60 * 60 * 1000)) + 1);
+    const maxForPeriod = round2(currentCalc.maxCostPerMonthSite * (daysInRange / 30));
+    const pctOfMax = maxForPeriod > 0 ? round2((actualSpend / maxForPeriod) * 100) : 0;
+    return {
+      actualSpend,
+      maxForPeriod,
+      pctOfMax: Math.min(100, pctOfMax),
+      daysInRange,
+      scanCount: billable.length,
+    };
+  }, [hasSite, dateRange?.start, dateRange?.end, scans, currentCalc.maxCostPerMonthSite, mapsForCost, pMaps]);
+
   const proposedCalc = useMemo(
     () => {
       const washTime = proposedWashTime === '' ? 60 : Number(proposedWashTime) || 60;
@@ -286,31 +340,105 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     const targetLitresPerWeekPerTruck = targetLitresPerMonthPerTruck / WEEKS_PER_MONTH;
 
     const disp = dispensingRate;
+    // Ensure each option's cost never exceeds the user's target budget (always at or under).
     const optionA = (() => {
       const washesPerWeek = currentWashesPerWeek;
       const litresPerWashNeeded = targetLitresPerWeekPerTruck / washesPerWeek;
       const washTimeSec = (litresPerWashNeeded / disp) * 60;
-      const washTimeRounded = Math.max(30, Math.min(300, Math.round(washTimeSec / 6) * 6));
-      const recalc = calcFromParams(washTimeRounded, currentWashesPerDay, washesPerWeek, disp, pricePerLitre, effectiveTruckCount);
+      let washTimeRounded = Math.max(30, Math.min(300, Math.round(washTimeSec / 6) * 6));
+      let recalc = calcFromParams(washTimeRounded, currentWashesPerDay, washesPerWeek, disp, pricePerLitre, effectiveTruckCount);
+      while (recalc.maxCostPerMonthSite > budget && washTimeRounded > 30) {
+        washTimeRounded -= 6;
+        recalc = calcFromParams(washTimeRounded, currentWashesPerDay, washesPerWeek, disp, pricePerLitre, effectiveTruckCount);
+      }
       return { label: 'Reduce Wash Time', washTime: washTimeRounded, washesPerDay: currentWashesPerDay, washesPerWeek, cost: recalc.maxCostPerMonthSite };
     })();
     const optionB = (() => {
       const washTimeSec = currentWashTime;
       const litresPerWash = (washTimeSec / 60) * disp;
       const washesPerWeekNeeded = targetLitresPerWeekPerTruck / litresPerWash;
-      const washesPerWeekRounded = Math.max(2, Math.min(12, Math.round(washesPerWeekNeeded)));
-      const recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
+      let washesPerWeekRounded = Math.max(2, Math.min(12, Math.round(washesPerWeekNeeded)));
+      let recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
+      while (recalc.maxCostPerMonthSite > budget && washesPerWeekRounded > 2) {
+        washesPerWeekRounded -= 1;
+        recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
+      }
       return { label: 'Reduce Washes/Week', washTime: washTimeSec, washesPerDay: currentWashesPerDay, washesPerWeek: washesPerWeekRounded, cost: recalc.maxCostPerMonthSite };
     })();
     const optionC = (() => {
-      const washTimeSec = Math.round((currentWashTime + proposedWashTime) / 2 / 6) * 6 || 90;
+      let washTimeSec = Math.round((currentWashTime + proposedWashTime) / 2 / 6) * 6 || 90;
       const litresPerWash = (washTimeSec / 60) * disp;
       const washesPerWeekNeeded = targetLitresPerWeekPerTruck / litresPerWash;
-      const washesPerWeekRounded = Math.max(2, Math.min(12, Math.round(washesPerWeekNeeded)));
-      const recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
+      let washesPerWeekRounded = Math.max(2, Math.min(12, Math.round(washesPerWeekNeeded)));
+      let recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
+      while (recalc.maxCostPerMonthSite > budget && washesPerWeekRounded > 2) {
+        washesPerWeekRounded -= 1;
+        recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
+      }
+      while (recalc.maxCostPerMonthSite > budget && washTimeSec > 30) {
+        washTimeSec -= 6;
+        const lpw = (washTimeSec / 60) * disp;
+        const wpwNeeded = targetLitresPerWeekPerTruck / lpw;
+        washesPerWeekRounded = Math.max(2, Math.min(12, Math.round(wpwNeeded)));
+        recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
+      }
       return { label: 'Combined', washTime: washTimeSec, washesPerDay: currentWashesPerDay, washesPerWeek: washesPerWeekRounded, cost: recalc.maxCostPerMonthSite };
     })();
-    setReverseOptions({ optionA, optionB, optionC });
+
+    // Ensure each option has a different cost and different parameters from the others.
+    const sameCost = (a, b) => Math.round(a.cost) === Math.round(b.cost);
+    const sameParams = (a, b) => a.washTime === b.washTime && a.washesPerWeek === b.washesPerWeek;
+    const isDuplicate = (a, b) => sameCost(a, b) || sameParams(a, b);
+
+    let outB = optionB;
+    if (isDuplicate(outB, optionA)) {
+      // Nudge B to a lower cost (still under budget) so it differs from A.
+      let wtB = optionB.washTime;
+      let wpwB = optionB.washesPerWeek;
+      while (wpwB > 2) {
+        wpwB -= 1;
+        const recalc = calcFromParams(wtB, currentWashesPerDay, wpwB, disp, pricePerLitre, effectiveTruckCount);
+        if (recalc.maxCostPerMonthSite <= budget && (Math.round(recalc.maxCostPerMonthSite) !== Math.round(optionA.cost) || (wtB !== optionA.washTime || wpwB !== optionA.washesPerWeek))) {
+          outB = { label: 'Reduce Washes/Week', washTime: wtB, washesPerDay: currentWashesPerDay, washesPerWeek: wpwB, cost: recalc.maxCostPerMonthSite };
+          break;
+        }
+      }
+      if (isDuplicate(outB, optionA) && wtB > 30) {
+        wtB = Math.max(30, wtB - 6);
+        const recalc = calcFromParams(wtB, currentWashesPerDay, outB.washesPerWeek, disp, pricePerLitre, effectiveTruckCount);
+        if (recalc.maxCostPerMonthSite <= budget)
+          outB = { label: 'Reduce Washes/Week', washTime: wtB, washesPerDay: currentWashesPerDay, washesPerWeek: outB.washesPerWeek, cost: recalc.maxCostPerMonthSite };
+      }
+    }
+
+    let outC = optionC;
+    while (isDuplicate(outC, optionA) || isDuplicate(outC, outB)) {
+      let wt = outC.washTime;
+      let wpw = outC.washesPerWeek;
+      let changed = false;
+      if (wpw > 2) {
+        wpw -= 1;
+        const recalc = calcFromParams(wt, currentWashesPerDay, wpw, disp, pricePerLitre, effectiveTruckCount);
+        if (recalc.maxCostPerMonthSite <= budget) {
+          outC = { label: 'Combined', washTime: wt, washesPerDay: currentWashesPerDay, washesPerWeek: wpw, cost: recalc.maxCostPerMonthSite };
+          changed = true;
+        }
+      }
+      if (!changed && wt > 30) {
+        wt -= 6;
+        const lpw = (wt / 60) * disp;
+        const wpwNeeded = targetLitresPerWeekPerTruck / lpw;
+        wpw = Math.max(2, Math.min(12, Math.round(wpwNeeded)));
+        const recalc = calcFromParams(wt, currentWashesPerDay, wpw, disp, pricePerLitre, effectiveTruckCount);
+        if (recalc.maxCostPerMonthSite <= budget) {
+          outC = { label: 'Combined', washTime: wt, washesPerDay: currentWashesPerDay, washesPerWeek: wpw, cost: recalc.maxCostPerMonthSite };
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+
+    setReverseOptions({ optionA, optionB: outB, optionC: outC });
   };
 
   // When the user clicks one of the suggested reverse-calculator options,
@@ -351,7 +479,6 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     return { company_name: 'ELORA Solutions', logo_url: null, primary_color: DEFAULT_PRIMARY, secondary_color: DEFAULT_SECONDARY };
   }, [permissions.userProfile?.company_id]);
 
-  const hasSite = !!localCustomer && !!localSite;
   const isLoading = sitesLoading || vehiclesLoading;
   const actionLoading = saveProposalLoading || sendProposalLoading || emailReportLoading || exportPdfLoading;
   const actionMessage = sendProposalLoading
@@ -877,9 +1004,14 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     return <PricingCalculatorGlassySkeleton />;
   }
 
+  const dateRangeLabel = dateRange ? formatDateRangeDisplay(dateRange) : '';
+
   return (
     <div className="space-y-6 relative">
       <ActionLoaderOverlay show={actionLoading} message={actionMessage} />
+      {dateRangeLabel && (
+        <p className="text-sm text-muted-foreground font-medium">Report period: {dateRangeLabel}</p>
+      )}
       <div>
         <h3 className="text-lg font-semibold text-foreground mb-3">Select Customer & Site</h3>
         <div className="flex flex-wrap items-end gap-4">
@@ -963,7 +1095,7 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                   <ClipboardList className="w-4 h-4" />
                   Current Parameters
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">From scan card (read-only)</p>
+                <p className="text-xs text-muted-foreground">From scan card (read-only){dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -992,6 +1124,36 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                   <p>Max cost / month / site ({truckCount} trucks): <strong>${currentCalc.maxCostPerMonthSite.toFixed(2)}</strong></p>
                   <p>Max cost / year / site: <strong>${currentCalc.maxCostPerYearSite.toFixed(2)}</strong></p>
                 </div>
+                {historicalActualVsMax != null && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Based on your selected period (live data)</p>
+                    <p className="text-sm text-muted-foreground">
+                      These max amounts assume every truck uses the full allowance. In the selected period you actually spent <strong className="text-foreground">${historicalActualVsMax.actualSpend.toFixed(2)}</strong>
+                      {historicalActualVsMax.maxForPeriod > 0 ? (
+                        <> ({historicalActualVsMax.pctOfMax}% of max possible for that period).</>
+                      ) : (
+                        '.'
+                      )}
+                    </p>
+                    {historicalActualVsMax.maxForPeriod > 0 && (
+                      <>
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Actual spend vs max (period)</span>
+                          <span>{historicalActualVsMax.pctOfMax}%</span>
+                        </div>
+                        <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all"
+                            style={{ width: `${Math.min(100, historicalActualVsMax.pctOfMax)}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {historicalActualVsMax.scanCount} scans in period · Max for period would be ${historicalActualVsMax.maxForPeriod.toFixed(2)} if all trucks hit limit
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -1001,6 +1163,7 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                   <Zap className="w-4 h-4" />
                   Proposed Parameters
                 </CardTitle>
+                {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -1100,6 +1263,8 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
           <Card className="border-green-200 dark:border-green-900/50 bg-green-50/50 dark:bg-green-950/20">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Projected Savings — {customerName} · {siteName}</CardTitle>
+              {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
+              <p className="text-xs text-muted-foreground mt-1">Savings vs max possible spend. Your actual savings depend on how much trucks use (see live data in Current Parameters).</p>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1136,6 +1301,7 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Reverse Calculator — Set a Budget, Get Parameters</CardTitle>
               <p className="text-sm text-muted-foreground">Enter your target monthly spend and we'll calculate the scan card parameters needed to achieve it.</p>
+              {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap items-end gap-3">

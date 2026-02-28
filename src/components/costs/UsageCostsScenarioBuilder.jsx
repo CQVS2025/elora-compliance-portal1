@@ -30,8 +30,8 @@ import {
 } from '@/components/ui/dialog';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { useAuth } from '@/lib/AuthContext';
-import { customersOptions, vehiclesOptions } from '@/query/options';
-import { getStateFromSite, getPricingDetails, calcFromParams, round2 } from './usageCostUtils';
+import { customersOptions, vehiclesOptions, scansOptions, pricingConfigOptions } from '@/query/options';
+import { getStateFromSite, getPricingDetails, calcFromParams, round2, formatDateRangeDisplay, buildVehicleWashTimeMaps, buildSitePricingMaps, calculateScanCostFromScan, isBillableScan } from './usageCostUtils';
 import { callEdgeFunction, supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import { toast } from '@/lib/toast';
@@ -109,6 +109,25 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
     enabled: !!companyId && !!localCustomer,
   });
 
+  const { data: pricingConfig } = useQuery(pricingConfigOptions());
+  const { data: scansData } = useQuery({
+    ...scansOptions(companyId, {
+      startDate: dateRange?.start,
+      endDate: dateRange?.end,
+      customerId: localCustomer || undefined,
+      status: 'success,exceeded',
+      export: true,
+    }),
+    enabled: !!companyId && !!localCustomer && !!dateRange?.start && !!dateRange?.end,
+  });
+
+  const scans = useMemo(() => {
+    const raw = scansData;
+    if (Array.isArray(raw)) return raw;
+    if (raw?.data) return raw.data;
+    return [];
+  }, [scansData]);
+
   const vehicles = useMemo(() => {
     const raw = vehiclesData;
     if (Array.isArray(raw)) return raw;
@@ -133,6 +152,37 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
   useEffect(() => {
     setSiteRows(initialSiteRows);
   }, [initialSiteRows.length, localCustomer]);
+
+  const entitlementMaps = useMemo(() => buildVehicleWashTimeMaps(vehicles), [vehicles]);
+  const sitePricingMaps = useMemo(
+    () => buildSitePricingMaps(pricingConfig?.tankConfigs ?? [], pricingConfig?.products ?? []),
+    [pricingConfig]
+  );
+  const pMaps = sitePricingMaps?.byDeviceSerial != null ? sitePricingMaps : null;
+  const hasMaps = entitlementMaps && (Object.keys(entitlementMaps.byRef || {}).length > 0 || Object.keys(entitlementMaps.byRfid || {}).length > 0);
+  const mapsForCost = hasMaps ? entitlementMaps : null;
+
+  const actualSpendBySite = useMemo(() => {
+    const billable = scans.filter((s) => isBillableScan(s));
+    const bySite = {};
+    billable.forEach((scan) => {
+      const siteRef = scan.siteRef ?? scan.site_ref ?? '__unknown__';
+      if (!bySite[siteRef]) bySite[siteRef] = 0;
+      const pricing = calculateScanCostFromScan(scan, mapsForCost, pMaps);
+      bySite[siteRef] += pricing.cost ?? 0;
+    });
+    Object.keys(bySite).forEach((k) => { bySite[k] = round2(bySite[k]); });
+    return bySite;
+  }, [scans, mapsForCost, pMaps]);
+
+  const historicalSummary = useMemo(() => {
+    if (!dateRange?.start || !dateRange?.end) return null;
+    const totalActual = Object.values(actualSpendBySite).reduce((s, v) => s + v, 0);
+    const start = new Date(dateRange.start);
+    const end = new Date(dateRange.end);
+    const daysInRange = Math.max(1, Math.round((end - start) / (24 * 60 * 60 * 1000)) + 1);
+    return { totalActual: round2(totalActual), daysInRange };
+  }, [actualSpendBySite, dateRange?.start, dateRange?.end]);
 
   const siteRowsWithPricing = useMemo(() => {
     return siteRows.map((row) => {
@@ -160,15 +210,20 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
         row.trucks
       );
       const monthlySaving = round2(currentCalc.maxCostPerMonthSite - proposedCalc.maxCostPerMonthSite);
+      const actualSpend = actualSpendBySite[row.siteRef] ?? 0;
+      const maxMo = currentCalc.maxCostPerMonthSite;
+      const pctOfMax = maxMo > 0 ? round2((actualSpend / maxMo) * 100) : 0;
       return {
         ...row,
         pricePerLitre,
         currentCostMo: currentCalc.maxCostPerMonthSite,
         proposedCostMo: proposedCalc.maxCostPerMonthSite,
         monthlySaving,
+        actualSpendPeriod: actualSpend,
+        pctOfMax: Math.min(100, pctOfMax),
       };
     });
-  }, [siteRows]);
+  }, [siteRows, actualSpendBySite]);
 
   const summary = useMemo(() => {
     const totalCurrent = siteRowsWithPricing.reduce((s, r) => s + r.currentCostMo, 0);
@@ -557,11 +612,16 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
     return <CardsAndChartsGlassySkeleton />;
   }
 
+  const dateRangeLabel = dateRange ? formatDateRangeDisplay(dateRange) : '';
+
   return (
     <div className="space-y-6 relative">
       <ActionLoaderOverlay show={saveLoading} message="Saving scenario..." />
       <ActionLoaderOverlay show={exportPdfLoading} message="Generating PDF..." />
 
+      {dateRangeLabel && (
+        <p className="text-sm text-muted-foreground font-medium">Data for period: {dateRangeLabel}</p>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Multi-Site Scenario Builder</h2>
@@ -623,6 +683,7 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
                   ${summary.totalCurrentMo.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">{summary.totalTrucks} trucks · {summary.siteCount} sites</p>
+                {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
               </CardContent>
             </Card>
             <Card className="border-border border-t-4 border-t-primary/50">
@@ -634,6 +695,7 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
                   ${summary.totalProposedMo.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">After parameter changes</p>
+                {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
               </CardContent>
             </Card>
             <Card className="border-border border-t-4 border-t-green-500/50">
@@ -645,6 +707,7 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
                   ${summary.monthlySaving.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">{summary.pctReduction}% reduction</p>
+                {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
               </CardContent>
             </Card>
             <Card className="border-border border-t-4 border-t-green-500/50">
@@ -656,15 +719,41 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
                   ${summary.annualSaving.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">Projected yearly saving</p>
+                {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
               </CardContent>
             </Card>
           </div>
+
+          {historicalSummary && summary.totalCurrentMo > 0 && (
+            (() => {
+              const maxForPeriod = round2(summary.totalCurrentMo * (historicalSummary.daysInRange / 30));
+              const pctOfMax = maxForPeriod > 0 ? Math.min(100, round2((historicalSummary.totalActual / maxForPeriod) * 100)) : 0;
+              return (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Based on your selected period (live data)</p>
+                  <p className="text-sm text-muted-foreground">
+                    Totals above are <strong className="text-foreground">max possible</strong> if every truck uses the full allowance. In the selected period you actually spent{' '}
+                    <strong className="text-foreground">${historicalSummary.totalActual.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    {' '}({pctOfMax}% of max for that period).
+                  </p>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Actual spend vs max for period</span>
+                    <span>{pctOfMax}%</span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pctOfMax}%` }} />
+                  </div>
+                </div>
+              );
+            })()
+          )}
 
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <CardTitle>Site-by-Site Parameters</CardTitle>
+                  {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
                   <p className="text-sm text-muted-foreground mt-1">
                     {viewMode === 'current'
                       ? 'A Current — read-only data from API (same as Compliance).'
@@ -701,6 +790,8 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
                         <TableHead className="text-right">Current Wash Time</TableHead>
                         <TableHead className="text-right">Current W/Week</TableHead>
                         <TableHead className="text-right">Current / Mo</TableHead>
+                        <TableHead className="text-right">Actual (period)</TableHead>
+                        <TableHead className="text-right">% of max</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -711,6 +802,8 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
                           <TableCell className="text-right text-muted-foreground">{row.currentWashTime}s</TableCell>
                           <TableCell className="text-right text-muted-foreground">{row.currentWashesPerWeek}</TableCell>
                           <TableCell className="text-right">${row.currentCostMo.toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-primary">${(row.actualSpendPeriod ?? 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{row.pctOfMax ?? 0}%</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -728,6 +821,8 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
                         <TableHead className="text-right">Current / Mo</TableHead>
                         <TableHead className="text-right">Proposed / Mo</TableHead>
                         <TableHead className="text-right text-green-700 dark:text-green-400">Monthly Saving</TableHead>
+                        <TableHead className="text-right">Actual (period)</TableHead>
+                        <TableHead className="text-right">% of max</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -784,6 +879,8 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
                           <TableCell className="text-right">${row.currentCostMo.toFixed(2)}</TableCell>
                           <TableCell className="text-right text-primary font-medium">${row.proposedCostMo.toFixed(2)}</TableCell>
                           <TableCell className="text-right text-green-700 dark:text-green-400 font-medium">${row.monthlySaving.toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-primary">${(row.actualSpendPeriod ?? 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{row.pctOfMax ?? 0}%</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

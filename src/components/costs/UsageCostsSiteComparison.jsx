@@ -27,7 +27,7 @@ import { motion } from 'framer-motion';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { scansOptions, vehiclesOptions, pricingConfigOptions } from '@/query/options';
 import { SiteComparisonGlassySkeleton } from './UsageCostsSkeletons';
-import { calculateScanCostFromScan, isBillableScan, buildVehicleWashTimeMaps, buildSitePricingMaps, round2 } from './usageCostUtils';
+import { calculateScanCostFromScan, isBillableScan, buildVehicleWashTimeMaps, buildSitePricingMaps, round2, formatDateRangeDisplay } from './usageCostUtils';
 
 const GRANULARITY_OPTIONS = [
   { value: 'day', label: 'Day' },
@@ -320,8 +320,13 @@ export default function UsageCostsSiteComparison({ selectedCustomer, selectedSit
     );
   }
 
+  const dateRangeLabel = formatDateRangeDisplay(dateRange);
+
   return (
     <div className="space-y-6">
+      {dateRangeLabel && (
+        <p className="text-sm text-muted-foreground font-medium">Data for period: {dateRangeLabel}</p>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm font-medium text-foreground">Compare:</span>
         {compareKeys.map((key, index) => (
@@ -390,6 +395,7 @@ export default function UsageCostsSiteComparison({ selectedCustomer, selectedSit
                     <p className="text-sm text-muted-foreground mt-1">
                       {site.vehicles} trucks · ${site.costPerTruck.toFixed(2)} / truck
                     </p>
+                    {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -399,7 +405,7 @@ export default function UsageCostsSiteComparison({ selectedCustomer, selectedSit
           <Card>
             <CardHeader>
               <CardTitle>Cost Trend Comparison</CardTitle>
-              <p className="text-sm text-muted-foreground">Weekly cost per site</p>
+              <p className="text-sm text-muted-foreground">Weekly cost per site{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -432,7 +438,7 @@ export default function UsageCostsSiteComparison({ selectedCustomer, selectedSit
           <Card>
             <CardHeader>
               <CardTitle>Per Truck Cost Comparison</CardTitle>
-              <p className="text-sm text-muted-foreground">Avg cost per truck at each site</p>
+              <p className="text-sm text-muted-foreground">Avg cost per truck at each site{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
             </CardHeader>
             <CardContent>
               {perTruckComparisonData.length > 0 ? (
@@ -465,8 +471,12 @@ export default function UsageCostsSiteComparison({ selectedCustomer, selectedSit
           <Card>
             <CardHeader>
               <CardTitle>Side-by-Side Metrics</CardTitle>
+              {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
             </CardHeader>
             <CardContent>
+              {dateRangeLabel && (
+                <p className="text-xs text-muted-foreground mb-3">Period: {dateRangeLabel}</p>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>

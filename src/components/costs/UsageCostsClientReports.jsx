@@ -29,7 +29,7 @@ import { Label } from '@/components/ui/label';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { customersOptions, sitesOptions, scansOptions, vehiclesOptions, pricingConfigOptions, companiesOptions, companyOptions } from '@/query/options';
 import { queryKeys } from '@/query/keys';
-import { calculateScanCostFromScan, isBillableScan, buildVehicleWashTimeMaps, buildSitePricingMaps, round2 } from './usageCostUtils';
+import { calculateScanCostFromScan, isBillableScan, buildVehicleWashTimeMaps, buildSitePricingMaps, round2, formatDateRangeDisplay } from './usageCostUtils';
 import { supabaseClient } from '@/api/supabaseClient';
 import { callEdgeFunction } from '@/lib/supabase';
 import { toast } from '@/lib/toast';
@@ -188,6 +188,7 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
     if (start.month() === end.month() && start.year() === end.year()) return start.format('MMMM YYYY');
     return `${start.format('MMM D')} – ${end.format('MMM D, YYYY')}`;
   }, [dateRange]);
+  const dateRangeLabel = formatDateRangeDisplay(dateRange);
 
   const reportCompanyNameFormatted = useMemo(() => formatReportCompanyName(customerName), [customerName]);
 
@@ -454,6 +455,7 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Client-Facing Cost Report</h2>
         <p className="text-sm text-muted-foreground">Generate professional reports to share with customers.</p>
+        {dateRangeLabel && <p className="text-sm text-muted-foreground font-medium mt-1">Report period: {dateRangeLabel}</p>}
       </div>
 
       <Card ref={reportCardRef} className="overflow-hidden">
@@ -465,6 +467,7 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
             <div className="flex flex-col gap-1 text-center flex-[2] min-w-0">
               <CardTitle className="text-lg font-semibold uppercase tracking-wide">Fleet Wash Program Report</CardTitle>
               <p className="text-sm text-muted-foreground">{reportMonthLabel} · {siteLabel}</p>
+              {dateRangeLabel && <p className="text-xs text-muted-foreground">{dateRangeLabel}</p>}
             </div>
             <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
               <img src={ELORA_LOGO_URL} alt="ELORA" className="h-8 w-auto object-contain" />
@@ -479,6 +482,7 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
                 <p className="text-xs font-semibold uppercase text-green-700 dark:text-green-400">Compliance Rate</p>
                 <p className="text-3xl font-bold text-green-800 dark:text-green-300">{reportData.complianceRate != null ? `${reportData.complianceRate}%` : '—'}</p>
                 <p className="text-xs text-green-600 dark:text-green-500">{reportData.complianceDelta != null ? `↑ ${reportData.complianceDelta}% from last month` : 'Based on wash scans in period'}</p>
+                {dateRangeLabel && <p className="text-xs text-green-600/80 dark:text-green-500/80 mt-1">{dateRangeLabel}</p>}
               </CardContent>
             </Card>
             <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
@@ -486,11 +490,12 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
                 <p className="text-xs font-semibold uppercase text-blue-700 dark:text-blue-400">Total Washes</p>
                 <p className="text-3xl font-bold text-blue-800 dark:text-blue-300">{reportData.totalWashes}</p>
                 <p className="text-xs text-blue-600 dark:text-blue-500">Across {reportData.activeSites} sites</p>
+                {dateRangeLabel && <p className="text-xs text-blue-600/80 dark:text-blue-500/80 mt-1">{dateRangeLabel}</p>}
               </CardContent>
             </Card>
           </div>
 
-          <h3 className="text-sm font-semibold mb-2 ml-1">Monthly Cost Summary</h3>
+          <h3 className="text-sm font-semibold mb-2 ml-1">Monthly Cost Summary{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</h3>
           <Table>
             <TableHeader>
               <TableRow>

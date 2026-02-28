@@ -21,9 +21,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { customersOptions, scansOptions, vehiclesOptions, pricingConfigOptions } from '@/query/options';
-import { calculateScanCostFromScan, isBillableScan, buildVehicleWashTimeMaps, buildSitePricingMaps } from './usageCostUtils';
+import { calculateScanCostFromScan, isBillableScan, buildVehicleWashTimeMaps, buildSitePricingMaps, formatDateRangeDisplay } from './usageCostUtils';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/lib/toast';
 import { CardsAndChartsGlassySkeleton } from './UsageCostsSkeletons';
@@ -127,6 +128,24 @@ export default function UsageCostsBudgetTracker({ selectedCustomer, selectedSite
     return { rows, scansExcludedConfigMissing };
   }, [scans, maps, pMaps]);
 
+  const spentBySite = useMemo(() => {
+    const filtered = scans.filter((s) => isBillableScan(s));
+    const bySite = {};
+    filtered.forEach((scan) => {
+      const cRef = scan.customerRef ?? scan.customer_ref ?? '__unknown__';
+      const cName = scan.customerName ?? scan.customer_name ?? (cRef === '__unknown__' ? 'Unknown / Unassigned' : cRef);
+      const sRef = scan.siteRef ?? scan.site_ref ?? '__unknown_site__';
+      const sName = scan.siteName ?? scan.site_name ?? (sRef === '__unknown_site__' ? 'Unknown site' : sRef);
+      const key = `${cRef}\0${sRef}`;
+      if (!bySite[key]) bySite[key] = { customerRef: cRef, customerName: cName, siteRef: sRef, siteName: sName, totalScans: 0, spent: 0 };
+      const pricing = calculateScanCostFromScan(scan, maps, pMaps);
+      const cost = pricing.cost;
+      bySite[key].totalScans += 1;
+      bySite[key].spent += cost;
+    });
+    return Object.values(bySite).map((s) => ({ ...s, spent: Math.round(s.spent * 100) / 100 }));
+  }, [scans, maps, pMaps]);
+
   const scansExcludedConfigMissing = spentByCustomer.scansExcludedConfigMissing ?? 0;
 
   const { data: budgetsRows = [], isLoading: budgetsLoading } = useQuery({
@@ -221,6 +240,28 @@ export default function UsageCostsBudgetTracker({ selectedCustomer, selectedSite
     return list.sort((a, b) => (b.budget || b.spent) - (a.budget || a.spent));
   }, [spentByCustomer, budgetsByCustomer, budgetsRows, daysElapsed, daysInMonth]);
 
+  const siteRowsFiltered = useMemo(() => {
+    let list = spentBySite;
+    if (selectedCustomer && selectedCustomer !== 'all') {
+      list = list.filter((s) => s.customerRef === selectedCustomer);
+    }
+    return list.sort((a, b) => b.spent - a.spent);
+  }, [spentBySite, selectedCustomer]);
+
+  const siteRowsByCustomer = useMemo(() => {
+    const groups = {};
+    siteRowsFiltered.forEach((row) => {
+      const ref = row.customerRef;
+      if (!groups[ref]) groups[ref] = { customerRef: ref, customerName: row.customerName, budget: budgetsByCustomer[ref]?.amount ?? 0, sites: [] };
+      groups[ref].sites.push(row);
+    });
+    return Object.values(groups).map((g) => ({
+      ...g,
+      totalSpent: g.sites.reduce((s, r) => s + r.spent, 0),
+      totalScans: g.sites.reduce((s, r) => s + r.totalScans, 0),
+    }));
+  }, [siteRowsFiltered, budgetsByCustomer]);
+
   const summary = useMemo(() => {
     const totalBudget = customerRows.reduce((s, r) => s + r.budget, 0);
     const totalSpent = customerRows.reduce((s, r) => s + r.spent, 0);
@@ -287,8 +328,13 @@ export default function UsageCostsBudgetTracker({ selectedCustomer, selectedSite
     return <CardsAndChartsGlassySkeleton />;
   }
 
+  const dateRangeLabel = formatDateRangeDisplay(dateRange);
+
   return (
     <div className="space-y-6">
+      {dateRangeLabel && (
+        <p className="text-sm text-muted-foreground font-medium">Data for period: {dateRangeLabel}</p>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Budget Tracker</h2>
@@ -312,6 +358,7 @@ export default function UsageCostsBudgetTracker({ selectedCustomer, selectedSite
               ${summary.totalBudget.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-muted-foreground mt-1">All customers this month</p>
+            {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
           </CardContent>
         </Card>
         <Card className="border-border">
@@ -325,6 +372,7 @@ export default function UsageCostsBudgetTracker({ selectedCustomer, selectedSite
             <p className="text-xs text-muted-foreground mt-1">
               {summary.totalBudget > 0 ? `${summary.pctUsed}% of budget used` : 'Actual spend this period'}
             </p>
+            {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
           </CardContent>
         </Card>
         <Card className="border-border border-t-4 border-t-green-500/50">
@@ -338,6 +386,7 @@ export default function UsageCostsBudgetTracker({ selectedCustomer, selectedSite
             <p className="text-xs text-muted-foreground mt-1">
               {summary.totalBudget > 0 ? `${Math.round((summary.remaining / summary.totalBudget) * 1000) / 10}% remaining` : '—'}
             </p>
+            {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
           </CardContent>
         </Card>
         <Card className="border-border border-t-4 border-t-primary/50">
@@ -355,70 +404,146 @@ export default function UsageCostsBudgetTracker({ selectedCustomer, selectedSite
                 <span className="text-red-600 dark:text-red-400">Over Budget</span>
               )}
             </p>
+            {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Budget vs Actual by Customer</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">Spend and budget for {monthLabel}</p>
-        </CardHeader>
-        <CardContent>
-          {customerRows.length === 0 ? (
-            <p className="text-muted-foreground py-8 text-center">
-              No scan data or budgets for this period. Set a budget or adjust the date range.
-            </p>
-          ) : (
-            <div className="space-y-6">
-              {customerRows.map((row) => {
-                const displayName = row.customerRef === '__unknown__' ? 'Unknown / Unassigned' : row.customerName;
-                const pctBar = row.budget > 0 ? Math.min(100, (row.spent / row.budget) * 100) : 0;
-                const barColor = pctBar >= 100 ? 'bg-red-500' : pctBar >= 90 ? 'bg-amber-500' : 'bg-green-500';
-                const hasBudget = row.budget > 0;
-                const statusLabel = !hasBudget ? 'No budget set' : row.status === 'Over' ? 'Over Budget' : row.status === 'At Risk' ? 'At Risk' : 'On Track';
-                const projectedText = hasBudget
-                  ? (row.projectedDiff <= 0 ? ` — $${Math.abs(row.projectedDiff).toFixed(0)} under budget` : ` — $${row.projectedDiff.toFixed(0)} OVER budget`)
-                  : ' this month';
-                return (
-                  <div key={row.customerRef} className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <span className="font-medium text-foreground">{displayName}</span>
-                        <span className="text-muted-foreground ml-2">{row.totalScans.toLocaleString()} scans</span>
+        <Tabs defaultValue="customer" className="w-full">
+          <CardHeader>
+            <CardTitle>Budget vs Actual</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">Spend and budget for {monthLabel}{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
+            <TabsList className="grid w-full max-w-[280px] grid-cols-2 mt-3">
+              <TabsTrigger value="customer">By Customer</TabsTrigger>
+              <TabsTrigger value="site">By Site</TabsTrigger>
+            </TabsList>
+          </CardHeader>
+          <CardContent>
+            <TabsContent value="customer" className="mt-0">
+              {dateRangeLabel && (
+                <p className="text-xs text-muted-foreground mb-3">Period: {dateRangeLabel}</p>
+              )}
+              {customerRows.length === 0 ? (
+                <p className="text-muted-foreground py-8 text-center">
+                  No scan data or budgets for this period. Set a budget or adjust the date range.
+                </p>
+              ) : (
+                <div className="space-y-6">
+                  {customerRows.map((row) => {
+                    const displayName = row.customerRef === '__unknown__' ? 'Unknown / Unassigned' : row.customerName;
+                    const pctBar = row.budget > 0 ? Math.min(100, (row.spent / row.budget) * 100) : 0;
+                    const barColor = pctBar >= 100 ? 'bg-red-500' : pctBar >= 90 ? 'bg-amber-500' : 'bg-green-500';
+                    const hasBudget = row.budget > 0;
+                    const statusLabel = !hasBudget ? 'No budget set' : row.status === 'Over' ? 'Over Budget' : row.status === 'At Risk' ? 'At Risk' : 'On Track';
+                    const projectedText = hasBudget
+                      ? (row.projectedDiff <= 0 ? ` — $${Math.abs(row.projectedDiff).toFixed(0)} under budget` : ` — $${row.projectedDiff.toFixed(0)} OVER budget`)
+                      : ' this month';
+                    return (
+                      <div key={row.customerRef} className="space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <span className="font-medium text-foreground">{displayName}</span>
+                            <span className="text-muted-foreground ml-2">{row.totalScans.toLocaleString()} scans</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-foreground">
+                              ${row.spent.toFixed(2)} / ${row.budget.toFixed(2)}
+                            </span>
+                            <span
+                              className={
+                                !hasBudget
+                                  ? 'text-muted-foreground'
+                                  : row.status === 'Over'
+                                    ? 'text-red-600 dark:text-red-400 font-medium'
+                                    : row.status === 'At Risk'
+                                      ? 'text-amber-600 dark:text-amber-400 font-medium'
+                                      : 'text-green-600 dark:text-green-400 font-medium'
+                              }
+                            >
+                              {statusLabel}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-2 rounded-full bg-muted overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pctBar}%` }} />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {hasBudget ? `${row.pctUsed}% used` : 'No budget set'} · Projected: ${row.projected.toFixed(0)}
+                          {projectedText}
+                        </p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-foreground">
-                          ${row.spent.toFixed(2)} / ${row.budget.toFixed(2)}
-                        </span>
-                        <span
-                          className={
-                            !hasBudget
-                              ? 'text-muted-foreground'
-                              : row.status === 'Over'
-                                ? 'text-red-600 dark:text-red-400 font-medium'
-                                : row.status === 'At Risk'
-                                  ? 'text-amber-600 dark:text-amber-400 font-medium'
-                                  : 'text-green-600 dark:text-green-400 font-medium'
-                          }
-                        >
-                          {statusLabel}
-                        </span>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+            <TabsContent value="site" className="mt-0">
+              {dateRangeLabel && (
+                <p className="text-xs text-muted-foreground mb-3">Period: {dateRangeLabel}</p>
+              )}
+              {siteRowsByCustomer.length === 0 ? (
+                <p className="text-muted-foreground py-8 text-center">
+                  No scan data for this period. Select a customer or date range to see spend by site.
+                </p>
+              ) : (
+                <div className="space-y-6">
+                  {siteRowsByCustomer.map((group) => {
+                    const hasBudget = group.budget > 0;
+                    const pctBar = hasBudget ? Math.min(100, (group.totalSpent / group.budget) * 100) : 0;
+                    const barColor = pctBar >= 100 ? 'bg-red-500' : pctBar >= 90 ? 'bg-amber-500' : 'bg-green-500';
+                    const statusLabel = !hasBudget ? 'No budget set' : pctBar >= 100 ? 'Over Budget' : pctBar >= 90 ? 'At Risk' : 'On Track';
+                    const displayName = group.customerRef === '__unknown__' ? 'Unknown / Unassigned' : group.customerName;
+                    return (
+                      <div key={group.customerRef} className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-semibold text-foreground">{displayName}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-foreground">
+                              ${group.totalSpent.toFixed(2)} / ${group.budget.toFixed(2)} total
+                            </span>
+                            <span
+                              className={
+                                !hasBudget
+                                  ? 'text-muted-foreground text-sm'
+                                  : pctBar >= 100
+                                    ? 'text-red-600 dark:text-red-400 font-medium text-sm'
+                                    : pctBar >= 90
+                                      ? 'text-amber-600 dark:text-amber-400 font-medium text-sm'
+                                      : 'text-green-600 dark:text-green-400 font-medium text-sm'
+                              }
+                            >
+                              {statusLabel}
+                            </span>
+                          </div>
+                        </div>
+                        {hasBudget && (
+                          <div className="h-2 rounded-full bg-muted overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pctBar}%` }} />
+                          </div>
+                        )}
+                        <div className="space-y-2 pt-1">
+                          {group.sites.map((site) => (
+                            <div
+                              key={`${site.customerRef}-${site.siteRef}`}
+                              className="flex flex-wrap items-center justify-between gap-2 py-2 px-3 rounded-md bg-background/60 border border-border/50"
+                            >
+                              <div>
+                                <span className="font-medium text-foreground">{site.siteName}</span>
+                                <span className="text-muted-foreground ml-2 text-sm">{site.totalScans.toLocaleString()} scans</span>
+                              </div>
+                              <span className="text-sm font-semibold text-primary">${site.spent.toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pctBar}%` }} />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {hasBudget ? `${row.pctUsed}% used` : 'No budget set'} · Projected: ${row.projected.toFixed(0)}
-                      {projectedText}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+          </CardContent>
+        </Tabs>
       </Card>
 
       <Dialog open={setBudgetOpen} onOpenChange={setSetBudgetOpen}>

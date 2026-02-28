@@ -23,7 +23,7 @@ import { motion } from 'framer-motion';
 import DataPagination from '@/components/ui/DataPagination';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { scansOptions, vehiclesOptions, pricingConfigOptions } from '@/query/options';
-import { calculateScanCostFromScan, isBillableScan, buildVehicleWashTimeMaps, buildSitePricingMaps, round2 } from './usageCostUtils';
+import { calculateScanCostFromScan, isBillableScan, buildVehicleWashTimeMaps, buildSitePricingMaps, round2, formatDateRangeDisplay } from './usageCostUtils';
 import { CardsAndChartsGlassySkeleton, ActionLoaderOverlay } from './UsageCostsSkeletons';
 
 const GRANULARITY_OPTIONS = [
@@ -354,9 +354,13 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
   }
 
   const topSitesForLineChart = siteRows.slice(0, TOP_SITES_FOR_CHART);
+  const dateRangeLabel = formatDateRangeDisplay(dateRange);
 
   return (
     <div className="space-y-6 relative">
+      {dateRangeLabel && (
+        <p className="text-sm text-muted-foreground font-medium">Data for period: {dateRangeLabel}</p>
+      )}
       <ActionLoaderOverlay show={exportLoading} message="Exporting CSV..." />
       <div className="flex flex-wrap items-center justify-end gap-4">
         {/* <div className="flex flex-wrap gap-2">
@@ -394,6 +398,7 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
                 ${summary.avgCostPerSiteWeek.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <p className="text-xs text-muted-foreground mt-1">Across {summary.activeSites} active sites</p>
+              {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
             </CardContent>
           </Card>
         </motion.div>
@@ -404,7 +409,7 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">${summary.avgCostPerTruckSite.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground mt-1">This period</p>
+              <p className="text-xs text-muted-foreground mt-1">{dateRangeLabel || 'This period'}</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -415,7 +420,7 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">${summary.avgCostPerWash.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Across all sites</p>
+              <p className="text-xs text-muted-foreground mt-1">{dateRangeLabel ? `${dateRangeLabel} · all sites` : 'Across all sites'}</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -428,7 +433,7 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
               <div className="text-2xl font-bold text-foreground">
                 {typeof summary.totalLitresDispensed === 'number' ? summary.totalLitresDispensed.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} L
               </div>
-              <p className="text-xs text-muted-foreground mt-1">This period</p>
+              <p className="text-xs text-muted-foreground mt-1">{dateRangeLabel || 'This period'}</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -437,7 +442,7 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
       <Card>
         <CardHeader>
           <CardTitle>Site Cost Over Time</CardTitle>
-          <p className="text-sm text-muted-foreground">Weekly cost by site</p>
+          <p className="text-sm text-muted-foreground">Weekly cost by site{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
         </CardHeader>
         <CardContent>
           {siteCostOverTimeDataWeekly.length > 0 && topSitesForLineChart.length > 0 ? (
@@ -478,6 +483,7 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
       <Card>
         <CardHeader>
           <CardTitle>Cost Per Truck by Site</CardTitle>
+          {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
           <p className="text-sm text-muted-foreground">Average cost per vehicle at each site</p>
         </CardHeader>
         <CardContent>
@@ -517,7 +523,10 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <CardTitle>Site Cost Summary</CardTitle>
+            <div>
+              <CardTitle>Site Cost Summary</CardTitle>
+              {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
+            </div>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -536,6 +545,9 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
           )}
         </CardHeader>
         <CardContent>
+          {dateRangeLabel && (
+            <p className="text-xs text-muted-foreground mb-3">Period: {dateRangeLabel}</p>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>

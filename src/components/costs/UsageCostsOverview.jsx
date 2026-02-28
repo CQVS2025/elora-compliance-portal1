@@ -12,7 +12,7 @@ import DataPagination from '@/components/ui/DataPagination';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { scansOptions, vehiclesOptions, pricingConfigOptions } from '@/query/options';
 import { OverviewGlassySkeleton } from './UsageCostsSkeletons';
-import { calculateScanCostFromScan, isBillableScan, round2, buildVehicleWashTimeMaps, buildSitePricingMaps } from './usageCostUtils';
+import { calculateScanCostFromScan, isBillableScan, round2, buildVehicleWashTimeMaps, buildSitePricingMaps, formatDateRangeDisplay } from './usageCostUtils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ListFilter } from 'lucide-react';
@@ -273,9 +273,13 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
   }
 
   const { summary, scansExcludedConfigMissing, excludedScanRows } = costData;
+  const dateRangeLabel = formatDateRangeDisplay(dateRange);
 
   return (
     <div className="space-y-6 relative">
+      {dateRangeLabel && (
+        <p className="text-sm text-muted-foreground font-medium">Data for period: {dateRangeLabel}</p>
+      )}
       <Dialog open={showExcludedScansModal} onOpenChange={setShowExcludedScansModal}>
         <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
           <DialogHeader>
@@ -333,7 +337,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-foreground">${summary.totalCost.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <p className="text-xs text-muted-foreground mt-1">{isPaginated && pageCount > 1 ? 'Cost for scans on this page' : 'Total wash costs (selected period)'}</p>
+              <p className="text-xs text-muted-foreground mt-1">{dateRangeLabel || (isPaginated && pageCount > 1 ? 'Cost for scans on this page' : 'Total wash costs (selected period)')}</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -347,7 +351,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-foreground">${summary.avgCostPerScan.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Average cost per wash</p>
+              <p className="text-xs text-muted-foreground mt-1">{dateRangeLabel ? `${dateRangeLabel} · avg per wash` : 'Average cost per wash'}</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -361,7 +365,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-foreground">{filteredScansForCost.length.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">{isPaginated && pageCount > 1 ? `Success scans on page ${currentApiPage} (${filteredScansForCost.length} on this page)` : 'Success scans (selected period)'}</p>
+              <p className="text-xs text-muted-foreground mt-1">{dateRangeLabel || (isPaginated && pageCount > 1 ? `Success scans on page ${currentApiPage}` : 'Success scans (selected period)')}</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -376,6 +380,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
             <CardContent>
               <div className="text-xl font-bold text-foreground">{summary.mostExpensiveSite.name || 'N/A'}</div>
               <p className="text-sm text-primary font-semibold mt-1">${(summary.mostExpensiveSite.cost ?? 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              {dateRangeLabel && <p className="text-xs text-muted-foreground mt-1">{dateRangeLabel}</p>}
             </CardContent>
           </Card>
         </motion.div>
@@ -398,7 +403,10 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <CardTitle>Cost Breakdown by Vehicle</CardTitle>
+            <div>
+              <CardTitle>Cost Breakdown by Vehicle</CardTitle>
+              {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
+            </div>
             <div className="flex items-center gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -417,6 +425,9 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
           </div>
         </CardHeader>
         <CardContent>
+          {dateRangeLabel && (
+            <p className="text-xs text-muted-foreground mb-3">Period: {dateRangeLabel}</p>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -486,7 +497,10 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader><CardTitle>Cost Over Time</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Cost Over Time</CardTitle>
+            {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
+          </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={costData.dailyCosts}>
@@ -506,7 +520,10 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Top 10 Sites by Cost</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Top 10 Sites by Cost</CardTitle>
+            {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
+          </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={costData.topSites} layout="vertical">
@@ -528,8 +545,14 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Cost Summary by Customer</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Cost Summary by Customer</CardTitle>
+          {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
+        </CardHeader>
         <CardContent>
+          {dateRangeLabel && (
+            <p className="text-xs text-muted-foreground mb-3">Period: {dateRangeLabel}</p>
+          )}
           <div className="space-y-2">
             {costData.customerSummary.map((customer) => (
               <div key={customer.customerRef} className="border border-border rounded-lg overflow-hidden">

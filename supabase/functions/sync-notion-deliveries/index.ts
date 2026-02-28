@@ -288,6 +288,8 @@ Deno.serve(async (req) => {
       if (row.driver_name) driverNames.add(row.driver_name);
     }
 
+    const notionPageIds = allRows.map((r) => r.notion_page_id);
+
     for (const name of driverNames) {
       const slug = slugify(name) || 'no-driver';
       await supabase
@@ -296,6 +298,15 @@ Deno.serve(async (req) => {
           { name, slug, updated_at: new Date().toISOString() },
           { onConflict: 'slug', ignoreDuplicates: false }
         );
+    }
+
+    if (fullSync) {
+      const keepSlugs = Array.from(driverNames).map((n) => slugify(n) || 'no-driver').filter(Boolean);
+      const { data: existingDrivers } = await supabase.from('delivery_drivers').select('id, slug');
+      const toDelete = (existingDrivers || []).filter((d) => keepSlugs.length === 0 || !keepSlugs.includes(d.slug));
+      for (const d of toDelete) {
+        await supabase.from('delivery_drivers').delete().eq('id', d.id);
+      }
     }
 
     const { data: drivers } = await supabase.from('delivery_drivers').select('id, name, slug');
@@ -331,6 +342,23 @@ Deno.serve(async (req) => {
         .from('delivery_deliveries')
         .upsert(deliveriesToUpsert, { onConflict: 'notion_page_id', ignoreDuplicates: false });
       if (error) throw error;
+    }
+
+    if (fullSync) {
+      if (notionPageIds.length > 0) {
+        const { data: existing } = await supabase.from('delivery_deliveries').select('id, notion_page_id');
+        const keepSet = new Set(notionPageIds);
+        const toDeleteIds = (existing || []).filter((r) => !keepSet.has(r.notion_page_id)).map((r) => r.id);
+        if (toDeleteIds.length > 0) {
+          await supabase.from('delivery_deliveries').delete().in('id', toDeleteIds);
+        }
+      } else {
+        const { data: all } = await supabase.from('delivery_deliveries').select('id');
+        const allIds = (all || []).map((r) => r.id);
+        if (allIds.length > 0) {
+          await supabase.from('delivery_deliveries').delete().in('id', allIds);
+        }
+      }
     }
 
     const lastEdited = allRows.length > 0
