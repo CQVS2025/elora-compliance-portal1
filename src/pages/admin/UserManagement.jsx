@@ -88,6 +88,7 @@ const TAB_VISIBILITY_OPTIONS = [
   { value: 'operations-log-edit', label: 'Create & Edit Operations Log' },
   { value: 'operations-log-products', label: 'Products in Operations Log entry' },
   { value: 'delivery-calendar', label: 'Delivery Calendar' },
+  { value: 'stock-orders', label: 'Stock & Orders' },
   { value: 'costs', label: 'Usage Costs' },
   { value: 'refills', label: 'Tank Levels' },
   { value: 'devices', label: 'Device Health' },
@@ -1059,8 +1060,8 @@ export default function UserManagement() {
         setShowCreateModal(open);
         if (!open) resetForm(); // Clear form when closing
       }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col overflow-hidden gap-0">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Create New User</DialogTitle>
             {selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' && companies.find(c => c.id === selectedCompanyTab) && (
               <p className="text-sm text-muted-foreground mt-1">
@@ -1073,7 +1074,7 @@ export default function UserManagement() {
               <p className="text-sm text-muted-foreground mt-1">Creating unassigned user (no company)</p>
             )}
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 overflow-y-auto min-h-0 flex-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Email *</Label>
@@ -1201,7 +1202,7 @@ export default function UserManagement() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t pt-4">
             <Button variant="outline" onClick={() => {
               setShowCreateModal(false);
               resetForm();

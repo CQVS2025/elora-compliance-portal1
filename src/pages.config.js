@@ -16,6 +16,7 @@ import RoleManagementInfo from './pages/admin/RoleManagementInfo';
 import RoleTabSettings from './pages/admin/RoleTabSettings';
 import TankConfiguration from './pages/admin/TankConfiguration';
 import ProductsManagement from './pages/admin/ProductsManagement';
+import PartsCatalogManagement from './pages/admin/PartsCatalogManagement';
 import OperationsLogCategoriesManagement from './pages/admin/OperationsLogCategoriesManagement';
 import EloraAI from './pages/EloraAI';
 import VehicleDetail from './pages/VehicleDetail';
@@ -24,6 +25,7 @@ import OperationsLog from './pages/OperationsLog';
 import OperationsLogEntryPage from './pages/OperationsLogEntryPage';
 import OperationsLogAttachmentPage from './pages/OperationsLogAttachmentPage';
 import DeliveryCalendar from './pages/DeliveryCalendar';
+import StockOrders from './pages/StockOrders';
 import __Layout from './Layout.jsx';
 
 
@@ -46,6 +48,7 @@ export const PAGES = {
     "admin/tab-visibility": RoleTabSettings,
     "admin/tank-configuration": TankConfiguration,
     "admin/products": ProductsManagement,
+    "admin/parts": PartsCatalogManagement,
     "admin/operations-log-categories": OperationsLogCategoriesManagement,
     "EloraAI": EloraAI,
     "VehicleDetail": VehicleDetail,
@@ -54,6 +57,7 @@ export const PAGES = {
     "OperationsLogEntry": OperationsLogEntryPage,
     "OperationsLogAttachment": OperationsLogAttachmentPage,
     "DeliveryCalendar": DeliveryCalendar,
+    "StockOrders": StockOrders,
 }
 
 export const pagesConfig = {

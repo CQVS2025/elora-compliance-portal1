@@ -34,6 +34,13 @@ export * from './deliveries';
 // Pricing config (tank calibration + product prices → replaces hard-coded PRICING_RULES)
 export * from './pricingConfig';
 
+// Parts catalog (Stock & Orders)
+export * from './parts';
+export * from './partRequests';
+export * from './orderRequests';
+export * from './agentStock';
+export * from './stockTakes';
+
 // Admin options
 export * from './users';
 export * from './companies';

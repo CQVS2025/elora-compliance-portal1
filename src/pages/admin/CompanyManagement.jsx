@@ -66,6 +66,7 @@ const TAB_VISIBILITY_OPTIONS = [
   { value: 'operations-log-edit', label: 'Create & Edit Operations Log' },
   { value: 'operations-log-products', label: 'Products in Operations Log entry' },
   { value: 'delivery-calendar', label: 'Delivery Calendar' },
+  { value: 'stock-orders', label: 'Stock & Orders' },
   { value: 'costs', label: 'Usage Costs' },
   { value: 'refills', label: 'Tank Levels' },
   { value: 'devices', label: 'Device Health' },

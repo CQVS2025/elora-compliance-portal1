@@ -202,7 +202,7 @@ export function getAccessibleTabs(userProfile) {
 
   // Super admin sees all tabs (Users tab moved to Admin console). SMS Alerts on by default only for super_admin. Edit Operations Log on by default for super_admin.
   if (role === 'super_admin') {
-    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
   }
 
   // Admin and all other roles: SMS Alerts off by default. Edit Operations Log on by default for admin.
@@ -210,9 +210,9 @@ export function getAccessibleTabs(userProfile) {
     return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
   }
 
-  // Manager sees most tabs (limited to assigned sites). Edit Operations Log on by default for manager.
+  // Manager sees most tabs (limited to assigned sites). Stock & Orders = Manager view (Order Requests + Stock Takes only).
   if (role === 'manager') {
-    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // User (demo) sees same as admin but limited to assigned company/companies. No operations-log-edit by default.
@@ -230,9 +230,9 @@ export function getAccessibleTabs(userProfile) {
     return ['dashboard', 'compliance', 'leaderboard', 'delivery-calendar'];
   }
 
-  // Delivery Manager: Delivery Calendar only (assigned driver tabs); no "All" tab
+  // Delivery Manager: Delivery Calendar + Stock & Orders (Agent view: Stock Take + Request Parts)
   if (role === 'delivery_manager') {
-    return ['dashboard', 'delivery-calendar'];
+    return ['dashboard', 'delivery-calendar', 'stock-orders'];
   }
 
   // Viewer sees read-only tabs (no operations-log-edit)

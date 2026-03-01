@@ -220,6 +220,12 @@ export const queryKeys = {
     operationsLogCategories: () => ['operationsLogCategories'],
     // Products (read for dropdown; super_admin manages)
     products: () => ['products'],
+    // Parts catalog (Stock & Orders; super_admin manages in admin)
+    parts: () => ['parts'],
+    partRequests: (companyId = null) => (companyId ? ['partRequests', companyId] : ['partRequests']),
+    orderRequests: (companyId = null) => (companyId ? ['orderRequests', companyId] : ['orderRequests']),
+    agentStock: (userId = null) => (userId ? ['agentStock', userId] : ['agentStock']),
+    stockTakes: (companyId = null) => (companyId ? ['stockTakes', companyId] : ['stockTakes']),
     // Pricing config: tank_configurations + products for data-driven cost calculation
     pricingConfig: () => ['pricingConfig'],
     // Current user's operations log permissions (can_create, etc.)

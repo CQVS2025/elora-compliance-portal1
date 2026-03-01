@@ -27,6 +27,7 @@ const PATH_TO_HEADER = {
   '/sms-alerts': { title: 'SMS Alerts', description: 'Risk prediction alert history' },
   '/operations-log': { title: 'Operations Log', description: 'Site activity tracking, notes & task management' },
   '/delivery-calendar': { title: 'Delivery Calendar', description: 'Delivery schedule from Notion' },
+  '/stock-orders': { title: 'Stock & Orders', description: 'Stock take and request parts' },
   '/Settings': { title: 'Settings', description: 'Manage your account preferences' },
   '/settings': { title: 'Settings', description: 'Manage your account preferences' },
   '/Profile': { title: 'Profile', description: 'Your account profile' },
@@ -63,6 +64,7 @@ const PATH_TO_TAB = {
   '/sms-alerts': 'sms-alerts',
   '/operations-log': 'operations-log',
   '/delivery-calendar': 'delivery-calendar',
+  '/stock-orders': 'stock-orders',
 };
 
 function getPathHeader(pathname) {

@@ -107,7 +107,7 @@ export function getEffectiveConfig(email) {
   return null;
 }
 
-const ALL_TAB_VALUES = ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+const ALL_TAB_VALUES = ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
 
 /**
  * Get tabs allowed by role: Admin Console role override if set, else role default from getAccessibleTabs.
@@ -139,9 +139,12 @@ function getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides, comp
     ? companyTabsOrArray
     : companyTabsOrArray?.visible_tabs;
   const roleTabs = getRoleTabs(userProfile, roleTabOverrides);
-  const baseTabs = companyTabList && companyTabList.length > 0
-    ? roleTabs.filter((t) => companyTabList.includes(t))
-    : roleTabs;
+  // Super admin always sees all role tabs (e.g. Stock & Orders); skip company filter
+  const baseTabs = userProfile?.role === 'super_admin'
+    ? roleTabs
+    : (companyTabList && companyTabList.length > 0
+      ? roleTabs.filter((t) => companyTabList.includes(t))
+      : roleTabs);
   if (userProfile?.visible_tabs && userProfile.visible_tabs.length > 0) {
     return userProfile.visible_tabs.filter((t) => baseTabs.includes(t));
   }

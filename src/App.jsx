@@ -239,6 +239,13 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        <Route path="/stock-orders" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.StockOrders)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
         <Route path="/operations-log/entry/:id" element={
           <AuthenticatedRoute>
             <DashboardLayout>
@@ -306,6 +313,14 @@ const AuthenticatedApp = () => {
           <SuperAdminRoute>
             <DashboardLayout>
               {React.createElement(Pages['admin/products'])}
+            </DashboardLayout>
+          </SuperAdminRoute>
+        } />
+
+        <Route path="/admin/parts" element={
+          <SuperAdminRoute>
+            <DashboardLayout>
+              {React.createElement(Pages['admin/parts'])}
             </DashboardLayout>
           </SuperAdminRoute>
         } />

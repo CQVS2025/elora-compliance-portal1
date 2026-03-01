@@ -15,6 +15,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Package,
+  Box,
   ClipboardList,
 } from 'lucide-react';
 
@@ -133,6 +134,12 @@ export default function AdminDashboard() {
       description: 'Add and manage products (name + price) for Operations Log dropdown',
       icon: Package,
       path: '/admin/products',
+    },
+    {
+      title: 'Parts Catalog (Stock & Orders)',
+      description: 'Manage the master parts list for Stock Take and Request Parts',
+      icon: Box,
+      path: '/admin/parts',
     },
     {
       title: 'Operations Log Categories',
