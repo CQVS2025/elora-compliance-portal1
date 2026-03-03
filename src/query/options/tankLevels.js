@@ -167,6 +167,26 @@ function calculateConsumption(washTimeSeconds, calibrationRate) {
 }
 
 /**
+ * Normalise wash time seconds from a scan payload.
+ * Supports multiple backend field names (washTime, washDurationSeconds, durationSeconds, washTimeSeconds).
+ */
+function getWashTimeSecondsFromScan(scan) {
+  if (!scan) return 0;
+  const raw =
+    scan.washTime != null
+      ? Number(scan.washTime)
+      : scan.washDurationSeconds != null
+        ? Number(scan.washDurationSeconds)
+        : scan.durationSeconds != null
+          ? Number(scan.durationSeconds)
+          : scan.washTimeSeconds != null
+            ? Number(scan.washTimeSeconds)
+            : null;
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  return raw;
+}
+
+/**
  * Calculate average daily consumption from recent scans
  */
 function calculateAvgDailyConsumption(scans, calibrationRate, daysToAnalyze = 7) {
@@ -183,7 +203,7 @@ function calculateAvgDailyConsumption(scans, calibrationRate, daysToAnalyze = 7)
   if (recentScans.length === 0) return 0;
   
   const totalConsumed = recentScans.reduce((sum, scan) => {
-    const washTime = scan.washTime ?? scan.wash_time;
+    const washTime = getWashTimeSecondsFromScan(scan);
     return sum + calculateConsumption(washTime, calibrationRate);
   }, 0);
   
@@ -397,11 +417,22 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
       return siteOk && customerOk;
     };
 
+    // Match scan to same customer only (no site requirement). Used for consumption so that
+    // one device used at multiple sites (e.g. mobile unit or shared device) has all usage counted.
+    const scanMatchesCustomerOnly = (scan) => {
+      const scanCustomerRef = (scan.customerRef ?? scan.customer_ref ?? '').toString().trim();
+      const scanCustomer = (scan.customerName ?? scan.customer ?? '').trim().toLowerCase();
+      if (site.customerRef && scanCustomerRef) return scanCustomerRef === site.customerRef;
+      if (!customerNorm) return true;
+      return scanCustomer === customerNorm;
+    };
+
+    // Consumption: count ALL scans for this device (same customer) since refill, regardless of site.
     const scansSinceRefill = scans.filter(scan => {
       const scanDate = new Date(scan.createdAt || scan.created_at);
       if (scanDate < refillDateTime) return false;
       if (!scanMatchesDevice(scan)) return false;
-      if (!scanMatchesSiteAndCustomer(scan)) return false;
+      if (!scanMatchesCustomerOnly(scan)) return false;
       return true;
     });
 
@@ -413,21 +444,23 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
 
     // Calculate total consumption (API may return washTime or wash_time)
     const totalConsumed = scansSinceRefill.reduce((sum, scan) => {
-      const washTime = scan.washTime ?? scan.wash_time;
+      const washTime = getWashTimeSecondsFromScan(scan);
       return sum + calculateConsumption(washTime, config.calibration_rate_per_60s);
     }, 0);
 
     // Calculate current level: start from refill newTotalLitres when available, else max capacity. Clamp to [0, max_capacity].
     const startingLevel = lastRefill.newTotalLitres ?? lastRefill.new_total_litres ?? lastRefill.deliveredLitres ?? lastRefill.delivered_litres ?? 0;
     const totalConsumedNum = Number.isFinite(totalConsumed) ? totalConsumed : 0;
-    const maxCap = Number(config.max_capacity_litres) || 0;
-    const startLevelNum = Number(startingLevel) || maxCap || 0;
+    const maxCapConfig = Number(config.max_capacity_litres) || 0;
+    const startLevelNum = Number(startingLevel) || maxCapConfig || 0;
+    // Effective capacity follows refills: use the larger of config capacity and last refill level.
+    const effectiveCapacity = startLevelNum > 0 ? Math.max(maxCapConfig, startLevelNum) : maxCapConfig;
     const currentLitresRaw = Math.max(0, startLevelNum - totalConsumedNum);
     const currentLitres = Number.isFinite(currentLitresRaw)
-      ? (maxCap > 0 ? Math.min(maxCap, Math.max(0, currentLitresRaw)) : Math.max(0, currentLitresRaw))
+      ? (effectiveCapacity > 0 ? Math.min(effectiveCapacity, Math.max(0, currentLitresRaw)) : Math.max(0, currentLitresRaw))
       : null;
-    const percentage = maxCap > 0 && currentLitres != null && Number.isFinite(currentLitres)
-      ? (currentLitres / maxCap) * 100
+    const percentage = effectiveCapacity > 0 && currentLitres != null && Number.isFinite(currentLitres)
+      ? (currentLitres / effectiveCapacity) * 100
       : null;
 
     // Calculate days remaining
@@ -448,7 +481,7 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
     );
 
     // Validate
-    const flags = validateTankLevel(currentLitres, config.max_capacity_litres, refillParsed.dateOnly || lastRefill.date);
+    const flags = validateTankLevel(currentLitres, effectiveCapacity || config.max_capacity_litres, refillParsed.dateOnly || lastRefill.date);
 
     // Check for device offline and stale data
     if (device.lastScanAt) {
@@ -480,6 +513,8 @@ async function calculateTankLevel(config, refills, scans, devices, sites) {
       site,
       status,
       currentLitres: currentLitres != null ? Math.round(currentLitres) : null,
+      // Surface the effective capacity so the UI can display it instead of the static config value.
+      max_capacity_litres: effectiveCapacity || config.max_capacity_litres,
       percentage: percentage != null && Number.isFinite(percentage) ? Math.round(percentage * 10) / 10 : null,
       daysRemaining: daysRemaining != null && Number.isFinite(daysRemaining) ? Math.round(daysRemaining * 10) / 10 : null,
       lastRefill: {
@@ -522,10 +557,12 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
       const tenantContext = getEloraTenantContext();
       
       // Fetch all required data in parallel
-      // Refills: only Delivered/Confirmed (Rule 2). Scans: all wash events, export=true. Devices: Active only (CMS source of truth).
-      // No user date range — always "live"; internal range last 2 years → today (Rule 1).
+      // Refills: only Delivered/Confirmed (Rule 2). We fetch a long history (from 2019) so that old refills are still used as baseline.
+      // Scans: all wash events, export=true, but limited to last 2 years for performance.
+      // No user date range — always "live"; internal scans range last 2 years → today (Rule 1).
       const toDate = new Date().toISOString().split('T')[0];
-      const fromDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const fromDateScans = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const fromDateRefills = '2019-01-01';
       const customerRef = !tenantContext.isSuperAdmin ? tenantContext.companyEloraCustomerRef : undefined;
 
       const [tankConfigs, refillsResponse, scansResponse, devicesResponse, sitesResponse] = await Promise.all([
@@ -533,16 +570,16 @@ export const tankLevelsOptions = (companyId, filters = {}) =>
         callEdgeFunction('elora_refills', {
           customerRef,
           status: 'confirmed,delivered',
-          fromDate,
+          fromDate: fromDateRefills,
           toDate,
         }),
         callEdgeFunction('elora_scans', {
           customer: customerRef,
           customerId: customerRef,
           customer_id: customerRef,
-          fromDate,
+          fromDate: fromDateScans,
           toDate,
-          start_date: fromDate,
+          start_date: fromDateScans,
           end_date: toDate,
           status: 'success,exceeded',
           export: true,
