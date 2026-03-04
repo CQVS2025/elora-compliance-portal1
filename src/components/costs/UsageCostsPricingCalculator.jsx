@@ -318,6 +318,25 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
     return { perTruckMonth, perSiteMonth, perSiteDay, perSiteYear, pct };
   }, [currentCalc, proposedCalc, truckCount]);
 
+  // Based on selected period: if the same number of scans had been at proposed params, projected spend and savings from actual.
+  const projectedSavingsVsActual = useMemo(() => {
+    if (!historicalActualVsMax || historicalActualVsMax.scanCount === 0) return null;
+    const costPerWashProposed = proposedCalc.litresPerWash * pricePerLitre;
+    const projectedSpendPeriod = round2(historicalActualVsMax.scanCount * costPerWashProposed);
+    const savingsFromActual = round2(historicalActualVsMax.actualSpend - projectedSpendPeriod);
+    const pctSavingsFromActual =
+      historicalActualVsMax.actualSpend > 0
+        ? round2((savingsFromActual / historicalActualVsMax.actualSpend) * 100)
+        : 0;
+    return {
+      actualSpend: historicalActualVsMax.actualSpend,
+      scanCount: historicalActualVsMax.scanCount,
+      projectedSpendPeriod,
+      savingsFromActual,
+      pctSavingsFromActual,
+    };
+  }, [historicalActualVsMax, proposedCalc.litresPerWash, pricePerLitre]);
+
   const extractBodyHtml = (html) => {
     try {
       const parser = new DOMParser();
@@ -335,110 +354,137 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
       setReverseOptions(null);
       return;
     }
-    const targetPerTruck = budget / effectiveTruckCount;
-    const targetLitresPerMonthPerTruck = targetPerTruck / pricePerLitre;
-    const targetLitresPerWeekPerTruck = targetLitresPerMonthPerTruck / WEEKS_PER_MONTH;
-
     const disp = dispensingRate;
-    // Ensure each option's cost never exceeds the user's target budget (always at or under).
-    const optionA = (() => {
-      const washesPerWeek = currentWashesPerWeek;
-      const litresPerWashNeeded = targetLitresPerWeekPerTruck / washesPerWeek;
-      const washTimeSec = (litresPerWashNeeded / disp) * 60;
-      let washTimeRounded = Math.max(30, Math.min(300, Math.round(washTimeSec / 6) * 6));
-      let recalc = calcFromParams(washTimeRounded, currentWashesPerDay, washesPerWeek, disp, pricePerLitre, effectiveTruckCount);
-      while (recalc.maxCostPerMonthSite > budget && washTimeRounded > 30) {
-        washTimeRounded -= 6;
-        recalc = calcFromParams(washTimeRounded, currentWashesPerDay, washesPerWeek, disp, pricePerLitre, effectiveTruckCount);
-      }
-      return { label: 'Reduce Wash Time', washTime: washTimeRounded, washesPerDay: currentWashesPerDay, washesPerWeek, cost: recalc.maxCostPerMonthSite };
-    })();
-    const optionB = (() => {
-      const washTimeSec = currentWashTime;
-      const litresPerWash = (washTimeSec / 60) * disp;
-      const washesPerWeekNeeded = targetLitresPerWeekPerTruck / litresPerWash;
-      let washesPerWeekRounded = Math.max(2, Math.min(12, Math.round(washesPerWeekNeeded)));
-      let recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
-      while (recalc.maxCostPerMonthSite > budget && washesPerWeekRounded > 2) {
-        washesPerWeekRounded -= 1;
-        recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
-      }
-      return { label: 'Reduce Washes/Week', washTime: washTimeSec, washesPerDay: currentWashesPerDay, washesPerWeek: washesPerWeekRounded, cost: recalc.maxCostPerMonthSite };
-    })();
-    const optionC = (() => {
-      let washTimeSec = Math.round((currentWashTime + proposedWashTime) / 2 / 6) * 6 || 90;
-      const litresPerWash = (washTimeSec / 60) * disp;
-      const washesPerWeekNeeded = targetLitresPerWeekPerTruck / litresPerWash;
-      let washesPerWeekRounded = Math.max(2, Math.min(12, Math.round(washesPerWeekNeeded)));
-      let recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
-      while (recalc.maxCostPerMonthSite > budget && washesPerWeekRounded > 2) {
-        washesPerWeekRounded -= 1;
-        recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
-      }
-      while (recalc.maxCostPerMonthSite > budget && washTimeSec > 30) {
-        washTimeSec -= 6;
-        const lpw = (washTimeSec / 60) * disp;
-        const wpwNeeded = targetLitresPerWeekPerTruck / lpw;
-        washesPerWeekRounded = Math.max(2, Math.min(12, Math.round(wpwNeeded)));
-        recalc = calcFromParams(washTimeSec, currentWashesPerDay, washesPerWeekRounded, disp, pricePerLitre, effectiveTruckCount);
-      }
-      return { label: 'Combined', washTime: washTimeSec, washesPerDay: currentWashesPerDay, washesPerWeek: washesPerWeekRounded, cost: recalc.maxCostPerMonthSite };
-    })();
 
-    // Ensure each option has a different cost and different parameters from the others.
-    const sameCost = (a, b) => Math.round(a.cost) === Math.round(b.cost);
-    const sameParams = (a, b) => a.washTime === b.washTime && a.washesPerWeek === b.washesPerWeek;
-    const isDuplicate = (a, b) => sameCost(a, b) || sameParams(a, b);
+    const maxCostMonthSiteRaw = (washTimeSec, washesPerWeek) => {
+      const litresPerWash = (washTimeSec / 60) * disp;
+      const maxLitresPerMonthPerTruck = litresPerWash * washesPerWeek * WEEKS_PER_MONTH;
+      const maxCostPerMonthPerTruck = maxLitresPerMonthPerTruck * pricePerLitre;
+      return maxCostPerMonthPerTruck * effectiveTruckCount;
+    };
 
-    let outB = optionB;
-    if (isDuplicate(outB, optionA)) {
-      // Nudge B to a lower cost (still under budget) so it differs from A.
-      let wtB = optionB.washTime;
-      let wpwB = optionB.washesPerWeek;
-      while (wpwB > 2) {
-        wpwB -= 1;
-        const recalc = calcFromParams(wtB, currentWashesPerDay, wpwB, disp, pricePerLitre, effectiveTruckCount);
-        if (recalc.maxCostPerMonthSite <= budget && (Math.round(recalc.maxCostPerMonthSite) !== Math.round(optionA.cost) || (wtB !== optionA.washTime || wpwB !== optionA.washesPerWeek))) {
-          outB = { label: 'Reduce Washes/Week', washTime: wtB, washesPerDay: currentWashesPerDay, washesPerWeek: wpwB, cost: recalc.maxCostPerMonthSite };
-          break;
+    const minAchievableRaw = maxCostMonthSiteRaw(30, 2);
+    const minAchievable = round2(minAchievableRaw);
+    // Strict: suggestions must be LESS than budget, not equal.
+    if (budget <= minAchievableRaw) {
+      setReverseOptions({
+        budget,
+        minAchievable,
+        minAchievableRaw,
+        strictlyReachable: false,
+        optionA: null,
+        optionB: null,
+        optionC: null,
+      });
+      return;
+    }
+
+    // Search the valid parameter space and pick 3 distinct options under budget.
+    // Constraints:
+    // - washTimeSec: 30..300 (step 6)
+    // - washesPerWeek: 2..12
+    const feasible = [];
+    for (let washTime = 30; washTime <= 300; washTime += 6) {
+      for (let washesPerWeek = 2; washesPerWeek <= 12; washesPerWeek += 1) {
+        const rawCost = maxCostMonthSiteRaw(washTime, washesPerWeek);
+        // Display is floored to cents to guarantee: displayed < budget (no rounding up).
+        const displayCost = Math.floor(rawCost * 100) / 100;
+        // Strict: raw cost must be less than budget.
+        if (rawCost < budget) {
+          feasible.push({ washTime, washesPerWeek, rawCost, displayCost });
         }
-      }
-      if (isDuplicate(outB, optionA) && wtB > 30) {
-        wtB = Math.max(30, wtB - 6);
-        const recalc = calcFromParams(wtB, currentWashesPerDay, outB.washesPerWeek, disp, pricePerLitre, effectiveTruckCount);
-        if (recalc.maxCostPerMonthSite <= budget)
-          outB = { label: 'Reduce Washes/Week', washTime: wtB, washesPerDay: currentWashesPerDay, washesPerWeek: outB.washesPerWeek, cost: recalc.maxCostPerMonthSite };
       }
     }
 
-    let outC = optionC;
-    while (isDuplicate(outC, optionA) || isDuplicate(outC, outB)) {
-      let wt = outC.washTime;
-      let wpw = outC.washesPerWeek;
-      let changed = false;
-      if (wpw > 2) {
-        wpw -= 1;
-        const recalc = calcFromParams(wt, currentWashesPerDay, wpw, disp, pricePerLitre, effectiveTruckCount);
-        if (recalc.maxCostPerMonthSite <= budget) {
-          outC = { label: 'Combined', washTime: wt, washesPerDay: currentWashesPerDay, washesPerWeek: wpw, cost: recalc.maxCostPerMonthSite };
-          changed = true;
+    const used = new Set();
+    const usedDisplayed = new Set();
+    const keyOf = (x) => `${x.washTime}|${x.washesPerWeek}`;
+    const displayKeyOf = (x) => `${x.displayCost}`;
+    const pickBy = (scoreFn) => {
+      let best = null;
+      let bestScore = null;
+      for (const cand of feasible) {
+        const k = keyOf(cand);
+        if (used.has(k)) continue;
+        if (usedDisplayed.has(displayKeyOf(cand))) continue;
+        const s = scoreFn(cand);
+        if (best == null) {
+          best = cand;
+          bestScore = s;
+          continue;
+        }
+        // Lexicographic compare of tuple scores.
+        let better = false;
+        for (let i = 0; i < Math.min(s.length, bestScore.length); i += 1) {
+          if (s[i] < bestScore[i]) {
+            better = true;
+            break;
+          }
+          if (s[i] > bestScore[i]) break;
+        }
+        if (better) {
+          best = cand;
+          bestScore = s;
         }
       }
-      if (!changed && wt > 30) {
-        wt -= 6;
-        const lpw = (wt / 60) * disp;
-        const wpwNeeded = targetLitresPerWeekPerTruck / lpw;
-        wpw = Math.max(2, Math.min(12, Math.round(wpwNeeded)));
-        const recalc = calcFromParams(wt, currentWashesPerDay, wpw, disp, pricePerLitre, effectiveTruckCount);
-        if (recalc.maxCostPerMonthSite <= budget) {
-          outC = { label: 'Combined', washTime: wt, washesPerDay: currentWashesPerDay, washesPerWeek: wpw, cost: recalc.maxCostPerMonthSite };
-          changed = true;
-        }
+      if (best) {
+        used.add(keyOf(best));
+        usedDisplayed.add(displayKeyOf(best));
       }
-      if (!changed) break;
+      return best;
+    };
+
+    const mkOption = (label, cand) => (
+      cand
+        ? { label, washTime: cand.washTime, washesPerDay: currentWashesPerDay, washesPerWeek: cand.washesPerWeek, cost: cand.displayCost }
+        : null
+    );
+
+    const bestUnderBudget = feasible.reduce((best, cand) => (cand.rawCost > best.rawCost ? cand : best), feasible[0]);
+
+    // Option A: prioritize lower wash time (and keep washes/week as high as possible).
+    const a = pickBy((c) => [c.washTime, -c.washesPerWeek, -c.rawCost]);
+    // Option B: prioritize fewer washes/week (and keep wash time as high as possible).
+    const b = pickBy((c) => [c.washesPerWeek, -c.washTime, -c.rawCost]);
+    // Option C: closest to budget (highest cost under budget), preferring different params.
+    const c = pickBy((x) => [-x.rawCost, Math.abs(x.washTime - currentWashTime), Math.abs(x.washesPerWeek - currentWashesPerWeek)]);
+
+    // If we still don't have 3 (should be rare), fill with next best under budget.
+    const fill1 = () => pickBy((x) => [-x.rawCost, x.washTime, x.washesPerWeek]);
+    // Note: bestUnderBudget might have a duplicate displayed cost; we only use it if we couldn't find 3 distinct
+    // (extremely tight budgets). In normal cases, pickBy enforces distinct displayed amounts.
+    const a2 = a ?? fill1() ?? bestUnderBudget;
+    const b2 = b ?? fill1() ?? bestUnderBudget;
+    const c2 = c ?? fill1() ?? bestUnderBudget;
+
+    // Build initial options from candidates.
+    const optionA = mkOption('Reduce Wash Time', a2);
+    const optionB = mkOption('Reduce Washes/Week', b2);
+    const optionC = mkOption('Combined', c2);
+
+    // Ensure all three displayed amounts are different.
+    const opts = [optionA, optionB, optionC];
+    const seenDisplay = new Set();
+    for (const opt of opts) {
+      if (!opt) continue;
+      // Work with cents as integer to avoid float issues.
+      let cents = Math.round(opt.cost * 100);
+      while (seenDisplay.has(cents)) {
+        cents -= 1;
+      }
+      seenDisplay.add(cents);
+      opt.cost = cents / 100;
     }
 
-    setReverseOptions({ optionA, optionB: outB, optionC: outC });
+    setReverseOptions({
+      budget,
+      minAchievable,
+      minAchievableRaw,
+      strictlyReachable: true,
+      optionA,
+      optionB,
+      optionC,
+    });
   };
 
   // When the user clicks one of the suggested reverse-calculator options,
@@ -1294,6 +1340,42 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                 <p className="text-2xl font-bold text-green-700 dark:text-green-400">{savings.pct}%</p>
                 <p className="text-xs text-muted-foreground">cost reduction</p>
               </div>
+
+              {projectedSavingsVsActual != null && (
+                <div className="mt-4 pt-4 border-t border-green-200 dark:border-green-800 space-y-3">
+                  <p className="text-xs font-medium text-muted-foreground">Based on your selected period (live data)</p>
+                  <p className="text-sm text-foreground">
+                    If you had used these proposed parameters for the same <strong>{projectedSavingsVsActual.scanCount} scans</strong> in this period, your spend would have been{' '}
+                    <strong className="text-green-700 dark:text-green-400">${projectedSavingsVsActual.projectedSpendPeriod.toFixed(2)}</strong>.
+                    {projectedSavingsVsActual.savingsFromActual >= 0 ? (
+                      <>
+                        {' '}You would save <strong className="text-green-700 dark:text-green-400">${projectedSavingsVsActual.savingsFromActual.toFixed(2)}</strong> ({projectedSavingsVsActual.pctSavingsFromActual}%) from what you actually spent (${projectedSavingsVsActual.actualSpend.toFixed(2)}).
+                      </>
+                    ) : (
+                      <>
+                        {' '}That is ${Math.abs(projectedSavingsVsActual.savingsFromActual).toFixed(2)} more than what you actually spent (${projectedSavingsVsActual.actualSpend.toFixed(2)}) in the period.
+                      </>
+                    )}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Savings from actual spend (period)</span>
+                    <span className={`text-sm font-semibold ${projectedSavingsVsActual.savingsFromActual >= 0 ? 'text-green-700 dark:text-green-400' : 'text-amber-600 dark:text-amber-500'}`}>
+                      {projectedSavingsVsActual.savingsFromActual >= 0 ? '+' : ''}{projectedSavingsVsActual.pctSavingsFromActual}%
+                    </span>
+                  </div>
+                  {projectedSavingsVsActual.savingsFromActual >= 0 && (
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-green-500 dark:bg-green-600"
+                        style={{ width: `${Math.min(100, projectedSavingsVsActual.pctSavingsFromActual)}%` }}
+                      />
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {projectedSavingsVsActual.scanCount} scans in period · Projected spend with proposed params: ${projectedSavingsVsActual.projectedSpendPeriod.toFixed(2)}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -1331,46 +1413,56 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                 <Button onClick={runReverseCalculator}>Calculate Parameters →</Button>
               </div>
               {reverseOptions && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                  <Card
-                    className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
-                    onClick={() => applyReverseOption(reverseOptions.optionA)}
-                  >
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Option A — Reduce Wash Time</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground">{reverseOptions.optionA.washTime}s wash time · {reverseOptions.optionA.washesPerDay}/day · {reverseOptions.optionA.washesPerWeek}/week</p>
-                      <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionA.cost.toFixed(0)}/mo</p>
-                      <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
-                    </CardContent>
-                  </Card>
-                  <Card
-                    className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
-                    onClick={() => applyReverseOption(reverseOptions.optionB)}
-                  >
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Option B — Reduce Washes/Week</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground">{reverseOptions.optionB.washTime}s wash time · {reverseOptions.optionB.washesPerDay}/day · {reverseOptions.optionB.washesPerWeek}/week</p>
-                      <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionB.cost.toFixed(0)}/mo</p>
-                      <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
-                    </CardContent>
-                  </Card>
-                  <Card
-                    className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
-                    onClick={() => applyReverseOption(reverseOptions.optionC)}
-                  >
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Option C — Combined</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground">{reverseOptions.optionC.washTime}s wash time · {reverseOptions.optionC.washesPerDay}/day · {reverseOptions.optionC.washesPerWeek}/week</p>
-                      <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionC.cost.toFixed(0)}/mo</p>
-                      <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
-                    </CardContent>
-                  </Card>
+                <div className="space-y-4 pt-2">
+                  {!reverseOptions.strictlyReachable && (
+                    <p className="text-sm text-amber-600 dark:text-amber-500">
+                      Target ${reverseOptions.budget.toFixed(0)}/mo cannot be achieved with minimum constraints (30s wash, 2 washes/week). Minimum achievable is ${reverseOptions.minAchievable.toFixed(0)}/mo.
+                    </p>
+                  )}
+
+                  {reverseOptions.strictlyReachable && reverseOptions.optionA && reverseOptions.optionB && reverseOptions.optionC && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <Card
+                        className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
+                        onClick={() => applyReverseOption(reverseOptions.optionA)}
+                      >
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Option A — Reduce Wash Time</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground">{reverseOptions.optionA.washTime}s wash time · {reverseOptions.optionA.washesPerDay}/day · {reverseOptions.optionA.washesPerWeek}/week</p>
+                          <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionA.cost.toFixed(2)}/mo</p>
+                          <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
+                        </CardContent>
+                      </Card>
+                      <Card
+                        className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
+                        onClick={() => applyReverseOption(reverseOptions.optionB)}
+                      >
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Option B — Reduce Washes/Week</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground">{reverseOptions.optionB.washTime}s wash time · {reverseOptions.optionB.washesPerDay}/day · {reverseOptions.optionB.washesPerWeek}/week</p>
+                          <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionB.cost.toFixed(2)}/mo</p>
+                          <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
+                        </CardContent>
+                      </Card>
+                      <Card
+                        className="cursor-pointer hover:border-primary/60 hover:shadow-sm transition-colors"
+                        onClick={() => applyReverseOption(reverseOptions.optionC)}
+                      >
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Option C — Combined</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground">{reverseOptions.optionC.washTime}s wash time · {reverseOptions.optionC.washesPerDay}/day · {reverseOptions.optionC.washesPerWeek}/week</p>
+                          <p className="text-lg font-bold text-primary mt-2">${reverseOptions.optionC.cost.toFixed(2)}/mo</p>
+                          <p className="text-xs text-muted-foreground mt-1">Click to use these as proposed parameters</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
