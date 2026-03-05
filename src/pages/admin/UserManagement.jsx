@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import { getAccessibleTabs, getDefaultEmailReportTypes } from '@/lib/permissions';
-import { roleTabSettingsOptions, companyTabSettingsOptions } from '@/query/options';
+import { roleTabSettingsOptions, companyTabSettingsOptions, sitesOptions } from '@/query/options';
 import { getDefaultCostSubtabs, getDefaultEmailReportSubtabs } from '@/lib/permissions';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronRight } from 'lucide-react';
@@ -164,6 +164,7 @@ export default function UserManagement() {
     role: 'user',
     company_id: '',
     assigned_delivery_drivers: [],
+    assigned_sites: [],
   });
 
   const isSuperAdmin = userProfile?.role === 'super_admin';
@@ -292,7 +293,7 @@ export default function UserManagement() {
     queryFn: async () => {
       const { data: companiesData, error: companiesError } = await supabase
         .from('companies')
-        .select('id, name, logo_url, primary_color')
+        .select('id, name, logo_url, primary_color, elora_customer_ref')
         .eq('is_active', true)
         .order('name');
       
@@ -327,6 +328,41 @@ export default function UserManagement() {
     staleTime: 0, // Always refetch when invalidated
   });
 
+  const selectedCompanyForSites = useMemo(
+    () => (formData.company_id ? companies.find((c) => c.id === formData.company_id) : null),
+    [companies, formData.company_id]
+  );
+  const { data: companyForSitesFallback } = useQuery({
+    queryKey: ['companyForSites', formData.company_id],
+    queryFn: async () => {
+      if (!formData.company_id) return null;
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, elora_customer_ref')
+        .eq('id', formData.company_id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled:
+      (showCreateModal || showEditModal) &&
+      (formData.role === 'batcher' || formData.role === 'manager') &&
+      !!formData.company_id &&
+      !selectedCompanyForSites?.elora_customer_ref,
+  });
+  const companyForSites = selectedCompanyForSites?.elora_customer_ref != null ? selectedCompanyForSites : companyForSitesFallback;
+  const customerRefForSites = companyForSites?.elora_customer_ref ?? undefined;
+  const { data: companySites = [], isLoading: companySitesLoading } = useQuery({
+    ...sitesOptions(formData.company_id, {
+      customerId: customerRefForSites,
+    }),
+    enabled:
+      (showCreateModal || showEditModal) &&
+      (formData.role === 'batcher' || formData.role === 'manager') &&
+      !!formData.company_id &&
+      !!customerRefForSites,
+  });
+
   // Create user mutation - uses edge function with admin API
   const createUserMutation = useMutation({
     mutationFn: async (userData) => {
@@ -351,6 +387,9 @@ export default function UserManagement() {
           company_id: companyId || undefined,
           assigned_delivery_drivers: userData.role === 'delivery_manager' && Array.isArray(userData.assigned_delivery_drivers) && userData.assigned_delivery_drivers.length > 0
             ? userData.assigned_delivery_drivers
+            : undefined,
+          assigned_sites: (userData.role === 'batcher' || userData.role === 'manager') && Array.isArray(userData.assigned_sites) && userData.assigned_sites.length > 0
+            ? userData.assigned_sites
             : undefined,
         });
 
@@ -425,6 +464,11 @@ export default function UserManagement() {
         payload.assigned_delivery_drivers = Array.isArray(userData.assigned_delivery_drivers) ? userData.assigned_delivery_drivers : [];
       } else {
         payload.assigned_delivery_drivers = null;
+      }
+      if (userData.role === 'batcher' || userData.role === 'manager') {
+        payload.assigned_sites = Array.isArray(userData.assigned_sites) ? userData.assigned_sites : [];
+      } else {
+        payload.assigned_sites = null;
       }
 
       const { data, error } = await supabase
@@ -559,6 +603,7 @@ export default function UserManagement() {
       role: 'user',
       company_id: selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' ? selectedCompanyTab : '',
       assigned_delivery_drivers: [],
+      assigned_sites: [],
     });
   };
 
@@ -572,6 +617,7 @@ export default function UserManagement() {
       role: user.role,
       company_id: user.company_id ?? '',
       assigned_delivery_drivers: Array.isArray(user.assigned_delivery_drivers) ? user.assigned_delivery_drivers : [],
+      assigned_sites: Array.isArray(user.assigned_sites) ? user.assigned_sites : [],
     });
     setShowEditModal(true);
   };
@@ -1126,7 +1172,12 @@ export default function UserManagement() {
               <Label>Role</Label>
               <Select
                 value={formData.role}
-                onValueChange={(value) => setFormData({ ...formData, role: value, assigned_delivery_drivers: value === 'delivery_manager' ? formData.assigned_delivery_drivers : [] })}
+                onValueChange={(value) => setFormData({
+                  ...formData,
+                  role: value,
+                  assigned_delivery_drivers: value === 'delivery_manager' ? formData.assigned_delivery_drivers : [],
+                  assigned_sites: (value === 'batcher' || value === 'manager') ? formData.assigned_sites : [],
+                })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -1177,12 +1228,54 @@ export default function UserManagement() {
                 )}
               </div>
             )}
+            {(formData.role === 'batcher' || formData.role === 'manager') && formData.company_id && (
+              <div className="space-y-2">
+                <Label>Assigned sites</Label>
+                <p className="text-xs text-muted-foreground">Select which sites this user can see data for. If none are selected, the user will see no site data until you assign at least one site.</p>
+                {companySitesLoading ? (
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" /> Loading sites…
+                  </p>
+                ) : (
+                  <div className="border border-border rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
+                    {companySites.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No sites found for this company. Set the company’s customer ref in Company Management.</p>
+                    ) : (
+                      companySites.map((site) => (
+                        <div key={site.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`create-site-${site.id}`}
+                            checked={formData.assigned_sites.includes(site.id)}
+                            onCheckedChange={(checked) => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                assigned_sites: checked
+                                  ? [...prev.assigned_sites, site.id]
+                                  : prev.assigned_sites.filter((id) => id !== site.id),
+                              }));
+                            }}
+                          />
+                          <label htmlFor={`create-site-${site.id}`} className="text-sm font-medium leading-none cursor-pointer">
+                            {site.name}{site.city ? ` — ${site.city}` : ''}
+                          </label>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+                {formData.assigned_sites.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {formData.assigned_sites.length} site{formData.assigned_sites.length !== 1 ? 's' : ''} selected
+                  </p>
+                )}
+              </div>
+            )}
             {isSuperAdmin && (
               <div className="space-y-2">
                 <Label>Company {!isSuperAdmin ? '*' : ''}</Label>
                 <Select
                   value={formData.company_id ? formData.company_id : 'unassigned'}
-                  onValueChange={(v) => setFormData({ ...formData, company_id: v === 'unassigned' ? '' : v })}
+                  onValueChange={(v) => setFormData({ ...formData, company_id: v === 'unassigned' ? '' : v, assigned_sites: [] })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select company" />
@@ -1262,7 +1355,12 @@ export default function UserManagement() {
               <Label>Role</Label>
               <Select
                 value={formData.role}
-                onValueChange={(value) => setFormData({ ...formData, role: value, assigned_delivery_drivers: value === 'delivery_manager' ? formData.assigned_delivery_drivers : [] })}
+                onValueChange={(value) => setFormData({
+                  ...formData,
+                  role: value,
+                  assigned_delivery_drivers: value === 'delivery_manager' ? formData.assigned_delivery_drivers : [],
+                  assigned_sites: (value === 'batcher' || value === 'manager') ? formData.assigned_sites : [],
+                })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -1313,12 +1411,54 @@ export default function UserManagement() {
                 )}
               </div>
             )}
+            {(formData.role === 'batcher' || formData.role === 'manager') && formData.company_id && (
+              <div className="space-y-2">
+                <Label>Assigned sites</Label>
+                <p className="text-xs text-muted-foreground">Select which sites this user can see data for. If none are selected, the user will see no site data until you assign at least one site.</p>
+                {companySitesLoading ? (
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" /> Loading sites…
+                  </p>
+                ) : (
+                  <div className="border border-border rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
+                    {companySites.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No sites found for this company. Set the company’s customer ref in Company Management.</p>
+                    ) : (
+                      companySites.map((site) => (
+                        <div key={site.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`edit-site-${site.id}`}
+                            checked={formData.assigned_sites.includes(site.id)}
+                            onCheckedChange={(checked) => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                assigned_sites: checked
+                                  ? [...prev.assigned_sites, site.id]
+                                  : prev.assigned_sites.filter((id) => id !== site.id),
+                              }));
+                            }}
+                          />
+                          <label htmlFor={`edit-site-${site.id}`} className="text-sm font-medium leading-none cursor-pointer">
+                            {site.name}{site.city ? ` — ${site.city}` : ''}
+                          </label>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+                {formData.assigned_sites.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {formData.assigned_sites.length} site{formData.assigned_sites.length !== 1 ? 's' : ''} selected
+                  </p>
+                )}
+              </div>
+            )}
             {isSuperAdmin && (
               <div className="space-y-2">
                 <Label>Company</Label>
                 <Select
                   value={formData.company_id === '' || formData.company_id == null ? 'unassigned' : formData.company_id}
-                  onValueChange={(v) => setFormData({ ...formData, company_id: v === 'unassigned' ? '' : v })}
+                  onValueChange={(v) => setFormData({ ...formData, company_id: v === 'unassigned' ? '' : v, assigned_sites: [] })}
                 >
                   <SelectTrigger>
                     <SelectValue />

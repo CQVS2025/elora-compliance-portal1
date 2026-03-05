@@ -140,19 +140,27 @@ export default function OperationsLog() {
     }
   }, [isSuperAdmin, effectiveCompanyId, customers, customerRef]);
 
+  const assignedSiteRefs = (permissions.isManager || permissions.isBatcher) && (permissions.assignedSites?.length > 0) ? permissions.assignedSites : undefined;
   const { data: sitesRaw = [], isLoading: sitesLoading } = useQuery(
     sitesOptions(companyForQueries ?? effectiveCompanyId, {
       customerId: customerRef === 'all' ? undefined : customerRef,
     })
   );
   const sites = React.useMemo(() => {
-    if (!customerRef || customerRef === 'all') return [];
-    return (sitesRaw || []).filter(
-      (s) =>
-        String(s.customer_ref ?? '') === String(customerRef) ||
-        String(s.id ?? s.ref ?? '') === String(customerRef)
-    );
-  }, [sitesRaw, customerRef]);
+    let list = (sitesRaw || []);
+    if (customerRef && customerRef !== 'all') {
+      list = list.filter(
+        (s) =>
+          String(s.customer_ref ?? '') === String(customerRef) ||
+          String(s.id ?? s.ref ?? '') === String(customerRef)
+      );
+    }
+    if (assignedSiteRefs?.length > 0) {
+      const idSet = new Set(assignedSiteRefs);
+      list = list.filter((s) => idSet.has(String(s.id ?? s.ref ?? '')));
+    }
+    return list;
+  }, [sitesRaw, customerRef, assignedSiteRefs]);
 
   const { data: vehiclesRaw = [], isLoading: vehiclesLoading } = useQuery({
     ...vehiclesOptions(companyForQueries ?? effectiveCompanyId, {
@@ -215,10 +223,11 @@ export default function OperationsLog() {
       status: statusFilter === 'all' ? undefined : statusFilter,
       categoryId: categoryFilter === 'all' ? undefined : categoryFilter,
       search: searchQuery.trim() || undefined,
+      allowedSiteRefs: assignedSiteRefs,
       page,
       pageSize,
     }),
-    [customerRef, siteRef, vehicleRefs, statusFilter, categoryFilter, searchQuery, page, pageSize]
+    [customerRef, siteRef, vehicleRefs, statusFilter, categoryFilter, searchQuery, assignedSiteRefs, page, pageSize]
   );
 
   const { data: entriesData, isLoading: entriesLoading } = useQuery(
@@ -235,10 +244,11 @@ export default function OperationsLog() {
       status: statusFilter === 'all' ? undefined : statusFilter,
       categoryId: categoryFilter === 'all' ? undefined : categoryFilter,
       search: searchQuery.trim() || undefined,
+      allowedSiteRefs: assignedSiteRefs,
       page: 1,
       pageSize: 500,
     }),
-    [customerRef, siteRef, vehicleRefs, statusFilter, categoryFilter, searchQuery]
+    [customerRef, siteRef, vehicleRefs, statusFilter, categoryFilter, searchQuery, assignedSiteRefs]
   );
   const { data: summaryData, isLoading: summaryLoading } = useQuery(
     operationsLogEntriesOptions(effectiveCompanyId, summaryFilters)

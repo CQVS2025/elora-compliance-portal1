@@ -1417,6 +1417,7 @@ export default function Dashboard() {
                 customers={customers} 
                 vehicles={enrichedVehicles}
                 selectedCustomer={selectedCustomer}
+                allowedSiteIds={(permissions.isManager || permissions.isBatcher) && permissionFilteredSites?.length > 0 ? permissionFilteredSites.map(s => s.id) : undefined}
               />
             )}
 

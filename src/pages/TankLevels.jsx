@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
+import { usePermissions } from '@/components/auth/PermissionGuard';
 import { tankLevelsOptions } from '@/query/options/tankLevels';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,7 +52,9 @@ function tankProductDisplay(tank) {
 
 export default function TankLevels() {
   const { userProfile } = useAuth();
+  const permissions = usePermissions();
   const companyId = userProfile?.company_id;
+  const assignedSiteRefs = (permissions.isManager || permissions.isBatcher) && (permissions.assignedSites?.length > 0) ? permissions.assignedSites : null;
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('all');
@@ -82,22 +85,35 @@ export default function TankLevels() {
     placeholderData: (previousData) => previousData,
   });
 
-  // Extract unique customers and states for filters
+  // Restrict to assigned sites for Manager/Batcher when building filter options
+  const allSitesForFilters = useMemo(() => {
+    const list = tankData?.allSites || [];
+    if (assignedSiteRefs?.length > 0) {
+      const idSet = new Set(assignedSiteRefs.map(String));
+      return list.filter((s) => idSet.has(String(s.siteRef ?? s.site_ref ?? s.ref ?? '')));
+    }
+    return list;
+  }, [tankData?.allSites, assignedSiteRefs]);
+
   const uniqueCustomers = useMemo(() => {
-    if (!tankData?.allSites) return [];
-    const customers = new Set(tankData.allSites.map(s => s.customer).filter(Boolean));
+    if (!allSitesForFilters.length) return [];
+    const customers = new Set(allSitesForFilters.map(s => s.customer).filter(Boolean));
     return Array.from(customers).sort();
-  }, [tankData?.allSites]);
+  }, [allSitesForFilters]);
 
   const uniqueStates = useMemo(() => {
-    if (!tankData?.allSites) return [];
-    const states = new Set(tankData.allSites.map(s => s.state).filter(Boolean));
+    if (!allSitesForFilters.length) return [];
+    const states = new Set(allSitesForFilters.map(s => s.state).filter(Boolean));
     return Array.from(states).sort();
-  }, [tankData?.allSites]);
+  }, [allSitesForFilters]);
 
-  // Monitored sites only (no-device sites are not shown)
+  // Monitored sites only (no-device sites are not shown). For Manager/Batcher, restrict to assigned sites.
   const allSitesForDisplay = useMemo(() => {
-    const monitored = tankData?.sites || [];
+    let monitored = tankData?.sites || [];
+    if (assignedSiteRefs?.length > 0) {
+      const idSet = new Set(assignedSiteRefs.map(String));
+      monitored = monitored.filter((s) => idSet.has(String(s.siteRef ?? s.site_ref ?? s.ref ?? '')));
+    }
     const statusOrder = { CRITICAL: 0, WARNING: 1, OK: 2, NO_DATA: 3, ERROR: 5 };
     const sorted = [...monitored];
     if (groupBy === 'site') {
@@ -119,7 +135,7 @@ export default function TankLevels() {
       });
     }
     return sorted;
-  }, [tankData?.sites, groupBy]);
+  }, [tankData?.sites, groupBy, assignedSiteRefs]);
 
   // Table rows: one row per tank (flatten sites)
   const tableRows = useMemo(() => {

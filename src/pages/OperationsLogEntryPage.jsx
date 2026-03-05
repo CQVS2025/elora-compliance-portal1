@@ -94,7 +94,7 @@ export default function OperationsLogEntryPage() {
   const { id: entryId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { userProfile } = useAuth();
+  const { userProfile, user: authUser } = useAuth();
   const permissions = usePermissions();
   const effectiveCompanyId = userProfile?.company_id ?? (permissions.isSuperAdmin ? 'all' : null);
 
@@ -220,7 +220,8 @@ export default function OperationsLogEntryPage() {
     navigate(`/operations-log/entry/${entryId}/attachment?path=${encodeURIComponent(path)}`);
   };
 
-  const canEdit = permissions.canEditOperationsLog;
+  const isCreator = !!entry && !!authUser?.id && String(entry.created_by) === String(authUser.id);
+  const canEdit = permissions.canEditOperationsLog || isCreator;
 
   const startEdit = () => {
     if (!entry) return;

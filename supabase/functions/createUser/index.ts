@@ -10,6 +10,7 @@ interface CreateUserRequest {
   role?: string;
   company_id?: string;
   assigned_delivery_drivers?: string[];
+  assigned_sites?: string[];
 }
 
 Deno.serve(async (req) => {
@@ -32,6 +33,7 @@ Deno.serve(async (req) => {
       role = 'user',
       company_id,
       assigned_delivery_drivers,
+      assigned_sites,
     } = body;
 
     // Validation
@@ -113,6 +115,9 @@ Deno.serve(async (req) => {
     };
     if (role === 'delivery_manager' && Array.isArray(assigned_delivery_drivers) && assigned_delivery_drivers.length > 0) {
       profileInsert.assigned_delivery_drivers = assigned_delivery_drivers;
+    }
+    if ((role === 'batcher' || role === 'manager') && Array.isArray(assigned_sites) && assigned_sites.length > 0) {
+      profileInsert.assigned_sites = assigned_sites;
     }
 
     const { data: profile, error: profileError } = await adminSupabase

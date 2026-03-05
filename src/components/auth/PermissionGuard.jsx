@@ -349,7 +349,7 @@ export function useFilteredData(vehicles, sites, customers = []) {
       return { filteredVehicles: tenantVehicles, filteredSites: tenantSites };
     }
 
-    // MANAGER: Their company, only assigned sites
+    // MANAGER: Their company, only assigned sites. No assigned sites = no data (super admin must set assigned_sites in Edit User).
     if (role === 'manager') {
       const assignedSiteIds = permissions.assignedSites || [];
       if (assignedSiteIds.length > 0) {
@@ -358,7 +358,7 @@ export function useFilteredData(vehicles, sites, customers = []) {
         const filteredVehicles = tenantVehicles.filter(v => siteIds.includes(v.site_id));
         return { filteredVehicles, filteredSites };
       }
-      return { filteredVehicles: tenantVehicles, filteredSites: tenantSites };
+      return { filteredVehicles: [], filteredSites: [] };
     }
 
     // BATCHER: Their company + single assigned site ONLY

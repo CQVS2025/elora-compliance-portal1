@@ -673,6 +673,7 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
                           <Table>
                             <TableHeader>
                               <TableRow>
+                                {isSuperAdmin && <TableHead className="w-[80px]">Image</TableHead>}
                                 <TableHead>Part</TableHead>
                                 <TableHead>Qty</TableHead>
                                 <TableHead>Price</TableHead>
@@ -682,6 +683,15 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
                             <TableBody>
                               {orderDetail.items.map((item) => (
                                 <TableRow key={item.id}>
+                                  {isSuperAdmin && (
+                                    <TableCell className="align-middle">
+                                      {partImageUrl(item.parts) ? (
+                                        <img src={partImageUrl(item.parts)} alt="" className="size-16 min-w-[4rem] min-h-[4rem] object-contain rounded border bg-muted" />
+                                      ) : (
+                                        <div className="size-16 min-w-[4rem] min-h-[4rem] rounded border bg-muted flex items-center justify-center text-muted-foreground text-xs">—</div>
+                                      )}
+                                    </TableCell>
+                                  )}
                                   <TableCell>{item.parts?.description ?? item.part_id}</TableCell>
                                   <TableCell>{item.qty_requested}</TableCell>
                                   <TableCell>{item.unit_price_cents_snapshot != null ? `$${(item.unit_price_cents_snapshot / 100).toFixed(2)}` : '—'}</TableCell>

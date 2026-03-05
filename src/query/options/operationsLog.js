@@ -126,7 +126,7 @@ export function allProductsPaginatedOptions({ page = 1, pageSize = 20 } = {}) {
  * @param {{ customerRef?: string, siteRef?: string, status?: string, categoryId?: string, search?: string, vehicleIds?: string[], page?: number, pageSize?: number }} filters
  */
 export function operationsLogEntriesOptions(companyId, filters = {}) {
-  const { customerRef, siteRef, status, categoryId, search, vehicleIds = [], page = 1, pageSize = 50 } = filters;
+  const { customerRef, siteRef, status, categoryId, search, vehicleIds = [], allowedSiteRefs, page = 1, pageSize = 50 } = filters;
   return queryOptions({
     queryKey: queryKeys.tenant.operationsLogEntries(companyId, filters),
     queryFn: async () => {
@@ -161,6 +161,9 @@ export function operationsLogEntriesOptions(companyId, filters = {}) {
       }
       if (customerRef && customerRef !== 'all') q = q.eq('customer_ref', customerRef);
       if (siteRef && siteRef !== 'all') q = q.eq('site_ref', siteRef);
+      if (Array.isArray(allowedSiteRefs) && allowedSiteRefs.length > 0) {
+        q = q.in('site_ref', allowedSiteRefs);
+      }
       if (status && status !== 'all') q = q.eq('status', status);
       if (categoryId && categoryId !== 'all') q = q.eq('category_id', categoryId);
       if (search && search.trim()) {
@@ -202,6 +205,6 @@ export function operationsLogEntryOptions(companyId, entryId) {
       return data;
     },
     staleTime: 1 * 60 * 1000,
-    enabled: !!companyId && !!entryId,
+    enabled: !!entryId,
   });
 }

@@ -61,7 +61,7 @@ export function orderRequestWithItemsOptions(orderRequestId) {
           qty_requested,
           item_status,
           unit_price_cents_snapshot,
-          parts(id, description, category, unit)
+          parts(id, description, category, unit, image_path)
         `)
         .eq('order_request_id', orderRequestId);
       if (e2) throw e2;

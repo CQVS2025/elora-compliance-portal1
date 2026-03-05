@@ -27,10 +27,11 @@ import DataPagination from '@/components/ui/DataPagination';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { siteOverridesOptions } from '@/query/options';
 
-export default function SiteManagement({ customers, vehicles, selectedCustomer }) {
+export default function SiteManagement({ customers, vehicles, selectedCustomer, allowedSiteIds }) {
   const queryClient = useQueryClient();
   const permissions = usePermissions();
   const isSuperAdmin = permissions.isSuperAdmin ?? false;
+  const hasSiteRestriction = Array.isArray(allowedSiteIds) && allowedSiteIds.length > 0;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -104,10 +105,16 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer }
     });
   }, [allSites, overrideMap]);
 
+  const restrictedSites = useMemo(() => {
+    if (!hasSiteRestriction) return sites;
+    const idSet = new Set(allowedSiteIds);
+    return sites.filter(s => idSet.has(s.id));
+  }, [sites, hasSiteRestriction, allowedSiteIds]);
+
   const filteredByCustomer = useMemo(() => {
-    if (!selectedCustomer || selectedCustomer === 'all') return sites;
-    return sites.filter(s => s.customer_ref === selectedCustomer || s.customer_ref == null);
-  }, [sites, selectedCustomer]);
+    if (!selectedCustomer || selectedCustomer === 'all') return restrictedSites;
+    return restrictedSites.filter(s => s.customer_ref === selectedCustomer || s.customer_ref == null);
+  }, [restrictedSites, selectedCustomer]);
 
   const handleEdit = (site) => {
     setSelectedSite(site);
