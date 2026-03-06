@@ -822,7 +822,7 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
         </Card>
       </div>
 
-      {/* Fleet Compliance Distribution + Compliance Rate Over Time */}
+      {/* Fleet Compliance Distribution + Compliance Rate Over Time - commented out per product
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="flex flex-col bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
           <CardHeader className="items-center pb-0">
@@ -947,6 +947,7 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           </CardContent>
         </Card>
       </div>
+      */}
 
       {/* Wash Records - individual wash events with date stamps */}
       {exportScans.length > 0 && (
@@ -996,7 +997,7 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
         </Card>
       )}
 
-      {/* Site Performance Comparison - Radar Chart */}
+      {/* Site Performance Comparison - Radar Chart - commented out per product
       <Card className="bg-card border-border rounded-2xl shadow-lg shadow-black/[0.03]">
         <CardHeader className="items-center pb-4">
           <CardTitle className="text-lg">Site Performance Comparison</CardTitle>
@@ -1055,6 +1056,7 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           )}
         </CardContent>
       </Card>
+      */}
 
       <DrillDownModal
         open={drillDownModal.open}

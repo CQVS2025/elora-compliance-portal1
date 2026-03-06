@@ -518,6 +518,21 @@ export default function Dashboard() {
   const enrichedVehicles = processedData.vehicles;
   const scans = processedData.scans;
 
+  // Wash records for email report PDF (same filters as Reports page: date range + drivers)
+  const exportScans = useMemo(() => {
+    const rangeStart = moment(dateRange.start).startOf('day');
+    const rangeEnd = moment(dateRange.end).endOf('day');
+    let list = successScansList.filter((scan) => {
+      const ts = scan.createdAt ?? scan.timestamp ?? scan.updatedAt;
+      return ts && moment(ts).isBetween(rangeStart, rangeEnd, null, '[]');
+    });
+    if (selectedDriverIds?.length > 0) {
+      const driverSet = new Set(selectedDriverIds.map(String));
+      list = list.filter((s) => s.vehicleRef != null && driverSet.has(String(s.vehicleRef)));
+    }
+    return list;
+  }, [successScansList, dateRange, selectedDriverIds]);
+
   // Apply role-based filtering FIRST to get what this user can access
   const { filteredVehicles: permissionFilteredVehicles, filteredSites: permissionFilteredSites } = useFilteredData(enrichedVehicles, rawSites, customers);
 
@@ -1443,7 +1458,8 @@ export default function Dashboard() {
                   dateRange,
                   filteredVehicles,
                   selectedCustomer,
-                  selectedSite
+                  selectedSite,
+                  exportScans,
                 }}
                 onSetDateRange={(range) => updateSharedFilter({ dateRange: range, activePeriod: 'Custom' })}
                 isReportDataUpdating={isDataLoading || isFiltersFetching}

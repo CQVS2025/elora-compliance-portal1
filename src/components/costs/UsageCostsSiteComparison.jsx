@@ -435,6 +435,7 @@ export default function UsageCostsSiteComparison({ selectedCustomer, selectedSit
             </CardContent>
           </Card>
 
+          {/* Per Truck Cost Comparison - commented out per product
           <Card>
             <CardHeader>
               <CardTitle>Per Truck Cost Comparison</CardTitle>
@@ -467,6 +468,7 @@ export default function UsageCostsSiteComparison({ selectedCustomer, selectedSit
               )}
             </CardContent>
           </Card>
+          */}
 
           <Card>
             <CardHeader>

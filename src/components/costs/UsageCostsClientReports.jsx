@@ -50,7 +50,7 @@ function formatReportCompanyName(name) {
     .join(' ');
 }
 
-export default function UsageCostsClientReports({ selectedCustomer, selectedSite, dateRange }) {
+export default function UsageCostsClientReports({ selectedCustomer, selectedSite, dateRange, dashboardComplianceRate }) {
   const permissions = usePermissions();
   const companyId = permissions.userProfile?.company_id ?? 'portal';
   const isSuperAdmin = permissions.isSuperAdmin ?? false;
@@ -480,8 +480,14 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
             <Card className="border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800">
               <CardContent className="pt-4">
                 <p className="text-xs font-semibold uppercase text-green-700 dark:text-green-400">Compliance Rate</p>
-                <p className="text-3xl font-bold text-green-800 dark:text-green-300">{reportData.complianceRate != null ? `${reportData.complianceRate}%` : '—'}</p>
-                <p className="text-xs text-green-600 dark:text-green-500">{reportData.complianceDelta != null ? `↑ ${reportData.complianceDelta}% from last month` : 'Based on wash scans in period'}</p>
+                <p className="text-3xl font-bold text-green-800 dark:text-green-300">
+                  {(dashboardComplianceRate != null ? dashboardComplianceRate : reportData.complianceRate) != null
+                    ? `${dashboardComplianceRate != null ? dashboardComplianceRate : reportData.complianceRate}%`
+                    : '—'}
+                </p>
+                <p className="text-xs text-green-600 dark:text-green-500">
+                  {reportData.complianceDelta != null ? `↑ ${reportData.complianceDelta}% from last month` : 'Based on wash scans in period'}
+                </p>
                 {dateRangeLabel && <p className="text-xs text-green-600/80 dark:text-green-500/80 mt-1">{dateRangeLabel}</p>}
               </CardContent>
             </Card>

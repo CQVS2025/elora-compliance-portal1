@@ -50,6 +50,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
   const [saving, setSaving] = useState(false);
   const [sendingNow, setSendingNow] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportProgress, setExportProgress] = useState({ washProcessed: 0, washTotal: 0 });
+  const exportCancelRef = useRef(false);
+  const exportCurrentRef = useRef(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [pdfHtml, setPdfHtml] = useState('');
   const pdfContainerRef = useRef(null);
@@ -115,16 +118,22 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     if (effectiveEmailReportSubtabs.length === 0) return [];
     return EMAIL_REPORT_SUBTABS.filter((t) => effectiveEmailReportSubtabs.includes(t.value));
   }, [effectiveEmailReportSubtabs]);
-  const emailReportSubTabRaw = searchParams.get('tab') === 'client-usage-cost-report' ? 'client-usage-cost-report' : 'email-reports';
+  const tabParam = searchParams.get('tab');
+  const emailReportSubTabRaw = tabParam === 'client-usage-cost-report'
+    ? 'client-usage-cost-report'
+    : tabParam === 'email-reports'
+      ? 'email-reports'
+      : 'client-usage-cost-report';
   const emailReportSubTab = useMemo(() => {
     if (allowedEmailSubtabs.some((t) => t.value === emailReportSubTabRaw)) return emailReportSubTabRaw;
-    return allowedEmailSubtabs[0]?.value ?? 'email-reports';
+    return allowedEmailSubtabs.some((t) => t.value === 'client-usage-cost-report')
+      ? 'client-usage-cost-report'
+      : (allowedEmailSubtabs[0]?.value ?? 'email-reports');
   }, [emailReportSubTabRaw, allowedEmailSubtabs]);
   const setEmailReportSubTab = (value) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      if (value === 'email-reports') next.delete('tab');
-      else next.set('tab', value);
+      next.set('tab', value);
       return next;
     }, { replace: true });
   };
@@ -652,6 +661,12 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
   const buildReportDataForPdf = (reportData, vehiclesForReport) => {
     if (!reportData?.stats || (vehiclesForReport.length === 0 && !reportData?.filteredVehicles)) return null;
     const vehicles = vehiclesForReport;
+    const vehicleRefToName = new Map();
+    vehicles.forEach((v) => {
+      const ref = v.vehicleRef ?? v.id ?? v.rfid;
+      const name = v.vehicleName ?? v.name ?? v.vehicle_ref;
+      if (ref != null) vehicleRefToName.set(String(ref), name || '—');
+    });
     const targetDefault = 12;
     const compliantCount = vehicles.filter(v => (v.washes_completed ?? 0) >= (v.target ?? targetDefault)).length;
     const criticalCount = vehicles.filter(v => (v.washes_completed ?? 0) === 0).length;
@@ -696,6 +711,8 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       siteCount,
       avgWashesPerVehicle: Number(avgWashesPerVehicle),
       dailyWashes,
+      exportScans: reportData?.exportScans ?? [],
+      vehicleRefToName: Object.fromEntries(vehicleRefToName),
       compliance: {
         summary: {
           averageCompliance: vehicles.length > 0 ? Math.round((compliantCount / vehicles.length) * 100) : 0,
@@ -710,8 +727,89 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     };
   };
 
-  /** Build PDF from report data and branding; returns { pdf, filename } for save or base64 */
-  const buildReportPdf = async (reportDataForPdf, branding) => {
+  /** Build full HTML for a single wash records page (one table, max 12 rows) for PDF capture. Returns full document HTML. */
+  const buildWashRecordPageHtml = (reportDataForPdf, branding, pageIndex) => {
+    const WASH_RECORDS_PER_PAGE = 12;
+    const exportScans = reportDataForPdf?.exportScans ?? [];
+    const vehicleRefToName = reportDataForPdf?.vehicleRefToName ?? {};
+    const totalRecords = exportScans.length;
+    const totalChunks = Math.ceil(totalRecords / WASH_RECORDS_PER_PAGE);
+    const chunk = exportScans.slice(pageIndex * WASH_RECORDS_PER_PAGE, (pageIndex + 1) * WASH_RECORDS_PER_PAGE);
+    const pageWidth = 860;
+    const fg = 'hsl(220, 13%, 9%)';
+    const mutedFg = 'hsl(220, 9%, 46%)';
+    const border = 'hsl(220, 13%, 91%)';
+    const mutedBg = 'hsl(220, 14%, 96%)';
+    const formatDateDDMMYYYY = (d) => {
+      if (!d) return '—';
+      const date = typeof d === 'string' ? new Date(d) : d;
+      return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+    const formatTime = (d) => {
+      if (!d) return '—';
+      const date = typeof d === 'string' ? new Date(d) : d;
+      return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    };
+    const escapeHtml = (s) => (s == null || s === '') ? '—' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const buildRow = (s) => {
+      const dt = s.createdAt ?? s.timestamp ?? s.scanDate ?? s.updatedAt;
+      const duration = s.washDurationSeconds ?? s.durationSeconds ?? s.washTime;
+      const durationStr = duration != null ? (duration >= 60 ? `${Math.round(duration / 60)}m` : `${duration}s`) : '—';
+      const vehicleName = vehicleRefToName[s.vehicleRef] ?? s.vehicleName ?? '—';
+      return `<tr style="background: transparent; border-bottom: 1px solid ${border};">
+        <td style="padding: 8px 10px; font-size: 11px; color: ${mutedFg};">${escapeHtml(formatDateDDMMYYYY(dt))}</td>
+        <td style="padding: 8px 10px; font-size: 11px; color: ${mutedFg};">${escapeHtml(formatTime(dt))}</td>
+        <td style="padding: 8px 10px; font-size: 11px; color: ${fg}; font-weight: 500;">${escapeHtml(vehicleName)}</td>
+        <td style="padding: 8px 10px; font-size: 11px; color: ${fg};">${escapeHtml(s.siteName ?? s.site_name ?? '—')}</td>
+        <td style="padding: 8px 10px; font-size: 11px; color: ${fg};">${escapeHtml(s.statusLabel ?? s.status ?? 'Success')}</td>
+        <td style="padding: 8px 10px; font-size: 11px; color: ${mutedFg}; text-align: right;">${escapeHtml(durationStr)}</td>
+      </tr>`;
+    };
+    const tableHeader = `
+      <tr style="background: ${mutedBg};">
+        <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Date</th>
+        <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Time</th>
+        <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Vehicle</th>
+        <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Site</th>
+        <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Status</th>
+        <th style="padding: 10px; text-align: right; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Wash Time</th>
+      </tr>`;
+    const title = pageIndex === 0 ? 'Wash Records' : `Wash Records (page ${pageIndex + 1} of ${totalChunks})`;
+    const subtitle = pageIndex === 0
+      ? `Individual wash events with date stamps. ${totalRecords} record${totalRecords !== 1 ? 's' : ''}. 12 per page.`
+      : '';
+    const rows = chunk.map(buildRow).join('');
+    const companyName = branding?.company_name || 'ELORA';
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Wash Records - ${companyName}</title></head>
+<body style="margin: 0; padding: 0; background: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; color: ${fg};">
+  <div style="width: ${pageWidth}px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); overflow: hidden;">
+    <div style="padding: 28px 32px;">
+      <div style="color: ${fg}; font-size: 13px; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;">${title}</div>
+      ${subtitle ? `<p style="color: ${mutedFg}; font-size: 12px; margin: 0 0 12px 0;">${subtitle}</p>` : ''}
+      <div style="border: 1px solid ${border}; border-radius: 8px; overflow: hidden;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 11px;">
+          <thead>${tableHeader}</thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+  };
+
+  /** Build PDF from report data and branding; returns { pdf, filename } for save or base64.
+   * Optional exportCallbacks: { onWashProgress(processed, total), getShouldCancel(), getShouldExportCurrent() }
+   */
+  const buildReportPdf = async (reportDataForPdf, branding, exportCallbacks = {}) => {
+    const {
+      onWashProgress = () => {},
+      getShouldCancel = () => false,
+      getShouldExportCurrent = () => false
+    } = exportCallbacks;
     const selectedReports = formData.report_types.length > 0 ? formData.report_types : allowedEmailReportTypeIds;
     const hasBothSections = selectedReports.includes('compliance') && selectedReports.includes('costs');
 
@@ -736,6 +834,21 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       }
     };
 
+    /** Add one canvas as exactly one PDF page (scale to fit). Used for wash records so each table is one page. */
+    const addCanvasAsSinglePage = (pdf, canvas) => {
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 24;
+      const contentWidth = pageWidth - (margin * 2);
+      const contentHeight = pageHeight - (margin * 2);
+      const scale = Math.min(contentWidth / canvas.width, contentHeight / canvas.height, 1);
+      const imgWidth = canvas.width * scale;
+      const imgHeight = canvas.height * scale;
+      const imgData = canvas.toDataURL('image/png', 0.95);
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
+    };
+
     const captureContainerToCanvas = async () => {
       if (!pdfContainerRef.current) throw new Error('PDF container not available. Please try again.');
       return await html2canvas(pdfContainerRef.current, {
@@ -753,24 +866,54 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
 
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true });
 
-    if (hasBothSections) {
-      const reportHtmlCompliance = await buildEnhancedReportHtml(reportDataForPdf, branding, true, 'compliance');
-      setPdfHtml(extractBodyHtml(reportHtmlCompliance));
+    const waitForRender = async () => {
       await new Promise((r) => setTimeout(r, 1200));
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    };
+
+    const addWashRecordPages = async () => {
+      const exportScans = reportDataForPdf?.exportScans ?? [];
+      const totalRecords = exportScans.length;
+      const numChunks = Math.ceil(totalRecords / 12);
+      if (numChunks === 0) return;
+      onWashProgress(0, totalRecords);
+      for (let i = 0; i < numChunks; i++) {
+        if (getShouldCancel()) throw new Error('Export cancelled');
+        if (getShouldExportCurrent()) break;
+        const washHtml = buildWashRecordPageHtml(reportDataForPdf, branding, i);
+        setPdfHtml(extractBodyHtml(washHtml));
+        await waitForRender();
+        if (getShouldCancel()) throw new Error('Export cancelled');
+        const canvas = await captureContainerToCanvas();
+        addCanvasAsSinglePage(pdf, canvas);
+        const processed = Math.min((i + 1) * 12, totalRecords);
+        onWashProgress(processed, totalRecords);
+      }
+    };
+
+    if (hasBothSections) {
+      const reportHtmlCompliance = await buildEnhancedReportHtml(reportDataForPdf, branding, true, 'compliance', { excludeComplianceWashRecords: true });
+      setPdfHtml(extractBodyHtml(reportHtmlCompliance));
+      await waitForRender();
       const canvas1 = await captureContainerToCanvas();
       addCanvasToPdf(pdf, canvas1, false);
+      await addWashRecordPages();
       const reportHtmlCost = await buildEnhancedReportHtml(reportDataForPdf, branding, true, 'costs');
       setPdfHtml(extractBodyHtml(reportHtmlCost));
-      await new Promise((r) => setTimeout(r, 1200));
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await waitForRender();
       const canvas2 = await captureContainerToCanvas();
       addCanvasToPdf(pdf, canvas2, true);
+    } else if (selectedReports.includes('compliance')) {
+      const reportHtml = await buildEnhancedReportHtml(reportDataForPdf, branding, true, 'both', { excludeComplianceWashRecords: true });
+      setPdfHtml(extractBodyHtml(reportHtml));
+      await waitForRender();
+      const canvas = await captureContainerToCanvas();
+      addCanvasToPdf(pdf, canvas, false);
+      await addWashRecordPages();
     } else {
       const reportHtml = await buildEnhancedReportHtml(reportDataForPdf, branding, true);
       setPdfHtml(extractBodyHtml(reportHtml));
-      await new Promise((r) => setTimeout(r, 1200));
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await waitForRender();
       const canvas = await captureContainerToCanvas();
       addCanvasToPdf(pdf, canvas, false);
     }
@@ -998,7 +1141,8 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     return imageUrl;
   };
 
-  const buildEnhancedReportHtml = async (reportData, clientBranding = null, includeCharts = true, sectionsToInclude = 'both') => {
+  const buildEnhancedReportHtml = async (reportData, clientBranding = null, includeCharts = true, sectionsToInclude = 'both', options = {}) => {
+    const { excludeComplianceWashRecords = false } = options;
     const requested = formData.report_types.length > 0 ? formData.report_types : allowedEmailReportTypeIds;
     const selectedReports = [...new Set(
       requested.filter(id => allowedEmailReportTypeIds.includes(id))
@@ -1042,6 +1186,17 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       const date = typeof d === 'string' ? new Date(d) : d;
       return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     };
+    const formatDateDDMMYYYY = (d) => {
+      if (!d) return '—';
+      const date = typeof d === 'string' ? new Date(d) : d;
+      return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+    const formatTime = (d) => {
+      if (!d) return '—';
+      const date = typeof d === 'string' ? new Date(d) : d;
+      return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    };
+    const escapeHtml = (s) => (s == null || s === '') ? '—' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
     // Use same full layout/spacing for compliance-only as when both report types selected (so compliance section looks identical either way)
     const pad = { card: '14px 20px', cardVal: '28px', cardLabel: '11px' };
@@ -1149,154 +1304,81 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       const complianceData = reportData?.compliance?.summary;
 
       if (complianceData) {
-        let chartHtml = '';
-        let washTrendChartHtml = '';
-        if (includeCharts) {
-          try {
-            const chartImage = await generateChartImage('compliance', {
-              compliant: complianceData.compliantVehicles || 0,
-              atRisk: complianceData.atRiskVehicles || 0
-            }, primaryColor, false, portal.destructive);
-            chartHtml = `
-              <div style="text-align: center; page-break-inside: avoid; break-inside: avoid; background: ${portal.background}; border-radius: 12px; padding: 16px; border: 1px solid ${border}; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);">
-                <div style="color: ${fg}; font-size: 11px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase;">Fleet Compliance</div>
-                <img src="${chartImage}" style="max-width: 320px; height: auto;" alt="Compliance Chart" />
-              </div>
-            `;
-          } catch (error) {
-            console.error('Error generating compliance chart:', error);
-          }
-          const dailyWashes = reportData?.dailyWashes || [];
-          if (dailyWashes.length > 0) {
-            try {
-              const trendImage = await generateChartImage('washTrend', { dailyWashes }, portal.success, false);
-              washTrendChartHtml = `
-                <div style="text-align: center; page-break-inside: avoid; break-inside: avoid; background: ${portal.background}; border-radius: 12px; padding: 16px; border: 1px solid ${border}; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);">
-                  <div style="color: ${fg}; font-size: 11px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase;">Wash Activity Trend</div>
-                  <img src="${trendImage}" style="max-width: 320px; height: auto;" alt="Wash trend" />
-                </div>
-              `;
-            } catch (err) {
-              console.error('Error generating wash trend chart:', err);
-            }
-          }
-        }
-        const twoColumnChartsRow = (chartHtml && washTrendChartHtml) ? `
-          <table width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0; page-break-inside: avoid; break-inside: avoid;">
-            <tr>
-              <td width="48%" style="vertical-align: top;">${chartHtml}</td>
-              <td width="4%"></td>
-              <td width="48%" style="vertical-align: top;">${washTrendChartHtml}</td>
-            </tr>
-          </table>
-        ` : (chartHtml ? `<div style="margin: 20px 0; page-break-inside: avoid;">${chartHtml}</div>` : '');
-
-        const likelihood = complianceData.complianceLikelihood;
-        const onTrackPct = likelihood?.onTrackPct ?? 0;
-        const atRiskPct = likelihood?.atRiskPct ?? 0;
-        const criticalPct = likelihood?.criticalPct ?? 0;
-        const fleetHealthBar = (onTrackPct + atRiskPct + criticalPct > 0) ? `
-          <div style="margin: 20px 0; page-break-inside: avoid; break-inside: avoid;">
-            <div style="color: ${fg}; font-size: 12px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Fleet Health Distribution</div>
-            <div style="display: flex; height: 24px; border-radius: 6px; overflow: hidden; background: ${border};">
-              <div style="width: ${onTrackPct}%; background: ${portal.success}; min-width: ${onTrackPct > 0 ? '20px' : '0'};"></div>
-              <div style="width: ${atRiskPct}%; background: ${portal.warning}; min-width: ${atRiskPct > 0 ? '20px' : '0'};"></div>
-              <div style="width: ${criticalPct}%; background: ${portal.destructive}; min-width: ${criticalPct > 0 ? '20px' : '0'};"></div>
-            </div>
-            <div style="display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap;">
-              <span style="font-size: 11px; color: ${mutedFg};"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${portal.success}; vertical-align: middle; margin-right: 4px;"></span> On Track (${complianceData.compliantVehicles || 0})</span>
-              <span style="font-size: 11px; color: ${mutedFg};"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${portal.warning}; vertical-align: middle; margin-right: 4px;"></span> At Risk</span>
-              <span style="font-size: 11px; color: ${mutedFg};"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${portal.destructive}; vertical-align: middle; margin-right: 4px;"></span> Critical (${complianceData.criticalVehicles || 0})</span>
-            </div>
-          </div>
-        ` : '';
-
         const costSummary = reportData?.costs?.summary;
         const totalWashes = costSummary?.totalWashes ?? 0;
         const activeDrivers = costSummary?.activeDrivers ?? 0;
-        const criticalVehicles = complianceData.criticalVehicles ?? 0;
-        const atRiskVehicles = complianceData.atRiskVehicles ?? 0;
         const siteCount = reportData?.siteCount ?? 0;
         const avgWashesPerVehicle = reportData?.avgWashesPerVehicle ?? costSummary?.avgWashesPerVehicle ?? 0;
         const complianceTarget = 80;
-        const showComplianceAlert = (atRiskVehicles + criticalVehicles) > 0;
 
-        const complianceAlertBox = showComplianceAlert ? `
-          <div style="background: ${portal.destructiveLight}; border: 1px solid ${portal.destructive}; border-radius: 10px; padding: 16px 20px; margin: 20px 0; page-break-inside: avoid; break-inside: avoid;">
-            <div style="display: flex; align-items: flex-start; gap: 10px;">
-              <span style="font-size: 18px; line-height: 1;">⚠</span>
-              <div>
-                <div style="color: ${fg}; font-size: 13px; font-weight: 700; margin-bottom: 4px;">Compliance Alert — ${companyName} Fleet</div>
-                <p style="color: ${mutedFg}; font-size: 12px; margin: 0; line-height: 1.5;">${atRiskVehicles + criticalVehicles} vehicles below threshold. ${criticalVehicles} have zero washes. Fleet at ${complianceData.averageCompliance || 0}% vs ${complianceTarget}% target.</p>
-              </div>
+        const exportScans = reportData?.exportScans ?? [];
+        const vehicleRefToName = reportData?.vehicleRefToName ?? {};
+        const WASH_RECORDS_PER_PAGE = 12;
+        const buildRowForScan = (s) => {
+          const dt = s.createdAt ?? s.timestamp ?? s.scanDate ?? s.updatedAt;
+          const duration = s.washDurationSeconds ?? s.durationSeconds ?? s.washTime;
+          const durationStr = duration != null ? (duration >= 60 ? `${Math.round(duration / 60)}m` : `${duration}s`) : '—';
+          const vehicleName = vehicleRefToName[s.vehicleRef] ?? s.vehicleName ?? '—';
+          return `<tr style="background: transparent; border-bottom: 1px solid ${border};">
+            <td style="padding: 8px 10px; font-size: 11px; color: ${mutedFg};">${escapeHtml(formatDateDDMMYYYY(dt))}</td>
+            <td style="padding: 8px 10px; font-size: 11px; color: ${mutedFg};">${escapeHtml(formatTime(dt))}</td>
+            <td style="padding: 8px 10px; font-size: 11px; color: ${fg}; font-weight: 500;">${escapeHtml(vehicleName)}</td>
+            <td style="padding: 8px 10px; font-size: 11px; color: ${fg};">${escapeHtml(s.siteName ?? s.site_name ?? '—')}</td>
+            <td style="padding: 8px 10px; font-size: 11px; color: ${fg};">${escapeHtml(s.statusLabel ?? s.status ?? 'Success')}</td>
+            <td style="padding: 8px 10px; font-size: 11px; color: ${mutedFg}; text-align: right;">${escapeHtml(durationStr)}</td>
+          </tr>`;
+        };
+        const tableHeader = `
+          <tr style="background: ${mutedBg};">
+            <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Date</th>
+            <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Time</th>
+            <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Vehicle</th>
+            <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Site</th>
+            <th style="padding: 10px; text-align: left; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Status</th>
+            <th style="padding: 10px; text-align: right; font-weight: 600; color: ${fg}; border-bottom: 1px solid ${border};">Wash Time</th>
+          </tr>`;
+        const washRecordsTableHtml = exportScans.length > 0 ? (() => {
+          const chunks = [];
+          for (let i = 0; i < exportScans.length; i += WASH_RECORDS_PER_PAGE) {
+            chunks.push(exportScans.slice(i, i + WASH_RECORDS_PER_PAGE));
+          }
+          return chunks.map((chunk, pageIndex) => {
+            const rows = chunk.map(buildRowForScan).join('');
+            const isFirstPage = pageIndex === 0;
+            const title = isFirstPage
+              ? `Wash Records`
+              : `Wash Records (page ${pageIndex + 1} of ${chunks.length})`;
+            const subtitle = isFirstPage
+              ? `Individual wash events with date stamps. ${exportScans.length} record${exportScans.length !== 1 ? 's' : ''}. 12 per page.`
+              : '';
+            return `
+          <div style="page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; margin: 0; padding: 24px 0;">
+            <div style="color: ${fg}; font-size: 13px; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;">${title}</div>
+            ${subtitle ? `<p style="color: ${mutedFg}; font-size: 12px; margin: 0 0 12px 0;">${subtitle}</p>` : ''}
+            <div style="border: 1px solid ${border}; border-radius: 8px; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 11px;">
+                <thead>${tableHeader}</thead>
+                <tbody>${rows}</tbody>
+              </table>
             </div>
-          </div>
-        ` : '';
+          </div>`;
+          }).join('');
+        })() : '';
 
-        let complianceBySiteChartHtml = '';
-        let washFrequencyBySiteHtml = '';
-        const siteSummary = reportData?.siteSummary || [];
-        if (includeCharts && siteSummary.length > 0) {
-          try {
-            const bySiteImage = await generateChartImage('complianceBySite', { sites: siteSummary }, primaryColor, false);
-            complianceBySiteChartHtml = `
-              <div style="margin-top: 24px; page-break-inside: avoid; break-inside: avoid;">
-                <div style="color: ${fg}; font-size: 13px; font-weight: 700; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">Compliance by site</div>
-                <div style="text-align: center; background: ${portal.background}; border-radius: 12px; padding: 16px; border: 1px solid ${border}; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);">
-                  <img src="${bySiteImage}" style="max-width: 480px; height: auto;" alt="Compliance by site" />
-                </div>
-              </div>
-            `;
-          } catch (err) {
-            console.error('Error generating compliance-by-site chart:', err);
-          }
-          try {
-            const washFreqImage = await generateChartImage('washesBySite', { sites: siteSummary }, portal.success, false);
-            washFrequencyBySiteHtml = `
-              <div style="margin-top: 134px; page-break-inside: avoid; break-inside: avoid;">
-                <div style="color: ${fg}; font-size: 13px; font-weight: 700; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;">Wash Frequency By Site</div>
-                <div style="text-align: center; background: ${portal.background}; border-radius: 12px; padding: 16px; border: 1px solid ${border}; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);">
-                  <img src="${washFreqImage}" style="max-width: 480px; height: auto;" alt="Wash frequency by site" />
-                </div>
-              </div>
-            `;
-          } catch (err) {
-            console.error('Error generating wash frequency by site chart:', err);
-          }
-        }
-
-        const topSite = siteSummary.length > 0 ? siteSummary[0] : null;
-        const insightsBlock = (siteCount > 0 || topSite) ? `
-          <div style="background: linear-gradient(135deg, ${portal.chart2Light || mutedBg} 0%, ${mutedBg} 100%); border-radius: 10px; padding: 18px 20px; margin: 20px 0; border-left: 4px solid ${portal.chart2}; page-break-inside: avoid; break-inside: avoid;">
-            <div style="color: ${fg}; font-size: 13px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Analysis</div>
-            <p style="color: ${mutedFg}; font-size: 13px; margin: 0; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-              ${siteCount > 0 ? `Report covers <strong>${siteCount}</strong> site${siteCount !== 1 ? 's' : ''}. ` : ''}
-              ${topSite ? `Top site by washes: <strong>${(topSite.siteName || '—').toString().replace(/</g, '&lt;')}</strong> (${topSite.compliancePct}% compliant, ${topSite.totalWashes} washes). ` : ''}
-              ${criticalVehicles > 0 ? `<strong>${criticalVehicles} vehicle${criticalVehicles !== 1 ? 's' : ''}</strong> with zero washes need attention.` : 'No vehicles with zero washes in this period.'}
-            </p>
-          </div>
-        ` : '';
-
-        const complianceCardsBlock = `<div style="page-break-inside: avoid; break-inside: avoid;">
+        const complianceCardsOnly = `<div style="page-break-inside: avoid; break-inside: avoid;">
           ${fourColumnMetrics(
-            metricCard('COMPLIANCE RATE', `${complianceData.averageCompliance || 0}%`, `vs ${complianceTarget}% target`, (complianceData.averageCompliance || 0) >= complianceTarget ? portal.success : portal.destructive),
-            metricCard('TOTAL VEHICLES', `${complianceData.totalVehicles || 0}`, 'In scope', portal.chart2),
-            metricCard('TOTAL WASHES', `${totalWashes.toLocaleString()}`, 'In report period', primaryColor),
-            metricCard('ACTIVE DRIVERS', `${activeDrivers}`, 'Active in period', portal.chart2)
-          )}
+          metricCard('COMPLIANCE RATE', `${complianceData.averageCompliance || 0}%`, `vs ${complianceTarget}% target`, (complianceData.averageCompliance || 0) >= complianceTarget ? portal.success : portal.destructive),
+          metricCard('TOTAL VEHICLES', `${complianceData.totalVehicles || 0}`, 'In scope', portal.chart2),
+          metricCard('TOTAL WASHES', `${totalWashes.toLocaleString()}`, 'In report period', primaryColor),
+          metricCard('ACTIVE DRIVERS', `${activeDrivers}`, 'Active in period', portal.chart2)
+        )}
           ${threeColumnMetrics(
-            metricCard('COMPLIANT', `${complianceData.compliantVehicles || 0}`, 'Meeting target', portal.success),
-            metricCard('AT RISK', `${complianceData.atRiskVehicles || 0}`, 'Below target', portal.destructive),
-            metricCard('AVG WASHES/VEHICLE', `${Number(avgWashesPerVehicle).toFixed(1)}`, 'Fleet average', portal.chart2)
-          )}
-          ${fleetHealthBar}
-          ${complianceAlertBox}
-          ${twoColumnChartsRow}
-          ${washFrequencyBySiteHtml}
-          ${complianceBySiteChartHtml}
-          ${insightsBlock}
+          metricCard('COMPLIANT', `${complianceData.compliantVehicles || 0}`, 'Meeting target', portal.success),
+          metricCard('AT RISK', `${complianceData.atRiskVehicles || 0}`, 'Below target', portal.destructive),
+          metricCard('AVG WASHES/VEHICLE', `${Number(avgWashesPerVehicle).toFixed(1)}`, 'Fleet average', portal.chart2)
+        )}
         </div>`;
-        content += section('Compliance Overview', complianceCardsBlock);
+        content += section('Compliance Overview', complianceCardsOnly + (!excludeComplianceWashRecords && exportScans.length > 0 ? washRecordsTableHtml : ''));
       } else {
         content += section('Compliance Overview',
           twoColumnMetrics(
@@ -1487,10 +1569,12 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
             <p style="color: ${mutedFg}; font-size: 12px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500;">
               ${reportData ? 'Report reflects current dashboard filters. Confidential — ' + companyName + '.' : 'Preview — connect to live data for full report.'}
             </p>
-            <div style="display: inline-flex; align-items: center; flex-wrap: nowrap; gap: 8px;">
-              <img src="https://yyqspdpk0yebvddv.public.blob.vercel-storage.com/233633501.png" alt="" style="height: 22px; width: auto; object-fit: contain; flex-shrink: 0; display: inline-block; vertical-align: middle;" />
-              <span style="color: ${mutedFg}; font-size: 11px; font-weight: 500; white-space: nowrap;">Powered by ELORA · © ${new Date().getFullYear()}</span>
-            </div>
+            <div style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;">
+  <img src="https://yyqspdpk0yebvddv.public.blob.vercel-storage.com/233633501.png" alt="" style="height:22px;width:auto;object-fit:contain;display:block;" />
+  <span style="color:${mutedFg};font-size:11px;font-weight:500;">
+    Powered by ELORA · © ${new Date().getFullYear()}
+  </span>
+</div>
           </footer>
         </div>
       </body>
@@ -1515,31 +1599,51 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     }
 
     setExportingPdf(true);
+    setExportProgress({ washProcessed: 0, washTotal: 0 });
+    exportCancelRef.current = false;
+    exportCurrentRef.current = false;
     toast.info('Exporting PDF…', { description: 'Building your report. This may take a moment.' });
 
-    try {
-      const branding = await resolveBrandingForReport();
-      const reportDataForPdf = buildReportDataForPdf(reportData, reportVehicles);
-      if (!reportDataForPdf) {
-        toast.error('No report data', { description: 'Set dashboard filters and ensure there is vehicle data, then try again.' });
+    // Defer heavy work so the export overlay can paint first and UI doesn't feel stuck
+    const runExport = async () => {
+      try {
+        const branding = await resolveBrandingForReport();
+        const reportDataForPdf = buildReportDataForPdf(reportData, reportVehicles);
+        if (!reportDataForPdf) {
+          toast.error('No report data', { description: 'Set dashboard filters and ensure there is vehicle data, then try again.' });
+          setExportingPdf(false);
+          setExportProgress({ washProcessed: 0, washTotal: 0 });
+          return;
+        }
+
+        const exportCallbacks = {
+          onWashProgress: (processed, total) => setExportProgress({ washProcessed: processed, washTotal: total }),
+          getShouldCancel: () => exportCancelRef.current,
+          getShouldExportCurrent: () => exportCurrentRef.current
+        };
+        const { pdf, filename } = await buildReportPdf(reportDataForPdf, branding, exportCallbacks);
+        pdf.save(filename);
+
+        setSuccessMessage('PDF exported successfully!');
+        toast.success('PDF exported', { description: 'Your report has been downloaded.' });
+        setTimeout(() => setSuccessMessage(''), 5000);
+      } catch (error) {
+        if (error?.message === 'Export cancelled') {
+          toast.info('Export cancelled', { description: 'PDF export was cancelled.' });
+        } else {
+          console.error('[handleExportPdf] Error exporting PDF:', error);
+          toast.error('Failed to export PDF', { description: error?.message || 'Please try again.' });
+        }
+      } finally {
         setExportingPdf(false);
-        return;
+        setExportProgress({ washProcessed: 0, washTotal: 0 });
+        setPdfHtml('');
       }
+    };
 
-      const { pdf, filename } = await buildReportPdf(reportDataForPdf, branding);
-      pdf.save(filename);
-
-      setSuccessMessage('PDF exported successfully!');
-      toast.success('PDF exported', { description: 'Your report has been downloaded.' });
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (error) {
-      console.error('[handleExportPdf] Error exporting PDF:', error);
-      toast.error('Failed to export PDF', { description: error?.message || 'Please try again.' });
-    } finally {
-      setExportingPdf(false);
-      // Clear the PDF HTML to free up memory
-      setPdfHtml('');
-    }
+    requestAnimationFrame(() => {
+      setTimeout(runExport, 80);
+    });
   };
 
   // Manual retry for user loading (no longer needed with useAuth hook)
@@ -1645,412 +1749,462 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
           </TabsList>
         )}
         {allowedEmailSubtabs.some((t) => t.value === 'email-reports') && (
-        <TabsContent value="email-reports" className="mt-4 focus-visible:outline-none">
-          <div className="w-full space-y-6">
-      {/* Page header */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Email Report Settings</h1>
-        <p className="text-sm text-muted-foreground">Request and configure email reports for your account.</p>
-      </div>
-
-      {/* Success message */}
-      {successMessage && (
-        <Alert className="border-primary/50 bg-primary/5">
-          <CheckCircle className="h-4 w-4 text-primary" />
-          <AlertDescription className="text-foreground">{successMessage}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* How it works */}
-      <Alert className="border-border bg-muted/30">
-        <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-        <AlertDescription>
-          <span className="font-medium text-foreground">How email reports work</span>
-          <span className="block mt-1.5 text-muted-foreground">
-            The report uses the <strong className="text-foreground">current dashboard filters</strong> at the top of this page (customer, site, and drivers) plus the date range. Set your filters above (e.g. select a customer, site, or drivers), then choose the report duration and which sections to include below. The exported PDF and email will show data that matches that filtered view.
-          </span>
-        </AlertDescription>
-      </Alert>
-
-      {/* Email Schedule - admin/super_admin only */}
-      {canManageSchedule && (
-        <Card className="border border-border bg-card">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-muted-foreground" />
-              <CardTitle className="text-base text-foreground">Email Schedule</CardTitle>
-            </div>
-            <CardDescription className="text-muted-foreground">
-              Enable automatic weekly email reports. Reports use last week&apos;s data and are sent on your chosen day and time (Australia timezone).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 text-foreground">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="automation-toggle" className="text-sm font-medium">Enable automatic weekly reports</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">When on, reports are sent automatically based on your schedule below.</p>
+          <TabsContent value="email-reports" className="mt-4 focus-visible:outline-none">
+            <div className="w-full space-y-6">
+              {/* Page header */}
+              <div className="space-y-1">
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Email Report Settings</h1>
+                <p className="text-sm text-muted-foreground">Request and configure email reports for your account.</p>
               </div>
-              <Switch
-                id="automation-toggle"
-                checked={scheduleForm.automationEnabled}
-                onCheckedChange={(v) => setScheduleForm(prev => ({ ...prev, automationEnabled: v }))}
-              />
-            </div>
-            {scheduleForm.automationEnabled && (
-              <>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Day of week</Label>
-                    <Select
-                      value={String(scheduleForm.scheduledDay)}
-                      onValueChange={(v) => setScheduleForm(prev => ({ ...prev, scheduledDay: parseInt(v, 10) }))}
-                    >
-                      <SelectTrigger className="border-input bg-background text-foreground">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DAYS_OF_WEEK.map((d) => (
-                          <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+              {/* Success message */}
+              {successMessage && (
+                <Alert className="border-primary/50 bg-primary/5">
+                  <CheckCircle className="h-4 w-4 text-primary" />
+                  <AlertDescription className="text-foreground">{successMessage}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* How it works */}
+              <Alert className="border-border bg-muted/30">
+                <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <AlertDescription>
+                  <span className="font-medium text-foreground">How email reports work</span>
+                  <span className="block mt-1.5 text-muted-foreground">
+                    The report uses the <strong className="text-foreground">current dashboard filters</strong> at the top of this page (customer, site, and drivers) plus the date range. Set your filters above (e.g. select a customer, site, or drivers), then choose the report duration and which sections to include below. The exported PDF and email will show data that matches that filtered view.
+                  </span>
+                </AlertDescription>
+              </Alert>
+
+              {/* Email Schedule - admin/super_admin only */}
+              {canManageSchedule && (
+                <Card className="border border-border bg-card">
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-5 w-5 text-muted-foreground" />
+                      <CardTitle className="text-base text-foreground">Email Schedule</CardTitle>
+                    </div>
+                    <CardDescription className="text-muted-foreground">
+                      Enable automatic weekly email reports. Reports use last week&apos;s data and are sent on your chosen day and time (Australia timezone).
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6 text-foreground">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="automation-toggle" className="text-sm font-medium">Enable automatic weekly reports</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">When on, reports are sent automatically based on your schedule below.</p>
+                      </div>
+                      <Switch
+                        id="automation-toggle"
+                        checked={scheduleForm.automationEnabled}
+                        onCheckedChange={(v) => setScheduleForm(prev => ({ ...prev, automationEnabled: v }))}
+                      />
+                    </div>
+                    {scheduleForm.automationEnabled && (
+                      <>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label className="text-foreground">Day of week</Label>
+                            <Select
+                              value={String(scheduleForm.scheduledDay)}
+                              onValueChange={(v) => setScheduleForm(prev => ({ ...prev, scheduledDay: parseInt(v, 10) }))}
+                            >
+                              <SelectTrigger className="border-input bg-background text-foreground">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {DAYS_OF_WEEK.map((d) => (
+                                  <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-foreground">Time</Label>
+                            <Input
+                              type="time"
+                              className="border-input bg-background text-foreground"
+                              value={scheduleForm.scheduledTime}
+                              onChange={(e) => setScheduleForm(prev => ({ ...prev, scheduledTime: e.target.value || '09:00' }))}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-foreground">Timezone</Label>
+                          <Select
+                            value={scheduleForm.timezone}
+                            onValueChange={(v) => setScheduleForm(prev => ({ ...prev, timezone: v }))}
+                          >
+                            <SelectTrigger className="border-input bg-background text-foreground">
+                              <SelectValue placeholder="Select your timezone" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {AUSTRALIA_TIMEZONES.map((tz) => (
+                                <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">Select your Australian timezone so reports are sent at the correct local time.</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Additional recipients</Label>
+                          <p className="text-xs text-muted-foreground">Add email addresses to also receive the weekly report. Separate with commas or new lines. You (the account holder) always receive it.</p>
+                          <Textarea
+                            placeholder="email1@example.com, email2@example.com"
+                            className="min-h-[88px] font-mono text-sm border-input bg-background text-foreground placeholder:text-muted-foreground"
+                            value={scheduleForm.recipientEmailsText ?? ''}
+                            onChange={(e) => setScheduleForm((prev) => ({ ...prev, recipientEmailsText: e.target.value }))}
+                            aria-label="Additional recipient emails, comma or newline separated"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">{parseRecipientsFromText(scheduleForm.recipientEmailsText, userEmail).length}</span> valid recipient(s) will receive the report.
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Report types to include</Label>
+                          <p className="text-xs text-muted-foreground">Choose which sections appear in the weekly automated report.</p>
+                          {reportTypes.length === 0 ? (
+                            <p className="text-xs text-muted-foreground py-2">No report types available for your role.</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-3 pt-2">
+                              {reportTypes.map((report) => (
+                                <div
+                                  key={report.id}
+                                  className="flex items-center space-x-2"
+                                >
+                                  <Checkbox
+                                    id={`schedule-${report.id}`}
+                                    checked={(scheduleForm.reportTypes || []).includes(report.id)}
+                                    onCheckedChange={(checked) => {
+                                      setScheduleForm(prev => ({
+                                        ...prev,
+                                        reportTypes: checked
+                                          ? [...(prev.reportTypes || []), report.id]
+                                          : (prev.reportTypes || []).filter((id) => id !== report.id),
+                                      }));
+                                    }}
+                                  />
+                                  <Label htmlFor={`schedule-${report.id}`} className="text-sm font-normal cursor-pointer">
+                                    {report.label}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Filters use the dashboard selection above. The automated report will include data from the <strong>previous week</strong> (last 7 days).
+                        </p>
+                        <Button onClick={saveSchedule} disabled={savingSchedule} className="gap-2">
+                          {savingSchedule && <Loader2 className="h-4 w-4 animate-spin" />}
+                          {savingSchedule ? 'Saving...' : 'Save Schedule'}
+                        </Button>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Report duration */}
+              <Card className="border border-border bg-card">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-muted-foreground" />
+                    <CardTitle className="text-base text-foreground">Report duration</CardTitle>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Time</Label>
-                    <Input
-                      type="time"
-                      className="border-input bg-background text-foreground"
-                      value={scheduleForm.scheduledTime}
-                      onChange={(e) => setScheduleForm(prev => ({ ...prev, scheduledTime: e.target.value || '09:00' }))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-foreground">Timezone</Label>
-                  <Select
-                    value={scheduleForm.timezone}
-                    onValueChange={(v) => setScheduleForm(prev => ({ ...prev, timezone: v }))}
+                  <CardDescription className="text-muted-foreground">
+                    Choose the date range for the report. The dashboard filters above will update to match.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6 text-foreground">
+                  <RadioGroup
+                    value={formData.duration_type}
+                    onValueChange={handleDurationChange}
+                    className="grid grid-cols-2 sm:grid-cols-4 gap-3"
                   >
-                    <SelectTrigger className="border-input bg-background text-foreground">
-                      <SelectValue placeholder="Select your timezone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AUSTRALIA_TIMEZONES.map((tz) => (
-                        <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Select your Australian timezone so reports are sent at the correct local time.</p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Additional recipients</Label>
-                  <p className="text-xs text-muted-foreground">Add email addresses to also receive the weekly report. Separate with commas or new lines. You (the account holder) always receive it.</p>
-                  <Textarea
-                    placeholder="email1@example.com, email2@example.com"
-                    className="min-h-[88px] font-mono text-sm border-input bg-background text-foreground placeholder:text-muted-foreground"
-                    value={scheduleForm.recipientEmailsText ?? ''}
-                    onChange={(e) => setScheduleForm((prev) => ({ ...prev, recipientEmailsText: e.target.value }))}
-                    aria-label="Additional recipient emails, comma or newline separated"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">{parseRecipientsFromText(scheduleForm.recipientEmailsText, userEmail).length}</span> valid recipient(s) will receive the report.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Report types to include</Label>
-                  <p className="text-xs text-muted-foreground">Choose which sections appear in the weekly automated report.</p>
+                    {durationOptions.map((opt) => (
+                      <div key={opt.id} className="flex items-center space-x-2">
+                        <RadioGroupItem value={opt.id} id={`duration-${opt.id}`} />
+                        <Label htmlFor={`duration-${opt.id}`} className="cursor-pointer text-sm font-normal">
+                          {opt.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                  {(formData.duration_type === 'days' || formData.duration_type === 'weeks' || formData.duration_type === 'months') && (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Label htmlFor="duration-count" className="text-sm text-muted-foreground shrink-0">
+                        {formData.duration_type === 'days' && 'Number of days'}
+                        {formData.duration_type === 'weeks' && 'Number of weeks'}
+                        {formData.duration_type === 'months' && 'Number of months'}
+                      </Label>
+                      <Input
+                        id="duration-count"
+                        type="number"
+                        min={1}
+                        max={formData.duration_type === 'days' ? 365 : formData.duration_type === 'weeks' ? 52 : 60}
+                        value={formData.duration_count === '' ? '' : formData.duration_count}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            setFormData(prev => ({ ...prev, duration_count: '' }));
+                            return;
+                          }
+                          const num = parseInt(raw, 10);
+                          if (Number.isNaN(num)) return;
+                          const max = formData.duration_type === 'days' ? 365 : formData.duration_type === 'weeks' ? 52 : 60;
+                          const val = Math.max(1, Math.min(max, num));
+                          setFormData(prev => ({ ...prev, duration_count: val }));
+                          applyDurationToFilters(formData.duration_type, val);
+                        }}
+                        onBlur={() => {
+                          if (formData.duration_count === '') {
+                            setFormData(prev => ({ ...prev, duration_count: 1 }));
+                            applyDurationToFilters(formData.duration_type, 1);
+                          }
+                        }}
+                        className="w-24"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {formData.duration_type === 'days' && `Last ${Number(formData.duration_count) || 1} day${(Number(formData.duration_count) || 1) > 1 ? 's' : ''}`}
+                        {formData.duration_type === 'weeks' && `Last ${Number(formData.duration_count) || 1} week${(Number(formData.duration_count) || 1) > 1 ? 's' : ''}`}
+                        {formData.duration_type === 'months' && `Last ${Number(formData.duration_count) || 1} month${(Number(formData.duration_count) || 1) > 1 ? 's' : ''}`}
+                      </span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Report types */}
+              <Card className="border border-border bg-card">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                  <div className="space-y-1.5">
+                    <CardTitle className="text-base text-foreground">Reports to include</CardTitle>
+                    <CardDescription className="text-muted-foreground">Select which sections appear in the email and PDF report.</CardDescription>
+                  </div>
+                  {reportTypes.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={handleAllReportsToggle}>
+                      {reportTypes.every((r) => formData.report_types.includes(r.id)) ? 'Deselect all' : 'Select all'}
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent>
                   {reportTypes.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">No report types available for your role.</p>
+                    <p className="text-sm text-muted-foreground py-4">
+                      No report types are available for your role. Contact your administrator to enable report types.
+                    </p>
                   ) : (
-                    <div className="flex flex-wrap gap-3 pt-2">
+                    <div className="grid gap-3">
                       {reportTypes.map((report) => (
                         <div
                           key={report.id}
-                          className="flex items-center space-x-2"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleReportTypeToggle(report.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleReportTypeToggle(report.id);
+                            }
+                          }}
+                          className="flex items-start space-x-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 cursor-pointer select-none"
                         >
-                          <Checkbox
-                            id={`schedule-${report.id}`}
-                            checked={(scheduleForm.reportTypes || []).includes(report.id)}
-                            onCheckedChange={(checked) => {
-                              setScheduleForm(prev => ({
-                                ...prev,
-                                reportTypes: checked
-                                  ? [...(prev.reportTypes || []), report.id]
-                                  : (prev.reportTypes || []).filter((id) => id !== report.id),
-                              }));
-                            }}
-                          />
-                          <Label htmlFor={`schedule-${report.id}`} className="text-sm font-normal cursor-pointer">
-                            {report.label}
-                          </Label>
+                          <div onClick={(e) => e.stopPropagation()} className="shrink-0 pt-0.5">
+                            <Checkbox
+                              id={`report-${report.id}`}
+                              checked={formData.report_types.includes(report.id)}
+                              onCheckedChange={() => handleReportTypeToggle(report.id)}
+                            />
+                          </div>
+                          <div className="grid gap-1 flex-1 min-w-0">
+                            <div className="flex items-center gap-2 text-sm font-medium leading-none">
+                              <span className="text-base" aria-hidden>{report.icon}</span>
+                              {report.label}
+                            </div>
+                            <p className="text-sm text-muted-foreground">{report.description}</p>
+                          </div>
                         </div>
                       ))}
                     </div>
                   )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Filters use the dashboard selection above. The automated report will include data from the <strong>previous week</strong> (last 7 days).
-                </p>
-                <Button onClick={saveSchedule} disabled={savingSchedule} className="gap-2">
-                  {savingSchedule && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {savingSchedule ? 'Saving...' : 'Save Schedule'}
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                </CardContent>
+              </Card>
 
-      {/* Report duration */}
-      <Card className="border border-border bg-card">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-base text-foreground">Report duration</CardTitle>
-          </div>
-          <CardDescription className="text-muted-foreground">
-            Choose the date range for the report. The dashboard filters above will update to match.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6 text-foreground">
-          <RadioGroup
-            value={formData.duration_type}
-            onValueChange={handleDurationChange}
-            className="grid grid-cols-2 sm:grid-cols-4 gap-3"
-          >
-            {durationOptions.map((opt) => (
-              <div key={opt.id} className="flex items-center space-x-2">
-                <RadioGroupItem value={opt.id} id={`duration-${opt.id}`} />
-                <Label htmlFor={`duration-${opt.id}`} className="cursor-pointer text-sm font-normal">
-                  {opt.label}
-                </Label>
-              </div>
-            ))}
-          </RadioGroup>
-          {(formData.duration_type === 'days' || formData.duration_type === 'weeks' || formData.duration_type === 'months') && (
-            <div className="flex flex-wrap items-center gap-3">
-              <Label htmlFor="duration-count" className="text-sm text-muted-foreground shrink-0">
-                {formData.duration_type === 'days' && 'Number of days'}
-                {formData.duration_type === 'weeks' && 'Number of weeks'}
-                {formData.duration_type === 'months' && 'Number of months'}
-              </Label>
-              <Input
-                id="duration-count"
-                type="number"
-                min={1}
-                max={formData.duration_type === 'days' ? 365 : formData.duration_type === 'weeks' ? 52 : 60}
-                value={formData.duration_count === '' ? '' : formData.duration_count}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === '') {
-                    setFormData(prev => ({ ...prev, duration_count: '' }));
-                    return;
-                  }
-                  const num = parseInt(raw, 10);
-                  if (Number.isNaN(num)) return;
-                  const max = formData.duration_type === 'days' ? 365 : formData.duration_type === 'weeks' ? 52 : 60;
-                  const val = Math.max(1, Math.min(max, num));
-                  setFormData(prev => ({ ...prev, duration_count: val }));
-                  applyDurationToFilters(formData.duration_type, val);
-                }}
-                onBlur={() => {
-                  if (formData.duration_count === '') {
-                    setFormData(prev => ({ ...prev, duration_count: 1 }));
-                    applyDurationToFilters(formData.duration_type, 1);
-                  }
-                }}
-                className="w-24"
-              />
-              <span className="text-sm text-muted-foreground">
-                {formData.duration_type === 'days' && `Last ${Number(formData.duration_count) || 1} day${(Number(formData.duration_count) || 1) > 1 ? 's' : ''}`}
-                {formData.duration_type === 'weeks' && `Last ${Number(formData.duration_count) || 1} week${(Number(formData.duration_count) || 1) > 1 ? 's' : ''}`}
-                {formData.duration_type === 'months' && `Last ${Number(formData.duration_count) || 1} month${(Number(formData.duration_count) || 1) > 1 ? 's' : ''}`}
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              {/* Data updating notice */}
+              {isReportDataUpdating && (
+                <Alert className="border-amber-500/50 bg-amber-500/10 dark:bg-amber-500/15 dark:border-amber-500/40">
+                  <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400" />
+                  <AlertDescription>
+                    <span className="font-medium text-foreground">Data is Syncing.</span> Wait for the report data above to finish loading before sending or exporting.
+                  </AlertDescription>
+                </Alert>
+              )}
 
-      {/* Report types */}
-      <Card className="border border-border bg-card">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div className="space-y-1.5">
-            <CardTitle className="text-base text-foreground">Reports to include</CardTitle>
-            <CardDescription className="text-muted-foreground">Select which sections appear in the email and PDF report.</CardDescription>
-          </div>
-          {reportTypes.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={handleAllReportsToggle}>
-              {reportTypes.every((r) => formData.report_types.includes(r.id)) ? 'Deselect all' : 'Select all'}
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          {reportTypes.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">
-              No report types are available for your role. Contact your administrator to enable report types.
-            </p>
-          ) : (
-            <div className="grid gap-3">
-              {reportTypes.map((report) => (
+              {/* Actions */}
+              <Card className="border border-border bg-card">
+                <CardContent className="pt-6">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button
+                      size="lg"
+                      className="flex-1 gap-2"
+                      onClick={handleSendNow}
+                      disabled={actionDisabled}
+                      title={
+                        isReportDataUpdating ? 'Please wait for data to finish updating' :
+                          userLoading ? 'Loading user information...' :
+                            !userEmail ? 'User email not available' :
+                              formData.report_types.length === 0 ? 'Please select at least one report type' :
+                                'Send email report now'
+                      }
+                    >
+                      {sendingNow ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : userLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : isReportDataUpdating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Wait for data...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4" />
+                          Email me now
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="flex-1 gap-2"
+                      onClick={handleExportPdf}
+                      disabled={actionDisabled}
+                      title={
+                        isReportDataUpdating ? 'Please wait for data to finish updating' :
+                          userLoading ? 'Loading user information...' :
+                            !userEmail ? 'User email not available' :
+                              formData.report_types.length === 0 ? 'Please select at least one report type' :
+                                'Export report to PDF'
+                      }
+                    >
+                      {exportingPdf ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Exporting...
+                        </>
+                      ) : isReportDataUpdating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Wait for data...
+                        </>
+                      ) : (
+                        <>
+                          <FileDown className="h-4 w-4" />
+                          Export to PDF
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Full-page overlay when exporting PDF — prevents UI freeze perception */}
+              {exportingPdf && (
                 <div
-                  key={report.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleReportTypeToggle(report.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleReportTypeToggle(report.id);
-                    }
-                  }}
-                  className="flex items-start space-x-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 cursor-pointer select-none"
+                  className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm"
+                  aria-live="polite"
+                  aria-busy="true"
+                  role="status"
                 >
-                  <div onClick={(e) => e.stopPropagation()} className="shrink-0 pt-0.5">
-                    <Checkbox
-                      id={`report-${report.id}`}
-                      checked={formData.report_types.includes(report.id)}
-                      onCheckedChange={() => handleReportTypeToggle(report.id)}
-                    />
-                  </div>
-                  <div className="grid gap-1 flex-1 min-w-0">
-                    <div className="flex items-center gap-2 text-sm font-medium leading-none">
-                      <span className="text-base" aria-hidden>{report.icon}</span>
-                      {report.label}
-                    </div>
-                    <p className="text-sm text-muted-foreground">{report.description}</p>
+                  <div className="flex flex-col items-center gap-5 rounded-xl border bg-card p-8 shadow-lg max-w-md w-full mx-4">
+                    <Loader2 className="h-10 w-10 animate-spin text-primary" aria-hidden />
+                    <p className="text-center font-medium text-foreground">Exporting PDF…</p>
+                    {exportProgress.washTotal > 0 ? (
+                      <>
+                        <p className="text-center text-sm text-muted-foreground">
+                          Wash records: <span className="font-semibold text-foreground">{exportProgress.washProcessed} of {exportProgress.washTotal}</span> (in batches of 12)
+                        </p>
+                        <div className="flex flex-wrap gap-2 justify-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { exportCancelRef.current = true; }}
+                            className="gap-1.5"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => { exportCurrentRef.current = true; }}
+                            className="gap-1.5"
+                          >
+                            Export current ({exportProgress.washProcessed} records)
+                          </Button>
+                        </div>
+                        <p className="text-center text-xs text-muted-foreground">
+                          Cancel stops the export. Export current downloads the PDF with the wash records processed so far.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="max-w-sm text-center text-sm text-muted-foreground">
+                        Building your report. This may take a moment for large reports.
+                      </p>
+                    )}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {/* Hidden PDF container */}
+              <div
+                ref={pdfContainerRef}
+                style={{
+                  position: 'fixed',
+                  width: '860px',
+                  minHeight: pdfHtml
+                    ? (formData.report_types.length === 1 && formData.report_types.includes('compliance') ? '600px' : '1100px')
+                    : '0px',
+                  padding: '28px',
+                  background: 'linear-gradient(135deg, hsl(220, 13%, 91%) 0%, #e2e8f0 100%)',
+                  top: '-99999px',
+                  left: '0',
+                  pointerEvents: 'none',
+                  zIndex: -9999,
+                  overflow: 'visible',
+                  visibility: pdfHtml ? 'visible' : 'hidden',
+                }}
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: pdfHtml }}
+              />
+
+              {/* Info */}
+              <Alert className="border-border bg-muted/30">
+                <Info className="h-4 w-4 text-muted-foreground" />
+                <AlertDescription>
+                  The report uses the date range and current filters (customer, site, drivers) from the dashboard above. Reports will be sent to{' '}
+                  <strong className="text-foreground">{userEmail || 'your email'}</strong>.
+                </AlertDescription>
+              </Alert>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Data updating notice */}
-      {isReportDataUpdating && (
-        <Alert className="border-amber-500/50 bg-amber-500/10 dark:bg-amber-500/15 dark:border-amber-500/40">
-          <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400" />
-          <AlertDescription>
-            <span className="font-medium text-foreground">Data is Syncing.</span> Wait for the report data above to finish loading before sending or exporting.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Actions */}
-      <Card className="border border-border bg-card">
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button
-              size="lg"
-              className="flex-1 gap-2"
-              onClick={handleSendNow}
-              disabled={actionDisabled}
-              title={
-                isReportDataUpdating ? 'Please wait for data to finish updating' :
-                  userLoading ? 'Loading user information...' :
-                    !userEmail ? 'User email not available' :
-                      formData.report_types.length === 0 ? 'Please select at least one report type' :
-                        'Send email report now'
-              }
-            >
-              {sendingNow ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Sending...
-                </>
-              ) : userLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading...
-                </>
-              ) : isReportDataUpdating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Wait for data...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Email me now
-                </>
-              )}
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="flex-1 gap-2"
-              onClick={handleExportPdf}
-              disabled={actionDisabled}
-              title={
-                isReportDataUpdating ? 'Please wait for data to finish updating' :
-                  userLoading ? 'Loading user information...' :
-                    !userEmail ? 'User email not available' :
-                      formData.report_types.length === 0 ? 'Please select at least one report type' :
-                        'Export report to PDF'
-              }
-            >
-              {exportingPdf ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Exporting...
-                </>
-              ) : isReportDataUpdating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Wait for data...
-                </>
-              ) : (
-                <>
-                  <FileDown className="h-4 w-4" />
-                  Export to PDF
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Hidden PDF container */}
-      <div
-        ref={pdfContainerRef}
-        style={{
-          position: 'fixed',
-          width: '860px',
-          minHeight: pdfHtml
-            ? (formData.report_types.length === 1 && formData.report_types.includes('compliance') ? '600px' : '1100px')
-            : '0px',
-          padding: '28px',
-          background: 'linear-gradient(135deg, hsl(220, 13%, 91%) 0%, #e2e8f0 100%)',
-          top: '-99999px',
-          left: '0',
-          pointerEvents: 'none',
-          zIndex: -9999,
-          overflow: 'visible',
-          visibility: pdfHtml ? 'visible' : 'hidden',
-        }}
-        aria-hidden="true"
-        dangerouslySetInnerHTML={{ __html: pdfHtml }}
-      />
-
-      {/* Info */}
-      <Alert className="border-border bg-muted/30">
-        <Info className="h-4 w-4 text-muted-foreground" />
-        <AlertDescription>
-          The report uses the date range and current filters (customer, site, drivers) from the dashboard above. Reports will be sent to{' '}
-          <strong className="text-foreground">{userEmail || 'your email'}</strong>.
-        </AlertDescription>
-      </Alert>
-          </div>
-        </TabsContent>
+          </TabsContent>
         )}
         {allowedEmailSubtabs.some((t) => t.value === 'client-usage-cost-report') && (
-        <TabsContent value="client-usage-cost-report" className="mt-4 focus-visible:outline-none">
-          <UsageCostsClientReports
-            selectedCustomer={reportData?.selectedCustomer}
-            selectedSite={reportData?.selectedSite}
-            dateRange={reportData?.dateRange ?? defaultDateRange}
-          />
-        </TabsContent>
+          <TabsContent value="client-usage-cost-report" className="mt-4 focus-visible:outline-none">
+            <UsageCostsClientReports
+              selectedCustomer={reportData?.selectedCustomer}
+              selectedSite={reportData?.selectedSite}
+              dateRange={reportData?.dateRange ?? defaultDateRange}
+              dashboardComplianceRate={reportData?.stats?.complianceRate}
+            />
+          </TabsContent>
         )}
       </Tabs>
     </div>
