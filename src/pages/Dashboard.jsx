@@ -181,7 +181,7 @@ function getOnTrackStatus(vehicle, dateRange, activePeriod) {
 }
 
 // Tabs that use filters (customer, site, date) - shared across all tabs
-const FILTER_TABS = ['compliance', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
+const FILTER_TABS = ['compliance', 'vehicle-image-log', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports'];
 
 // Email Reports uses the same shared filters as other tabs
 const REPORT_FILTER_SOURCE = 'compliance';
@@ -192,6 +192,7 @@ const PATH_TO_TAB = {
   '/Dashboard': 'dashboard',
   '/dashboard': 'dashboard',
   '/compliance': 'compliance',
+  '/vehicle-image-log': 'vehicle-image-log',
   '/operations-log': 'operations-log',
   '/usage-costs': 'costs',
   '/refills': 'refills',

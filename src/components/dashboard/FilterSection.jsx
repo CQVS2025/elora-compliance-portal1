@@ -51,6 +51,8 @@ export default function FilterSection({
   isResetting = false,
   suppressDriverDropdownLoader = false,
   lastSyncedAt = null,
+  hideDeviceFilter = false,
+  hideDateRange = false,
 }) {
   const driverOptions = useMemo(() => {
     const list = vehiclesForDriverFilter || [];
@@ -207,7 +209,7 @@ export default function FilterSection({
             </div>
           )}
 
-          {typeof setSelectedDeviceId === 'function' && (
+          {!hideDeviceFilter && typeof setSelectedDeviceId === 'function' && (
             <div className="w-[160px] shrink-0">
               <Select
                 value={selectedDeviceId}
@@ -228,45 +230,47 @@ export default function FilterSection({
             </div>
           )}
 
-          <div className="w-[260px] shrink-0">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="h-10 w-full min-w-0 justify-start rounded-lg text-left font-normal"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 truncate">
-                    {dateRange?.start && dateRange?.end ? (
-                      <>
-                        {format(new Date(dateRange.start), 'dd/MM/yyyy')} – {format(new Date(dateRange.end), 'dd/MM/yyyy')}
-                      </>
-                    ) : (
-                      <span className="text-muted-foreground">Pick a date range</span>
-                    )}
-                  </span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="range"
-                  defaultMonth={dateRange?.start ? new Date(dateRange.start) : undefined}
-                  selected={
-                    dateRange?.start && dateRange?.end
-                      ? { from: new Date(dateRange.start), to: new Date(dateRange.end) }
-                      : undefined
-                  }
-                  onSelect={(range) => {
-                    if (!range?.from) return;
-                    const start = format(range.from, 'yyyy-MM-dd');
-                    const end = range.to ? format(range.to, 'yyyy-MM-dd') : start;
-                    setDateRange({ ...dateRange, start, end });
-                  }}
-                  numberOfMonths={2}
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
+          {!hideDateRange && (
+            <div className="w-[260px] shrink-0">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="h-10 w-full min-w-0 justify-start rounded-lg text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 truncate">
+                      {dateRange?.start && dateRange?.end ? (
+                        <>
+                          {format(new Date(dateRange.start), 'dd/MM/yyyy')} – {format(new Date(dateRange.end), 'dd/MM/yyyy')}
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">Pick a date range</span>
+                      )}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    defaultMonth={dateRange?.start ? new Date(dateRange.start) : undefined}
+                    selected={
+                      dateRange?.start && dateRange?.end
+                        ? { from: new Date(dateRange.start), to: new Date(dateRange.end) }
+                        : undefined
+                    }
+                    onSelect={(range) => {
+                      if (!range?.from) return;
+                      const start = format(range.from, 'yyyy-MM-dd');
+                      const end = range.to ? format(range.to, 'yyyy-MM-dd') : start;
+                      setDateRange({ ...dateRange, start, end });
+                    }}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
 
           {onResetDateRange && (
             <Button

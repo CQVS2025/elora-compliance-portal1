@@ -202,32 +202,32 @@ export function getAccessibleTabs(userProfile) {
 
   // Super admin sees all tabs (Users tab moved to Admin console). SMS Alerts on by default only for super_admin. Edit Operations Log on by default for super_admin.
   if (role === 'super_admin') {
-    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+    return ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
   }
 
   // Admin and all other roles: SMS Alerts off by default. Edit Operations Log on by default for admin.
   if (role === 'admin') {
-    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'];
   }
 
   // Manager sees most tabs (limited to assigned sites). Stock & Orders = Manager view (Order Requests + Stock Takes only).
   if (role === 'manager') {
-    return ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // User (demo) sees same as admin but limited to assigned company/companies. No operations-log-edit by default.
   if (role === 'user') {
-    return ['dashboard', 'compliance', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // Batcher sees same as admin but locked to a single assigned site. No operations-log-edit by default.
   if (role === 'batcher') {
-    return ['dashboard', 'compliance', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   // Driver sees only compliance and leaderboard (assigned vehicles only); Operations Log off by default
   if (role === 'driver') {
-    return ['dashboard', 'compliance', 'leaderboard', 'delivery-calendar'];
+    return ['dashboard', 'compliance', 'vehicle-image-log', 'leaderboard', 'delivery-calendar'];
   }
 
   // Delivery Manager: Delivery Calendar + Stock & Orders (Agent view: Stock Take + Request Parts)
@@ -237,7 +237,7 @@ export function getAccessibleTabs(userProfile) {
 
   // Viewer sees read-only tabs (no operations-log-edit)
   if (role === 'viewer') {
-    return ['dashboard', 'compliance', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
+    return ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'];
   }
 
   return ['dashboard', 'compliance', 'leaderboard'];

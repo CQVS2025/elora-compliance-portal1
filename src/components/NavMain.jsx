@@ -15,8 +15,9 @@ import {
   ClipboardList,
   CalendarDays,
   Package,
+  ImageIcon,
 } from 'lucide-react';
-import { useAvailableTabs } from '@/components/auth/PermissionGuard';
+import { useAvailableTabs, usePermissions } from '@/components/auth/PermissionGuard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   SidebarGroup,
@@ -34,6 +35,7 @@ const DASHBOARD_NAV_ITEM = { value: 'dashboard', label: 'Dashboard', icon: Layou
 const ALL_TABS = [
   DASHBOARD_NAV_ITEM,
   { value: 'compliance', label: 'Compliance', icon: Home, path: '/compliance' },
+  { value: 'vehicle-image-log', label: 'Vehicle Image Log', icon: ImageIcon, path: '/vehicle-image-log' },
   { value: 'operations-log', label: 'Operations Log', icon: ClipboardList, path: '/operations-log' },
   { value: 'delivery-calendar', label: 'Delivery Calendar', icon: CalendarDays, path: '/delivery-calendar' },
   { value: 'stock-orders', label: 'Stock & Orders', icon: Package, path: '/stock-orders' },
@@ -96,10 +98,12 @@ function NavItem({ item, isActive, onNavigate }) {
 export default function NavMain() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { effectiveTabValues = [] } = usePermissions();
   const availableTabs = useAvailableTabs(MAIN_TABS);
   const availableIntelligenceTabs = useAvailableTabs(INTELLIGENCE_TABS);
   const currentPath = location.pathname;
   const isDashboardActive = currentPath === '/' || currentPath === '/dashboard' || currentPath === '/Dashboard';
+  const showDashboard = effectiveTabValues.includes('dashboard');
 
   return (
     <>
@@ -107,7 +111,9 @@ export default function NavMain() {
         <SidebarGroupLabel>Navigation</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            <NavItem item={DASHBOARD_NAV_ITEM} isActive={isDashboardActive} onNavigate={navigate} />
+            {showDashboard && (
+              <NavItem item={DASHBOARD_NAV_ITEM} isActive={isDashboardActive} onNavigate={navigate} />
+            )}
             {availableTabs.map((item) => {
               const isActive = currentPath === item.path;
               return <NavItem key={item.value} item={item} isActive={isActive} onNavigate={navigate} />;

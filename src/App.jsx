@@ -11,6 +11,7 @@ import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
+import NoAccess from './pages/NoAccess';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
@@ -133,6 +134,13 @@ const AuthenticatedApp = () => {
           <AuthenticatedRoute>
             <DashboardLayout>
               <MainPage />
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/vehicle-image-log" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.VehicleImageLog)}
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
@@ -459,6 +467,13 @@ const AuthenticatedApp = () => {
             <DashboardLayout>
               <Pages.Settings />
             </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+
+        {/* No tab access - user has no visible tabs; show message and sign out option */}
+        <Route path="/no-access" element={
+          <AuthenticatedRoute>
+            <NoAccess />
           </AuthenticatedRoute>
         } />
 

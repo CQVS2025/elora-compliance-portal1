@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { LayoutDashboard, Truck, MapPin, GitCompare, Calculator, Lightbulb, Wallet } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import UsageCostsOverview from './UsageCostsOverview';
 import UsageCostsPerTruck from './UsageCostsPerTruck';
@@ -57,16 +58,23 @@ export default function UsageCosts({ selectedCustomer, selectedSite, dateRange }
   return (
     <div className="space-y-4 min-w-0 w-full overflow-hidden">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex flex-wrap h-auto min-h-[3.25rem] gap-2 bg-muted/50 p-2 w-full rounded-xl">
+        <TabsList className="flex flex-wrap h-auto min-h-[3.5rem] gap-2 bg-muted/60 p-2.5 w-full rounded-xl border border-border/60">
           {allowedTabs.map((tab) => {
             const Icon = tab.icon;
+            const isActive = activeTab === tab.value;
             return (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="flex items-center gap-2 px-5 py-3 text-base font-medium min-h-[2.75rem] data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+                className={cn(
+                  'flex items-center gap-2.5 px-5 py-3 text-base min-h-[2.75rem] rounded-lg cursor-pointer',
+                  'transition-all duration-200 ease-out',
+                  'text-blue-600 dark:text-blue-400 font-semibold',
+                  'hover:bg-blue-100/80 dark:hover:bg-blue-950/50 hover:text-blue-700 dark:hover:text-blue-300',
+                  'data-[state=active]:bg-blue-100 dark:data-[state=active]:bg-blue-950/60 data-[state=active]:text-blue-700 dark:data-[state=active]:text-blue-300 data-[state=active]:font-bold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-blue-200 dark:data-[state=active]:ring-blue-800'
+                )}
               >
-                <Icon className="w-5 h-5 shrink-0" />
+                <Icon className={cn('w-5 h-5 shrink-0', isActive ? 'text-blue-700 dark:text-blue-300' : 'text-blue-600/90 dark:text-blue-400/90')} />
                 {tab.label}
               </TabsTrigger>
             );

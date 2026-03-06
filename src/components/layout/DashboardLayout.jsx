@@ -6,7 +6,7 @@ import NavMain from '@/components/NavMain';
 import NavUser from '@/components/NavUser';
 import SiteHeader from '@/components/SiteHeader';
 import { useAuth } from '@/lib/AuthContext';
-import { usePermissions } from '@/components/auth/PermissionGuard';
+import { usePermissions, useFirstAccessiblePath } from '@/components/auth/PermissionGuard';
 
 const ELORA_LOGO_URL = 'https://mtjfypwrtvzhnzgatoim.supabase.co/storage/v1/object/public/EloraBucket/company-logos/89d845f5-e06f-4d47-8137-b58c79245a6c/1770066973198-3tv73wrjy56.jpg';
 
@@ -15,6 +15,7 @@ const PATH_TO_HEADER = {
   '/Dashboard': { title: 'Dashboard', description: 'Welcome and overview' },
   '/dashboard': { title: 'Dashboard', description: 'Welcome and overview' },
   '/compliance': { title: 'Compliance', description: 'Fleet compliance overview' },
+  '/vehicle-image-log': { title: 'Vehicle Image Log', description: 'Upload and view vehicle images' },
   '/usage-costs': { title: 'Usage Costs', description: 'Cost and usage analytics' },
   '/tank-levels': { title: 'Tank Levels', description: 'Real-time chemical inventory monitoring' },
   '/refills': { title: 'Tank Levels', description: 'Real-time chemical inventory monitoring' }, // Legacy redirect
@@ -50,6 +51,7 @@ const PATH_TO_TAB = {
   '/Dashboard': 'dashboard',
   '/dashboard': 'dashboard',
   '/compliance': 'compliance',
+  '/vehicle-image-log': 'vehicle-image-log',
   '/usage-costs': 'costs',
   '/tank-levels': 'refills',
   '/refills': 'refills',
@@ -66,6 +68,14 @@ const PATH_TO_TAB = {
   '/delivery-calendar': 'delivery-calendar',
   '/stock-orders': 'stock-orders',
 };
+
+/** Resolve pathname to tab value; includes sub-routes (e.g. /operations-log/entry/5 -> operations-log, /vehicle/5 -> sites). */
+function getTabForPath(pathname) {
+  if (PATH_TO_TAB[pathname] != null) return PATH_TO_TAB[pathname];
+  if (pathname.startsWith('/operations-log/')) return 'operations-log';
+  if (pathname.startsWith('/vehicle/')) return 'sites';
+  return null;
+}
 
 function getPathHeader(pathname) {
   if (pathname.startsWith('/vehicle/')) return { title: 'Vehicle details', description: 'Wash history, compliance & analytics' };
@@ -91,6 +101,7 @@ export default function DashboardLayout({ children, title: titleProp, descriptio
   const location = useLocation();
   const { userProfile } = useAuth();
   const { effectiveTabValues = [] } = usePermissions();
+  const { firstPath, hasDashboard, hasNoAccess } = useFirstAccessiblePath();
   const pathHeader = getPathHeader(location.pathname);
   const title = titleProp ?? pathHeader?.title ?? 'Dashboard';
   const description = descriptionProp ?? pathHeader?.description ?? null;
@@ -99,10 +110,20 @@ export default function DashboardLayout({ children, title: titleProp, descriptio
   const companyLogoUrl = userProfile?.company_logo_url;
   const isSuperAdmin = userProfile?.role === 'super_admin';
 
-  const tabForPath = PATH_TO_TAB[location.pathname];
-  const isDashboardTab = tabForPath === 'dashboard';
-  if (tabForPath != null && !isDashboardTab && effectiveTabValues.length > 0 && !effectiveTabValues.includes(tabForPath)) {
-    return <Navigate to="/" replace />;
+  const pathname = location.pathname;
+  const tabForPath = getTabForPath(pathname);
+  const isDashboardPath = pathname === '/' || pathname === '/dashboard' || pathname === '/Dashboard';
+
+  if (pathname === '/no-access') {
+    // Allow no-access page to render (handled by its own route)
+  } else if (isDashboardPath) {
+    if (!hasDashboard) {
+      if (hasNoAccess) return <Navigate to="/no-access" replace />;
+      if (firstPath && firstPath !== '/') return <Navigate to={firstPath} replace />;
+    }
+  } else if (tabForPath != null && !effectiveTabValues.includes(tabForPath)) {
+    if (hasNoAccess) return <Navigate to="/no-access" replace />;
+    return <Navigate to={firstPath || '/'} replace />;
   }
 
   return (

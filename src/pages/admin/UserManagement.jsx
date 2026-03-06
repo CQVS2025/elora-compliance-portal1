@@ -84,6 +84,7 @@ const ROLES = [
 const TAB_VISIBILITY_OPTIONS = [
   { value: 'dashboard', label: 'Dashboard' },
   { value: 'compliance', label: 'Compliance' },
+  { value: 'vehicle-image-log', label: 'Vehicle Image Log' },
   { value: 'operations-log', label: 'Operations Log' },
   { value: 'operations-log-edit', label: 'Create & Edit Operations Log' },
   { value: 'operations-log-products', label: 'Products in Operations Log entry' },
@@ -120,6 +121,16 @@ const EMAIL_REPORT_SUBTABS_UM = [
   { value: 'email-reports', label: 'Email Reports' },
   { value: 'client-usage-cost-report', label: 'Client Usage Cost Report' },
 ];
+
+// Column visibility for Users table (persisted in user_profiles.admin_users_table_visible_columns)
+const USER_TABLE_COLUMNS = [
+  { id: 'user', label: 'User' },
+  { id: 'presence', label: 'Presence' },
+  { id: 'role', label: 'Role' },
+  { id: 'company', label: 'Company' },
+  { id: 'status', label: 'Status' },
+];
+const USER_TABLE_COLUMN_IDS = USER_TABLE_COLUMNS.map((c) => c.id);
 
 export default function UserManagement() {
   const navigate = useNavigate();
@@ -211,7 +222,7 @@ export default function UserManagement() {
     if (!userForTabVisibility) return;
     const baseTabs = getBaseTabsForUser(userForTabVisibility);
     const current = userForTabVisibility.visible_tabs;
-    const base = Array.isArray(current) && current.length > 0 ? current : baseTabs;
+    const base = Array.isArray(current) ? current : baseTabs;
     setLocalTabVisibility(base.filter((t) => baseTabs.includes(t)));
     setLocalUserCostSubtabs(
       userForTabVisibility.visible_cost_subtabs === null || userForTabVisibility.visible_cost_subtabs === undefined
@@ -593,6 +604,42 @@ export default function UserManagement() {
     },
   });
 
+  // Visible columns for Users table (persisted; null/empty = show all)
+  const visibleColumnIds = useMemo(() => {
+    const raw = userProfile?.admin_users_table_visible_columns;
+    if (!Array.isArray(raw) || raw.length === 0) return USER_TABLE_COLUMN_IDS;
+    const filtered = raw.filter((id) => USER_TABLE_COLUMN_IDS.includes(id));
+    return filtered.length === 0 ? USER_TABLE_COLUMN_IDS : filtered;
+  }, [userProfile?.admin_users_table_visible_columns]);
+
+  const saveUsersTableColumnsMutation = useMutation({
+    mutationFn: async (columns) => {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          admin_users_table_visible_columns: columns.length > 0 ? columns : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userProfile.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, columns) => {
+      refetchProfile?.();
+      toast.success(columns.length === 0 ? 'Showing all columns' : 'Column visibility saved');
+    },
+    onError: (error) => {
+      toast.error(error?.message || 'Failed to save column visibility');
+    },
+  });
+
+  const toggleUsersTableColumn = (columnId) => {
+    const next = visibleColumnIds.includes(columnId)
+      ? visibleColumnIds.filter((id) => id !== columnId)
+      : [...visibleColumnIds, columnId];
+    const ordered = USER_TABLE_COLUMN_IDS.filter((id) => next.includes(id));
+    saveUsersTableColumnsMutation.mutate(ordered);
+  };
+
   const resetForm = () => {
     setFormData({
       email: '',
@@ -939,9 +986,43 @@ export default function UserManagement() {
 
       {/* Users Table */}
       <Card className="border-border">
-        <CardHeader>
-            <CardTitle>Users ({filteredUsers.length})</CardTitle>
-          </CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle>Users ({filteredUsers.length})</CardTitle>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <LayoutGrid className="h-4 w-4" />
+                Columns
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-2" align="end">
+              <p className="text-sm font-medium text-muted-foreground px-2 py-1.5">Toggle columns</p>
+              {USER_TABLE_COLUMNS.map((col) => (
+                <label
+                  key={col.id}
+                  className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-accent"
+                >
+                  <Checkbox
+                    checked={visibleColumnIds.includes(col.id)}
+                    onCheckedChange={() => toggleUsersTableColumn(col.id)}
+                    disabled={saveUsersTableColumnsMutation.isPending}
+                  />
+                  {col.label}
+                </label>
+              ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full mt-2 gap-2"
+                onClick={() => saveUsersTableColumnsMutation.mutate(USER_TABLE_COLUMN_IDS)}
+                disabled={saveUsersTableColumnsMutation.isPending || visibleColumnIds.length === USER_TABLE_COLUMN_IDS.length}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset to all
+              </Button>
+            </PopoverContent>
+          </Popover>
+        </CardHeader>
           <CardContent>
             {loadingUsers ? (
               <div className="flex items-center justify-center py-12">
@@ -957,13 +1038,21 @@ export default function UserManagement() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">User</th>
-                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">Presence</th>
-                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">Role</th>
-                        {isSuperAdmin && (
+                        {visibleColumnIds.includes('user') && (
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">User</th>
+                        )}
+                        {visibleColumnIds.includes('presence') && (
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Presence</th>
+                        )}
+                        {visibleColumnIds.includes('role') && (
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Role</th>
+                        )}
+                        {isSuperAdmin && visibleColumnIds.includes('company') && (
                           <th className="text-left py-3 px-4 font-medium text-muted-foreground">Company</th>
                         )}
-                        <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
+                        {visibleColumnIds.includes('status') && (
+                          <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
+                        )}
                         <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
                       </tr>
                     </thead>
@@ -975,45 +1064,53 @@ export default function UserManagement() {
 
                         return (
                       <tr key={user.id} className="border-b hover:bg-muted/50">
-                        <td className="py-3 px-4">
-                          <UserAvatarWithPresence
-                            name={user.full_name}
-                            email={user.email}
-                            avatarUrl={user.avatar_url}
-                            isOnline={isOnline}
-                          />
-                        </td>
-                        <td className="py-3 px-4">
-                          {lastSeenAt ? (
-                            <div className="flex flex-col gap-0.5">
-                              {isOnline ? (
-                                <span className="text-sm font-medium text-green-600 dark:text-green-400">Online</span>
-                              ) : (
-                                <span className="text-sm text-muted-foreground">
-                                  Last seen {moment(lastSeenAt).fromNow()}
+                        {visibleColumnIds.includes('user') && (
+                          <td className="py-3 px-4">
+                            <UserAvatarWithPresence
+                              name={user.full_name}
+                              email={user.email}
+                              avatarUrl={user.avatar_url}
+                              isOnline={isOnline}
+                            />
+                          </td>
+                        )}
+                        {visibleColumnIds.includes('presence') && (
+                          <td className="py-3 px-4">
+                            {lastSeenAt ? (
+                              <div className="flex flex-col gap-0.5">
+                                {isOnline ? (
+                                  <span className="text-sm font-medium text-green-600 dark:text-green-400">Online</span>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">
+                                    Last seen {moment(lastSeenAt).fromNow()}
+                                  </span>
+                                )}
+                                <span className="text-xs text-muted-foreground" title="Last seen at">
+                                  {moment(lastSeenAt).format('MMM D, YYYY, h:mm A')}
                                 </span>
-                              )}
-                              <span className="text-xs text-muted-foreground" title="Last seen at">
-                                {moment(lastSeenAt).format('MMM D, YYYY, h:mm A')}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">{getRoleBadge(user.role)}</td>
-                        {isSuperAdmin && (
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        )}
+                        {visibleColumnIds.includes('role') && (
+                          <td className="py-3 px-4">{getRoleBadge(user.role)}</td>
+                        )}
+                        {isSuperAdmin && visibleColumnIds.includes('company') && (
                           <td className="py-3 px-4">
                             <span className="text-muted-foreground">{user.companies?.name || '-'}</span>
                           </td>
                         )}
-                        <td className="py-3 px-4">
-                          {user.is_active !== false ? (
-                            <Badge variant="default">Active</Badge>
-                          ) : (
-                            <Badge variant="secondary">Inactive</Badge>
-                          )}
-                        </td>
+                        {visibleColumnIds.includes('status') && (
+                          <td className="py-3 px-4">
+                            {user.is_active !== false ? (
+                              <Badge variant="default">Active</Badge>
+                            ) : (
+                              <Badge variant="secondary">Inactive</Badge>
+                            )}
+                          </td>
+                        )}
                         <td className="py-3 px-4 text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -1869,7 +1966,7 @@ export default function UserManagement() {
                     const hasDeliveryCalendar = toSave.includes('delivery-calendar');
                     saveUserTabVisibilityMutation.mutate({
                       userId: userForTabVisibility.id,
-                      visibleTabs: toSave.length > 0 ? toSave : null,
+                      visibleTabs: toSave,
                       visibleDeliveryDriverIds: userForTabVisibility.role === 'delivery_manager'
                         ? (hasDeliveryCalendar && localVisibleDeliveryDriverIds.length > 0 ? localVisibleDeliveryDriverIds : null)
                         : undefined,
@@ -1877,7 +1974,7 @@ export default function UserManagement() {
                       visibleEmailReportSubtabs: localUserEmailReportSubtabs,
                     });
                   }}
-                  disabled={saveUserTabVisibilityMutation.isPending || localTabVisibility.length === 0}
+                  disabled={saveUserTabVisibilityMutation.isPending}
                 >
                   {saveUserTabVisibilityMutation.isPending && saveUserTabVisibilityMutation.variables?.visibleTabs !== null ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

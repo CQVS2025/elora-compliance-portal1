@@ -62,6 +62,7 @@ import { ChevronRight } from 'lucide-react';
 const TAB_VISIBILITY_OPTIONS = [
   { value: 'dashboard', label: 'Dashboard' },
   { value: 'compliance', label: 'Compliance' },
+  { value: 'vehicle-image-log', label: 'Vehicle Image Log' },
   { value: 'operations-log', label: 'Operations Log' },
   { value: 'operations-log-edit', label: 'Create & Edit Operations Log' },
   { value: 'operations-log-products', label: 'Products in Operations Log entry' },

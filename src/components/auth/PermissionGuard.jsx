@@ -107,7 +107,7 @@ export function getEffectiveConfig(email) {
   return null;
 }
 
-const ALL_TAB_VALUES = ['dashboard', 'compliance', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+const ALL_TAB_VALUES = ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
 
 /**
  * Get tabs allowed by role: Admin Console role override if set, else role default from getAccessibleTabs.
@@ -145,7 +145,7 @@ function getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides, comp
     : (companyTabList && companyTabList.length > 0
       ? roleTabs.filter((t) => companyTabList.includes(t))
       : roleTabs);
-  if (userProfile?.visible_tabs && userProfile.visible_tabs.length > 0) {
+  if (userProfile?.visible_tabs != null && Array.isArray(userProfile.visible_tabs)) {
     return userProfile.visible_tabs.filter((t) => baseTabs.includes(t));
   }
   if (perms.visible_tabs && perms.visible_tabs.length > 0) {
@@ -416,6 +416,50 @@ export function useAvailableTabs(allTabs) {
   return useMemo(() => {
     return allTabs.filter((tab) => effectiveTabValues.includes(tab.value));
   }, [allTabs, effectiveTabValues]);
+}
+
+/** Tab value to path in nav order (used for first accessible redirect). */
+const TAB_VALUE_TO_PATH = [
+  ['dashboard', '/'],
+  ['compliance', '/compliance'],
+  ['vehicle-image-log', '/vehicle-image-log'],
+  ['operations-log', '/operations-log'],
+  ['delivery-calendar', '/delivery-calendar'],
+  ['stock-orders', '/stock-orders'],
+  ['costs', '/usage-costs'],
+  ['refills', '/tank-levels'],
+  ['devices', '/device-health'],
+  ['sites', '/sites'],
+  ['reports', '/reports'],
+  ['email-reports', '/email-reports'],
+  ['branding', '/branding'],
+  ['leaderboard', '/leaderboard'],
+  ['ai-insights', '/ai-insights'],
+  ['sms-alerts', '/sms-alerts'],
+];
+
+/**
+ * Returns first path the user is allowed to access, whether they have dashboard,
+ * and whether they have no tabs (and are not admin) so they should see the no-access page.
+ */
+export function useFirstAccessiblePath() {
+  const permissions = usePermissions();
+  const effectiveTabValues = permissions.effectiveTabValues || [];
+  const isAdmin = permissions.isAdmin;
+
+  return useMemo(() => {
+    const hasDashboard = effectiveTabValues.includes('dashboard');
+    let firstPath = null;
+    for (const [value, path] of TAB_VALUE_TO_PATH) {
+      if (effectiveTabValues.includes(value)) {
+        firstPath = path;
+        break;
+      }
+    }
+    const hasNoAccess = firstPath == null && !isAdmin;
+    if (firstPath == null && isAdmin) firstPath = '/admin';
+    return { firstPath: firstPath ?? '/', hasDashboard, hasNoAccess };
+  }, [effectiveTabValues, isAdmin]);
 }
 
 export default PermissionGuard;

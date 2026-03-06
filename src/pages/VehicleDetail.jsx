@@ -17,6 +17,9 @@ import {
   BarChart3,
   TrendingUp,
   TrendingDown,
+  ImageIcon,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import moment from 'moment';
 import { Button } from '@/components/ui/button';
@@ -37,8 +40,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { format } from 'date-fns';
+import { Calendar as CalendarIcon } from 'lucide-react';
 import { vehiclesOptions, dashboardOptions, scansOptions } from '@/query/options';
+import { vehicleImageLogOptions, getVehicleImageUrl } from '@/query/options/vehicleImageLog';
+import { useUploadVehicleImage, useDeleteVehicleImage } from '@/query/mutations/vehicleImageLog';
 import { usePermissions } from '@/components/auth/PermissionGuard';
+import { useAuth } from '@/lib/AuthContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   VehicleWashActivityTrend,
@@ -305,18 +319,20 @@ export default function VehicleDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const permissions = usePermissions();
+  const { user } = useAuth();
   const companyId = permissions.userProfile?.company_id;
+  const fromVehicleImageLog = location.state?.fromVehicleImageLog === true;
 
-  const periodFromState = location.state?.fromDate && location.state?.toDate
-    ? { start: location.state.fromDate, end: location.state.toDate }
-    : null;
-  const scansDateRange = useMemo(() => {
-    if (periodFromState) return { from: periodFromState.start, to: periodFromState.end };
-    return {
-      from: moment().subtract(3, 'months').format('YYYY-MM-DD'),
-      to: moment().format('YYYY-MM-DD'),
-    };
-  }, [periodFromState]);
+  const [selectedDateRange, setSelectedDateRange] = useState(() => {
+    if (location.state?.fromDate && location.state?.toDate) {
+      return { start: location.state.fromDate, end: location.state.toDate };
+    }
+    return { start: DEFAULT_DATE_RANGE.start, end: DEFAULT_DATE_RANGE.end };
+  });
+  const scansDateRange = useMemo(
+    () => ({ from: selectedDateRange.start, to: selectedDateRange.end }),
+    [selectedDateRange.start, selectedDateRange.end]
+  );
 
   const { data: allVehicles = [], isLoading: vehiclesLoading, error: vehiclesError, dataUpdatedAt: vehiclesUpdatedAt } = useQuery({
     ...vehiclesOptions(companyId, {}),
@@ -336,8 +352,8 @@ export default function VehicleDetail() {
     ...dashboardOptions(companyId, {
       customerId: vehicle?.customerId ?? 'all',
       siteId: vehicle?.siteId ?? 'all',
-      startDate: periodFromState?.start ?? DEFAULT_DATE_RANGE.start,
-      endDate: periodFromState?.end ?? DEFAULT_DATE_RANGE.end,
+      startDate: selectedDateRange.start,
+      endDate: selectedDateRange.end,
     }),
     enabled: !!companyId && !!vehicle,
   });
@@ -364,8 +380,8 @@ export default function VehicleDetail() {
 
   const dashboardRowForVehicle = useMemo(() => {
     if (!vehicle?.vehicleRef || !dashboardData?.rows?.length) return null;
-    const start = periodFromState ? moment(periodFromState.start) : moment(DEFAULT_DATE_RANGE.start);
-    const end = periodFromState ? moment(periodFromState.end) : moment(DEFAULT_DATE_RANGE.end);
+    const start = moment(selectedDateRange.start);
+    const end = moment(selectedDateRange.end);
     const rows = dashboardData.rows.filter(
       (r) => r.vehicleRef === vehicle.vehicleRef && moment(`${r.year}-${String(r.month).padStart(2, '0')}-01`).isBetween(start, end, 'month', '[]')
     );
@@ -373,17 +389,17 @@ export default function VehicleDetail() {
       ? rows.reduce((latest, r) => (!latest || (r.lastScan && r.lastScan > latest) ? r.lastScan : latest), null)
       : vehicle.lastScanAt;
     return { lastScan, rows };
-  }, [vehicle, dashboardData, periodFromState]);
+  }, [vehicle, dashboardData, selectedDateRange.start, selectedDateRange.end]);
 
   const targetWashes = vehicle?.protocolNumber ?? 12;
   const washesPerDay = vehicle?.washesPerDay ?? (vehicle?.washesPerWeek ? Math.ceil(vehicle.washesPerWeek / 7) : 2);
   const periodStart = useMemo(
-    () => (periodFromState ? moment(periodFromState.start).startOf('day') : moment().startOf('month')),
-    [periodFromState]
+    () => moment(selectedDateRange.start).startOf('day'),
+    [selectedDateRange.start]
   );
   const periodEnd = useMemo(
-    () => (periodFromState ? moment(periodFromState.end).endOf('day') : moment().endOf('month')),
-    [periodFromState]
+    () => moment(selectedDateRange.end).endOf('day'),
+    [selectedDateRange.end]
   );
   const scansInPeriod = useMemo(() => {
     return scans.filter((s) => {
@@ -403,9 +419,7 @@ export default function VehicleDetail() {
   const [washHistoryPage, setWashHistoryPage] = useState(1);
   const [washHistoryPageSize, setWashHistoryPageSize] = useState(20);
   const washHistoryList = scansInPeriod;
-  const periodLabel = periodFromState
-    ? `${moment(periodFromState.start).format('D MMM YYYY')} – ${moment(periodFromState.end).format('D MMM YYYY')}`
-    : now.format('MMMM YYYY');
+  const periodLabel = `${moment(selectedDateRange.start).format('D MMM YYYY')} – ${moment(selectedDateRange.end).format('D MMM YYYY')}`;
   const washHistoryTotalPages = Math.max(1, Math.ceil(washHistoryList.length / washHistoryPageSize));
   const safePage = Math.min(washHistoryPage, washHistoryTotalPages);
   React.useEffect(() => {
@@ -420,6 +434,20 @@ export default function VehicleDetail() {
 
   const lastSyncedAt = Math.max(vehiclesUpdatedAt ?? 0, dashboardUpdatedAt ?? 0, scansUpdatedAt ?? 0) || null;
   const syncLabel = formatSyncAgo(lastSyncedAt);
+
+  const { data: imageLogEntries = [], isLoading: imageLogLoading } = useQuery(vehicleImageLogOptions(vehicleRef));
+  const uploadImageMutation = useUploadVehicleImage(vehicleRef);
+  const deleteImageMutation = useDeleteVehicleImage(vehicleRef);
+  const canManageVehicleImages = permissions.effectiveTabValues?.includes('vehicle-image-log') ?? false;
+  const fileInputRef = React.useRef(null);
+  const handleUploadClick = () => fileInputRef.current?.click();
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      uploadImageMutation.mutate({ file, userId: user?.id });
+    }
+    e.target.value = '';
+  };
 
   const isDetailLoading =
     vehiclesLoading ||
@@ -479,20 +507,52 @@ export default function VehicleDetail() {
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      <Button variant="ghost" onClick={() => navigate('/compliance')} className="gap-2 -ml-2 mb-1">
-        <ArrowLeft className="h-4 w-4" /> Back to Compliance
+      <Button variant="ghost" onClick={() => navigate(fromVehicleImageLog ? '/vehicle-image-log' : '/compliance')} className="gap-2 -ml-2 mb-1">
+        <ArrowLeft className="h-4 w-4" /> Back to {fromVehicleImageLog ? 'Vehicle Image Log' : 'Compliance'}
       </Button>
 
       {/* Breadcrumb + Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link to="/compliance" className="hover:text-foreground transition-colors">Compliance</Link>
+          <Link to={fromVehicleImageLog ? '/vehicle-image-log' : '/compliance'} className="hover:text-foreground transition-colors">
+            {fromVehicleImageLog ? 'Vehicle Image Log' : 'Compliance'}
+          </Link>
           <span aria-hidden>/</span>
           <span className="font-medium text-foreground truncate">{customerName}</span>
           <span aria-hidden>/</span>
           <span className="font-semibold text-foreground truncate">{displayName}</span>
         </nav>
         <div className="flex items-center gap-2 flex-wrap">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 min-w-[200px] justify-start text-left font-normal">
+                <CalendarIcon className="h-4 w-4 shrink-0" />
+                {selectedDateRange.start && selectedDateRange.end ? (
+                  `${format(new Date(selectedDateRange.start), 'dd MMM yyyy')} – ${format(new Date(selectedDateRange.end), 'dd MMM yyyy')}`
+                ) : (
+                  <span className="text-muted-foreground">Pick date range</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="range"
+                defaultMonth={selectedDateRange.start ? new Date(selectedDateRange.start) : undefined}
+                selected={
+                  selectedDateRange.start && selectedDateRange.end
+                    ? { from: new Date(selectedDateRange.start), to: new Date(selectedDateRange.end) }
+                    : undefined
+                }
+                onSelect={(range) => {
+                  if (!range?.from) return;
+                  const start = format(range.from, 'yyyy-MM-dd');
+                  const end = range.to ? format(range.to, 'yyyy-MM-dd') : start;
+                  setSelectedDateRange({ start, end });
+                }}
+                numberOfMonths={2}
+              />
+            </PopoverContent>
+          </Popover>
           {syncLabel && (
             <span className="text-xs text-muted-foreground">Live — Synced {syncLabel}</span>
           )}
@@ -544,7 +604,7 @@ export default function VehicleDetail() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  {periodFromState ? 'Washes in selected period' : 'Washes This Month'}
+                  Washes in selected period
                 </p>
                 <p className="text-2xl font-bold mt-1">{washesInPeriod}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">of {targetWashes} target</p>
@@ -597,84 +657,33 @@ export default function VehicleDetail() {
         </Card>
       </div>
 
-      {/* Identity & Status */}
+      {/* Scan Card Programmed Parameters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Hash className="h-4 w-4" /> Identity & Status
-          </CardTitle>
+        <CardHeader className="flex flex-row items-center gap-2">
+          <CreditCard className="h-4 w-4" />
+          <CardTitle className="text-base">Scan Card Programmed Parameters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Vehicle Reference</p>
-              <p className="font-mono text-sm mt-0.5">{orEmpty(vehicle.vehicleRef)}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="rounded-lg border bg-muted/30 p-4 text-center">
+              <p className="text-2xl font-bold">{vehicle.washTime1Seconds != null ? `${vehicle.washTime1Seconds}s` : '—'}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Wash Time</p>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Internal ID</p>
-              <p className="font-mono text-sm mt-0.5">{orEmpty(vehicle.internalVehicleId)}</p>
+            <div className="rounded-lg border bg-muted/30 p-4 text-center">
+              <p className="text-2xl font-bold">{orEmpty(vehicle.washesPerDay)}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Washes / Day</p>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">RFID Tag</p>
-              <p className="font-mono text-sm mt-0.5">{orEmpty(vehicle.vehicleRfid)}</p>
+            <div className="rounded-lg border bg-muted/30 p-4 text-center">
+              <p className="text-2xl font-bold">{orEmpty(vehicle.washesPerWeek)}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Washes / Week</p>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Status</p>
-              <p className="flex items-center gap-1.5 mt-0.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                {orEmpty(vehicle.statusLabel)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">First Name</p>
-              <p className="text-sm mt-0.5">{orEmpty(vehicle.legacyFirstName)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Last Name</p>
-              <p className="text-sm mt-0.5">{orEmpty(vehicle.legacyLastName)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Position</p>
-              <p className="text-sm mt-0.5">{orEmpty(vehicle.legacyPosition)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Record Created</p>
-              <p className="text-sm mt-0.5">{vehicle.createdAt ? moment(vehicle.createdAt).format('D MMM YYYY') : EMPTY_LABEL}</p>
+            <div className="rounded-lg border bg-muted/30 p-4 text-center">
+              <p className="text-2xl font-bold">{orEmpty(vehicle.protocolNumber)}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Target (Monthly)</p>
             </div>
           </div>
         </CardContent>
       </Card>
-
-      {/* Vehicle Analytics */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">Vehicle Analytics</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <VehicleWashActivityTrend
-            scans={scans}
-            dailyTarget={washesPerDay}
-            vehicleName={displayName}
-          />
-          <VehicleComplianceProgress
-            washesThisMonth={washesInPeriod}
-            targetWashes={targetWashes}
-            vehicleName={displayName}
-            monthLabel={now.format('MMM YYYY')}
-          />
-          <VehicleCumulativeWashesChart
-            scans={scansInPeriod}
-            targetWashes={targetWashes}
-            vehicleName={displayName}
-          />
-          <VehicleWashFrequencyByDay
-            scans={scansInPeriod}
-            vehicleName={displayName}
-            monthLabel={now.format('MMM YYYY')}
-          />
-        </div>
-        <div className="mt-6">
-          <VehicleWashActivityByHour scans={scans} vehicleName={displayName} />
-        </div>
-      </section>
 
       {/* Wash History */}
       <Card>
@@ -704,7 +713,7 @@ export default function VehicleDetail() {
             </div>
           ) : washHistoryList.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">
-              {periodFromState ? 'No wash scans in the selected period.' : 'No wash scans this month.'}
+              No wash scans in the selected period.
             </p>
           ) : (
             <>
@@ -800,29 +809,153 @@ export default function VehicleDetail() {
         </CardContent>
       </Card>
 
-      {/* Scan Card Programmed Parameters */}
+      {/* Vehicle Analytics */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4">Vehicle Analytics</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <VehicleWashActivityTrend
+            scans={scans}
+            dailyTarget={washesPerDay}
+            vehicleName={displayName}
+          />
+          <VehicleComplianceProgress
+            washesThisMonth={washesInPeriod}
+            targetWashes={targetWashes}
+            vehicleName={displayName}
+            monthLabel={now.format('MMM YYYY')}
+          />
+          <VehicleCumulativeWashesChart
+            scans={scansInPeriod}
+            targetWashes={targetWashes}
+            vehicleName={displayName}
+          />
+          <VehicleWashFrequencyByDay
+            scans={scansInPeriod}
+            vehicleName={displayName}
+            monthLabel={now.format('MMM YYYY')}
+          />
+        </div>
+        <div className="mt-6">
+          <VehicleWashActivityByHour scans={scans} vehicleName={displayName} />
+        </div>
+      </section>
+
+      {/* Vehicle Image Log – images uploaded for this vehicle (same as Vehicle Image Log tab) */}
       <Card>
-        <CardHeader className="flex flex-row items-center gap-2">
-          <CreditCard className="h-4 w-4" />
-          <CardTitle className="text-base">Scan Card Programmed Parameters</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="h-4 w-4" />
+            <CardTitle className="text-base">Vehicle Image Log</CardTitle>
+          </div>
+          {canManageVehicleImages && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleUploadClick}
+                disabled={uploadImageMutation.isPending}
+                className="gap-1"
+              >
+                {uploadImageMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Upload image
+              </Button>
+            </>
+          )}
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="rounded-lg border bg-muted/30 p-4 text-center">
-              <p className="text-2xl font-bold">{vehicle.washTime1Seconds != null ? `${vehicle.washTime1Seconds}s` : '—'}</p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Wash Time</p>
+          {imageLogLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-            <div className="rounded-lg border bg-muted/30 p-4 text-center">
-              <p className="text-2xl font-bold">{orEmpty(vehicle.washesPerDay)}</p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Washes / Day</p>
+          ) : imageLogEntries.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No images in the log for this vehicle yet. {canManageVehicleImages && 'Use "Upload image" to add photos.'}</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {imageLogEntries.map((entry) => {
+                const url = getVehicleImageUrl(entry.file_path);
+                return (
+                  <div key={entry.id} className="group relative rounded-lg border bg-muted/30 overflow-hidden aspect-square">
+                    {url ? (
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="block w-full h-full">
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                      </a>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">Image</div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 text-white text-xs">
+                      {entry.uploaded_at ? moment(entry.uploaded_at).format('D MMM YYYY, HH:mm') : ''}
+                    </div>
+                    {canManageVehicleImages && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => deleteImageMutation.mutate({ id: entry.id, filePath: entry.file_path })}
+                        disabled={deleteImageMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <div className="rounded-lg border bg-muted/30 p-4 text-center">
-              <p className="text-2xl font-bold">{orEmpty(vehicle.washesPerWeek)}</p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Washes / Week</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Identity & Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Hash className="h-4 w-4" /> Identity & Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Vehicle Reference</p>
+              <p className="font-mono text-sm mt-0.5">{orEmpty(vehicle.vehicleRef)}</p>
             </div>
-            <div className="rounded-lg border bg-muted/30 p-4 text-center">
-              <p className="text-2xl font-bold">{orEmpty(vehicle.protocolNumber)}</p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Target (Monthly)</p>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Internal ID</p>
+              <p className="font-mono text-sm mt-0.5">{orEmpty(vehicle.internalVehicleId)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">RFID Tag</p>
+              <p className="font-mono text-sm mt-0.5">{orEmpty(vehicle.vehicleRfid)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Status</p>
+              <p className="flex items-center gap-1.5 mt-0.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                {orEmpty(vehicle.statusLabel)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">First Name</p>
+              <p className="text-sm mt-0.5">{orEmpty(vehicle.legacyFirstName)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Last Name</p>
+              <p className="text-sm mt-0.5">{orEmpty(vehicle.legacyLastName)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Position</p>
+              <p className="text-sm mt-0.5">{orEmpty(vehicle.legacyPosition)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Record Created</p>
+              <p className="text-sm mt-0.5">{vehicle.createdAt ? moment(vehicle.createdAt).format('D MMM YYYY') : EMPTY_LABEL}</p>
             </div>
           </div>
         </CardContent>
