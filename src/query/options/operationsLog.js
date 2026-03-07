@@ -150,7 +150,7 @@ export function operationsLogEntriesOptions(companyId, filters = {}) {
           *,
           category:operations_log_categories(id,name),
           operations_log_vehicle_links(vehicle_id),
-          operations_log_attachments(id,file_name,file_size,mime_type)
+          operations_log_attachments(id,storage_path,file_name,file_size,mime_type,uploaded_at)
         `,
           { count: 'exact' }
         )

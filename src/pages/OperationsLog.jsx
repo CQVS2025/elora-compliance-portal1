@@ -26,6 +26,9 @@ import {
   Plus,
   Loader2,
   RotateCcw,
+  Building2,
+  Image as ImageIcon,
+  ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -48,12 +51,14 @@ import {
   operationsLogEntriesOptions,
   productsOptions,
   operationsLogMyPermissionsOptions,
+  companiesOptions,
 } from '@/query/options';
 import { supabase } from '@/lib/supabase';
 import { OperationsLogFeedView } from '@/components/operations-log/OperationsLogFeedView';
 import { OperationsLogTableView } from '@/components/operations-log/OperationsLogTableView';
 import { OperationsLogBoardView } from '@/components/operations-log/OperationsLogBoardView';
 import { OperationsLogCalendarView } from '@/components/operations-log/OperationsLogCalendarView';
+import { OperationsLogGalleryView } from '@/components/operations-log/OperationsLogGalleryView';
 import { NewEntryModal } from '@/components/operations-log/NewEntryModal';
 import {
   SummaryCardsSkeleton,
@@ -62,6 +67,7 @@ import {
   ActivityTableSkeleton,
   ActivityBoardSkeleton,
   ActivityCalendarSkeleton,
+  ActivityGallerySkeleton,
   FiltersRowSkeleton,
 } from '@/components/operations-log/OperationsLogSkeletons';
 import { MultiSelection } from '@/components/ui/multi-selection';
@@ -73,6 +79,7 @@ const VIEWS = [
   { value: 'table', label: 'Table', icon: Hash },
   { value: 'board', label: 'Board', icon: LayoutGrid },
   { value: 'calendar', label: 'Calendar', icon: CalendarIcon },
+  { value: 'gallery', label: 'Gallery', icon: ImageIcon },
 ];
 
 const OPS_LOG_CHART_CONFIG = {
@@ -128,22 +135,39 @@ export default function OperationsLog() {
         ? companyForCustomer
         : effectiveCompanyId;
 
-  const { data: customers = [], isLoading: customersLoading } = useQuery(customersOptions(effectiveCompanyId));
+  const showAllCompaniesInOpsLog = useMemo(() => {
+    const role = userProfile?.role;
+    const hasOpsLogTab = (permissions.effectiveTabValues || []).includes('operations-log');
+    const canSeeAllCompanies = permissions.isSuperAdmin || role === 'delivery_manager' || role === 'driver';
+    return !!(canSeeAllCompanies && hasOpsLogTab);
+  }, [userProfile?.role, permissions.isSuperAdmin, permissions.effectiveTabValues]);
+
+  const { data: customers = [], isLoading: customersLoading } = useQuery(
+    customersOptions(effectiveCompanyId, { allTenants: showAllCompaniesInOpsLog })
+  );
   const isSuperAdmin = permissions.isSuperAdmin;
 
-  // For admins (not super_admin): default customer to their company's customer; dropdown has no "All Customers" option
-  React.useEffect(() => {
-    if (isSuperAdmin) return;
-    if (effectiveCompanyId === 'all' || !effectiveCompanyId) return;
-    if (customers.length > 0 && customerRef === 'all') {
-      setCustomerRef(String(customers[0].id ?? customers[0].ref ?? ''));
-    }
-  }, [isSuperAdmin, effectiveCompanyId, customers, customerRef]);
+  const { data: companiesRaw = [] } = useQuery({
+    ...companiesOptions(showAllCompaniesInOpsLog ? 'all' : (effectiveCompanyId ?? 'all')),
+    enabled: showAllCompaniesInOpsLog || !!effectiveCompanyId || effectiveCompanyId === 'all',
+  });
+  const customerRefToCompany = useMemo(() => {
+    const m = {};
+    (companiesRaw || []).forEach((c) => {
+      const ref = c.elora_customer_ref;
+      if (ref != null && ref !== '') m[String(ref)] = c;
+    });
+    return m;
+  }, [companiesRaw]);
+
+  // Start at companies view; no longer auto-select first customer so user can use Company → Site → Logs flow
 
   const assignedSiteRefs = (permissions.isManager || permissions.isBatcher) && (permissions.assignedSites?.length > 0) ? permissions.assignedSites : undefined;
+  const sitesCompanyId = showAllCompaniesInOpsLog ? 'all' : (companyForQueries ?? effectiveCompanyId);
   const { data: sitesRaw = [], isLoading: sitesLoading } = useQuery(
-    sitesOptions(companyForQueries ?? effectiveCompanyId, {
+    sitesOptions(sitesCompanyId, {
       customerId: customerRef === 'all' ? undefined : customerRef,
+      allTenants: showAllCompaniesInOpsLog,
     })
   );
   const sites = React.useMemo(() => {
@@ -163,11 +187,12 @@ export default function OperationsLog() {
   }, [sitesRaw, customerRef, assignedSiteRefs]);
 
   const { data: vehiclesRaw = [], isLoading: vehiclesLoading } = useQuery({
-    ...vehiclesOptions(companyForQueries ?? effectiveCompanyId, {
+    ...vehiclesOptions(sitesCompanyId, {
       customerId: customerRef === 'all' ? undefined : customerRef,
       siteId: siteRef === 'all' ? undefined : siteRef,
+      allTenants: showAllCompaniesInOpsLog,
     }),
-    enabled: !!(companyForQueries ?? effectiveCompanyId),
+    enabled: !!sitesCompanyId,
   });
 
   const vehicleOptions = React.useMemo(() => {
@@ -362,6 +387,33 @@ export default function OperationsLog() {
     permissions.canEditOperationsLog &&
     (myOpsPermissions === undefined || myOpsPermissions?.can_create !== false);
 
+  const showCompaniesView = !customerRef || customerRef === 'all';
+  const showSitesView = customerRef && customerRef !== 'all' && (!siteRef || siteRef === 'all');
+  const showLogsView = customerRef && customerRef !== 'all' && siteRef && siteRef !== 'all';
+
+  const selectedCompanyName = useMemo(() => {
+    if (!customerRef || customerRef === 'all') return null;
+    const company = customerRefToCompany[String(customerRef)];
+    if (company?.name) return company.name;
+    const cust = (customers || []).find((c) => String(c.id ?? c.ref) === String(customerRef));
+    return cust?.name ?? null;
+  }, [customerRef, customerRefToCompany, customers]);
+
+  const selectedSiteName = useMemo(() => {
+    if (!siteRef || siteRef === 'all') return null;
+    return siteRefToName[String(siteRef)] ?? siteRef;
+  }, [siteRef, siteRefToName]);
+
+  const handleBackToCompanies = () => {
+    setCustomerRef('all');
+    setSiteRef('all');
+    setVehicleRefs([]);
+  };
+  const handleBackToSites = () => {
+    setSiteRef('all');
+    setVehicleRefs([]);
+  };
+
   const handleExport = () => {
     const headers = ['Title', 'Site', 'Category', 'Priority', 'Status', 'Assigned', 'Due', 'Created'];
     const rows = entries.map((e) => [
@@ -388,6 +440,37 @@ export default function OperationsLog() {
     <div className="min-w-0 space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6">
       <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
+          <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <button
+              type="button"
+              onClick={handleBackToCompanies}
+              className="hover:text-foreground transition-colors"
+            >
+              Operations Log
+            </button>
+            {selectedCompanyName && (
+              <>
+                <ChevronRight className="size-4 shrink-0" />
+                {showLogsView ? (
+                  <button
+                    type="button"
+                    onClick={handleBackToSites}
+                    className="hover:text-foreground transition-colors truncate max-w-[180px] sm:max-w-[240px]"
+                  >
+                    {selectedCompanyName}
+                  </button>
+                ) : (
+                  <span className="text-foreground font-medium truncate max-w-[180px] sm:max-w-[240px]">{selectedCompanyName}</span>
+                )}
+              </>
+            )}
+            {selectedSiteName && showLogsView && (
+              <>
+                <ChevronRight className="size-4 shrink-0" />
+                <span className="text-foreground font-medium truncate max-w-[180px] sm:max-w-[280px]">{selectedSiteName}</span>
+              </>
+            )}
+          </nav>
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate">Operations Log</h1>
           <p className="text-sm text-muted-foreground">Site activity tracking, notes & task management.</p>
         </div>
@@ -405,46 +488,109 @@ export default function OperationsLog() {
         </div>
       </div>
 
+      {/* Companies view: grid of companies (customers with logo) */}
+      {showCompaniesView && (
+        <>
+          {customersLoading ? (
+            <FiltersRowSkeleton />
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Select a company to see its sites and operational logs.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {customers.map((c) => {
+                  const company = customerRefToCompany[String(c.id ?? c.ref)];
+                  const logoUrl = company?.logo_url;
+                  const displayName = company?.name ?? c.name ?? '—';
+                  return (
+                    <button
+                      key={c.id ?? c.ref}
+                      type="button"
+                      onClick={() => setCustomerRef(String(c.id ?? c.ref))}
+                      className={cn(
+                        'rounded-xl border border-border bg-card p-5 text-left shadow-sm transition-all',
+                        'hover:border-primary/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2'
+                      )}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="size-14 rounded-lg bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                          {logoUrl ? (
+                            <img src={logoUrl} alt="" className="size-full object-contain" />
+                          ) : (
+                            <Building2 className="size-7 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-foreground truncate">{displayName}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">View sites & logs</p>
+                        </div>
+                        <ChevronRight className="size-5 text-muted-foreground shrink-0" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {customers.length === 0 && (
+                <p className="text-sm text-muted-foreground py-8 text-center">No companies available.</p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Sites view: grid of sites for selected company */}
+      {showSitesView && (
+        <>
+          {sitesLoading ? (
+            <FiltersRowSkeleton />
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Select a site to see its operational logs and photos.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {sites.map((s) => {
+                  const company = customerRefToCompany[String(customerRef)];
+                  const logoUrl = company?.logo_url;
+                  const siteName = s.name ?? s.siteName ?? s.id ?? s.ref ?? '—';
+                  return (
+                    <button
+                      key={s.id ?? s.ref}
+                      type="button"
+                      onClick={() => setSiteRef(s.id ?? s.ref)}
+                      className={cn(
+                        'rounded-xl border border-border bg-card p-5 text-left shadow-sm transition-all',
+                        'hover:border-primary/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2'
+                      )}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="size-14 rounded-lg bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                          {logoUrl ? (
+                            <img src={logoUrl} alt="" className="size-full object-contain" />
+                          ) : (
+                            <Building2 className="size-7 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-foreground truncate">{siteName}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">View logs & gallery</p>
+                        </div>
+                        <ChevronRight className="size-5 text-muted-foreground shrink-0" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {sites.length === 0 && (
+                <p className="text-sm text-muted-foreground py-8 text-center">No sites for this company.</p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Logs view: filters (no customer/site), summary, activity + gallery */}
+      {showLogsView && (
+        <>
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        {customersLoading ? (
-          <FiltersRowSkeleton />
-        ) : (
           <>
-            <div className="w-full min-w-0 sm:w-auto sm:min-w-[180px]">
-              <Select
-                value={customerRef}
-                onValueChange={setCustomerRefAndReset}
-              >
-                <SelectTrigger className="w-full sm:w-[200px] min-w-0">
-                  <SelectValue placeholder={isSuperAdmin ? 'Customer' : (customers[0]?.name ?? 'Customer')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {isSuperAdmin && (
-                    <SelectItem value="all">All Customers</SelectItem>
-                  )}
-                  {customers.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-full min-w-0 sm:w-auto sm:min-w-[160px]">
-              <Select
-                value={siteRef}
-                onValueChange={setSiteRefAndReset}
-                disabled={!customerRef || customerRef === 'all'}
-              >
-                <SelectTrigger className="w-full sm:w-[180px] min-w-0">
-                  <SelectValue placeholder={customerRef === 'all' ? 'Select customer first' : 'Site'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sites</SelectItem>
-                  {sites.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name ?? s.siteName ?? s.id}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px]">
               <MultiSelection
                 value={vehicleRefs}
@@ -453,7 +599,6 @@ export default function OperationsLog() {
                 isLoading={vehiclesLoading}
                 placeholder="Select vehicles"
               />
-
             </div>
             <div className="w-full min-w-0 sm:w-auto flex flex-wrap items-center gap-2 sm:gap-3">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -502,7 +647,6 @@ export default function OperationsLog() {
               </ToggleGroup>
             </div>
           </>
-        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -594,6 +738,8 @@ export default function OperationsLog() {
               <ActivityTableSkeleton />
             ) : view === 'board' ? (
               <ActivityBoardSkeleton />
+            ) : view === 'gallery' ? (
+              <ActivityGallerySkeleton />
             ) : (
               <ActivityCalendarSkeleton />
             )
@@ -623,6 +769,11 @@ export default function OperationsLog() {
               total={totalEntries}
               onPageChange={setPage}
               pageSize={pageSize}
+            />
+          ) : view === 'gallery' ? (
+            <OperationsLogGalleryView
+              entries={entriesWithDisplayNames}
+              onSelectEntry={onSelectEntry}
             />
           ) : (
             <OperationsLogCalendarView
@@ -702,6 +853,9 @@ export default function OperationsLog() {
           </>
         )}
       </div>
+
+        </>
+      )}
 
       <NewEntryModal
         open={newEntryOpen}
