@@ -673,36 +673,12 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="border-border border-t-4 border-t-blue-500/50">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Current Total / Month</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-foreground">
-                  ${summary.totalCurrentMo.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">{summary.totalTrucks} trucks · {summary.siteCount} sites</p>
-                {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
-              </CardContent>
-            </Card>
-            <Card className="border-border border-t-4 border-t-primary/50">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Proposed Total / Month</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-foreground">
-                  ${summary.totalProposedMo.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">After parameter changes</p>
-                {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
-              </CardContent>
-            </Card>
-            <Card className="border-border border-t-4 border-t-green-500/50">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-stretch">
+            <Card className="border-border border-t-4 border-t-green-500/50 flex flex-col h-full">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Monthly Saving</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1">
                 <p className="text-2xl font-bold text-green-700 dark:text-green-400">
                   ${summary.monthlySaving.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
@@ -710,11 +686,11 @@ export default function UsageCostsScenarioBuilder({ selectedCustomer, selectedSi
                 {dateRangeLabel && <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
               </CardContent>
             </Card>
-            <Card className="border-border border-t-4 border-t-green-500/50">
+            <Card className="border-border border-t-4 border-t-green-500/50 flex flex-col h-full">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Annual Saving</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1">
                 <p className="text-2xl font-bold text-green-700 dark:text-green-400">
                   ${summary.annualSaving.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>

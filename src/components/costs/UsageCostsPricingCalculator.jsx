@@ -1134,8 +1134,8 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            <Card className="flex flex-col h-full">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
                   <ClipboardList className="w-4 h-4" />
@@ -1143,7 +1143,7 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">From scan card (read-only){dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 flex-1">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Wash Time (seconds)</Label>
@@ -1170,40 +1170,10 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
                   <p>Max cost / month / site ({truckCount} trucks): <strong>${currentCalc.maxCostPerMonthSite.toFixed(2)}</strong></p>
                   <p>Max cost / year / site: <strong>${currentCalc.maxCostPerYearSite.toFixed(2)}</strong></p>
                 </div>
-                {historicalActualVsMax != null && (
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
-                    <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Based on your selected period (live data)</p>
-                    <p className="text-sm text-muted-foreground">
-                      These max amounts assume every truck uses the full allowance. In the selected period you actually spent <strong className="text-foreground">${historicalActualVsMax.actualSpend.toFixed(2)}</strong>
-                      {historicalActualVsMax.maxForPeriod > 0 ? (
-                        <> ({historicalActualVsMax.pctOfMax}% of max possible for that period).</>
-                      ) : (
-                        '.'
-                      )}
-                    </p>
-                    {historicalActualVsMax.maxForPeriod > 0 && (
-                      <>
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Actual spend vs max (period)</span>
-                          <span>{historicalActualVsMax.pctOfMax}%</span>
-                        </div>
-                        <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${Math.min(100, historicalActualVsMax.pctOfMax)}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {historicalActualVsMax.scanCount} scans in period · Max for period would be ${historicalActualVsMax.maxForPeriod.toFixed(2)} if all trucks hit limit
-                        </p>
-                      </>
-                    )}
-                  </div>
-                )}
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="flex flex-col h-full">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Zap className="w-4 h-4" />
@@ -1305,6 +1275,37 @@ export default function UsageCostsPricingCalculator({ selectedCustomer: globalCu
               </CardContent>
             </Card>
           </div>
+
+          {historicalActualVsMax != null && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3 w-full">
+              <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Based on your selected period (live data)</p>
+              <p className="text-sm text-muted-foreground">
+                These max amounts assume every truck uses the full allowance. In the selected period you actually spent <strong className="text-foreground">${historicalActualVsMax.actualSpend.toFixed(2)}</strong>
+                {historicalActualVsMax.maxForPeriod > 0 ? (
+                  <> ({historicalActualVsMax.pctOfMax}% of max possible for that period).</>
+                ) : (
+                  '.'
+                )}
+              </p>
+              {historicalActualVsMax.maxForPeriod > 0 && (
+                <>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Actual spend vs max (period)</span>
+                    <span>{historicalActualVsMax.pctOfMax}%</span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${Math.min(100, historicalActualVsMax.pctOfMax)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {historicalActualVsMax.scanCount} scans in period · Max for period would be ${historicalActualVsMax.maxForPeriod.toFixed(2)} if all trucks hit limit
+                  </p>
+                </>
+              )}
+            </div>
+          )}
 
           <Card className="border-green-200 dark:border-green-900/50 bg-green-50/50 dark:bg-green-950/20">
             <CardHeader className="pb-2">

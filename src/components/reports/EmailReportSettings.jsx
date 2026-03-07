@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { roleTabSettingsOptions } from '@/query/options';
 import { getDefaultEmailReportTypes, isAdmin } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
-import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, Calendar, Plus, X, FileText } from 'lucide-react';
+import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, Calendar, Plus, X, FileText, Eye } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import UsageCostsClientReports from '@/components/costs/UsageCostsClientReports';
@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Chart } from 'chart.js/auto';
@@ -53,6 +54,9 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
   const [exportProgress, setExportProgress] = useState({ washProcessed: 0, washTotal: 0 });
   const exportCancelRef = useRef(false);
   const exportCurrentRef = useRef(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [pdfHtml, setPdfHtml] = useState('');
   const pdfContainerRef = useRef(null);
@@ -448,6 +452,34 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
       ...prev,
       report_types: allSelected ? [] : allReportIds
     }));
+  };
+
+  // Preview report (compliance and/or cost) in an overlay. Defers heavy work so "Loading…" paints first.
+  const handlePreviewReport = () => {
+    if (formData.report_types.length === 0) {
+      toast.error('Select at least one section', { description: 'Choose Compliance Summary and/or Cost Analysis to preview.' });
+      return;
+    }
+    setPreviewLoading(true);
+    const runPreview = async () => {
+      try {
+        const branding = await resolveBrandingForReport();
+        const reportDataForPdf = buildReportDataForPdf(reportData, reportVehicles);
+        if (!reportDataForPdf) {
+          toast.error('No report data', { description: 'Set dashboard filters and ensure there is vehicle data, then try again.' });
+          return;
+        }
+        const html = await buildEnhancedReportHtml(reportDataForPdf, branding, true, 'both', { excludeComplianceWashRecords: false });
+        setPreviewHtml(extractBodyHtml(html));
+        setPreviewOpen(true);
+      } catch (error) {
+        console.error('[handlePreviewReport]', error);
+        toast.error('Preview failed', { description: error?.message || 'Please try again.' });
+      } finally {
+        setPreviewLoading(false);
+      }
+    };
+    requestAnimationFrame(() => setTimeout(runPreview, 80));
   };
 
   // Save preferences mutation (report types and chart option)
@@ -1757,6 +1789,17 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
                 <p className="text-sm text-muted-foreground">Request and configure email reports for your account.</p>
               </div>
 
+              {/* Filter reminder — use top-level filters to filter report/PDF */}
+              <Alert className="border-border bg-muted/30">
+                <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <AlertDescription>
+                  <span className="font-medium text-foreground">Filter your report and PDF</span>
+                  <span className="block mt-1 text-muted-foreground">
+                    Use the <strong className="text-foreground">dashboard filters at the top of the page</strong> (date range, customer, site, drivers) to control which data appears in your email report and exported PDF. Change those filters above, then configure and send or export below.
+                  </span>
+                </AlertDescription>
+              </Alert>
+
               {/* Success message */}
               {successMessage && (
                 <Alert className="border-primary/50 bg-primary/5">
@@ -1983,9 +2026,26 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
                     <CardDescription className="text-muted-foreground">Select which sections appear in the email and PDF report.</CardDescription>
                   </div>
                   {reportTypes.length > 0 && (
-                    <Button variant="ghost" size="sm" onClick={handleAllReportsToggle}>
-                      {reportTypes.every((r) => formData.report_types.includes(r.id)) ? 'Deselect all' : 'Select all'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handlePreviewReport}
+                        disabled={previewLoading || formData.report_types.length === 0 || isReportDataUpdating}
+                        className="gap-1.5"
+                        title={formData.report_types.length === 0 ? 'Select at least one section to preview' : 'Preview how the report will look'}
+                      >
+                        {previewLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                        {previewLoading ? 'Loading…' : 'Preview report'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={handleAllReportsToggle}>
+                        {reportTypes.every((r) => formData.report_types.includes(r.id)) ? 'Deselect all' : 'Select all'}
+                      </Button>
+                    </div>
                   )}
                 </CardHeader>
                 <CardContent>
@@ -2029,6 +2089,29 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
                   )}
                 </CardContent>
               </Card>
+
+              {/* Report preview overlay */}
+              <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+                <DialogContent className="max-w-[min(92vw,960px)] max-h-[90vh] flex flex-col p-0 gap-0">
+                  <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
+                    <DialogTitle className="text-base">Report preview</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      This is how your PDF will look with the selected sections. Use the dashboard filters above to change the data.
+                    </p>
+                  </DialogHeader>
+                  <div className="flex-1 min-h-0 overflow-auto px-6 pb-6">
+                    <div
+                      className="mx-auto rounded-lg border border-border bg-muted/20 p-4"
+                      style={{ width: 860, maxWidth: '100%' }}
+                    >
+                      <div
+                        className="bg-background rounded-lg shadow-sm overflow-hidden"
+                        dangerouslySetInnerHTML={{ __html: previewHtml }}
+                      />
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Data updating notice */}
               {isReportDataUpdating && (
@@ -2198,12 +2281,23 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
         )}
         {allowedEmailSubtabs.some((t) => t.value === 'client-usage-cost-report') && (
           <TabsContent value="client-usage-cost-report" className="mt-4 focus-visible:outline-none">
-            <UsageCostsClientReports
-              selectedCustomer={reportData?.selectedCustomer}
-              selectedSite={reportData?.selectedSite}
-              dateRange={reportData?.dateRange ?? defaultDateRange}
-              dashboardComplianceRate={reportData?.stats?.complianceRate}
-            />
+            <div className="w-full space-y-6">
+              <Alert className="border-border bg-muted/30">
+                <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <AlertDescription>
+                  <span className="font-medium text-foreground">Filter your report and PDF</span>
+                  <span className="block mt-1 text-muted-foreground">
+                    Use the <strong className="text-foreground">dashboard filters at the top of the page</strong> (date range, customer, site) to control which data appears in this usage/cost report and any exported PDFs. Change those filters above, then run or export the report below.
+                  </span>
+                </AlertDescription>
+              </Alert>
+              <UsageCostsClientReports
+                selectedCustomer={reportData?.selectedCustomer}
+                selectedSite={reportData?.selectedSite}
+                dateRange={reportData?.dateRange ?? defaultDateRange}
+                dashboardComplianceRate={reportData?.stats?.complianceRate}
+              />
+            </div>
           </TabsContent>
         )}
       </Tabs>

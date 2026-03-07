@@ -809,37 +809,6 @@ export default function VehicleDetail() {
         </CardContent>
       </Card>
 
-      {/* Vehicle Analytics */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4">Vehicle Analytics</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <VehicleWashActivityTrend
-            scans={scans}
-            dailyTarget={washesPerDay}
-            vehicleName={displayName}
-          />
-          <VehicleComplianceProgress
-            washesThisMonth={washesInPeriod}
-            targetWashes={targetWashes}
-            vehicleName={displayName}
-            monthLabel={now.format('MMM YYYY')}
-          />
-          <VehicleCumulativeWashesChart
-            scans={scansInPeriod}
-            targetWashes={targetWashes}
-            vehicleName={displayName}
-          />
-          <VehicleWashFrequencyByDay
-            scans={scansInPeriod}
-            vehicleName={displayName}
-            monthLabel={now.format('MMM YYYY')}
-          />
-        </div>
-        <div className="mt-6">
-          <VehicleWashActivityByHour scans={scans} vehicleName={displayName} />
-        </div>
-      </section>
-
       {/* Vehicle Image Log – images uploaded for this vehicle (same as Vehicle Image Log tab) */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -912,6 +881,37 @@ export default function VehicleDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Vehicle Analytics */}
+      <section>
+        <h2 className="text-lg font-semibold mb-4">Vehicle Analytics</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <VehicleWashActivityTrend
+            scans={scans}
+            dailyTarget={washesPerDay}
+            vehicleName={displayName}
+          />
+          <VehicleComplianceProgress
+            washesThisMonth={washesInPeriod}
+            targetWashes={targetWashes}
+            vehicleName={displayName}
+            monthLabel={now.format('MMM YYYY')}
+          />
+          <VehicleCumulativeWashesChart
+            scans={scansInPeriod}
+            targetWashes={targetWashes}
+            vehicleName={displayName}
+          />
+          <VehicleWashFrequencyByDay
+            scans={scansInPeriod}
+            vehicleName={displayName}
+            monthLabel={now.format('MMM YYYY')}
+          />
+        </div>
+        <div className="mt-6">
+          <VehicleWashActivityByHour scans={scans} vehicleName={displayName} />
+        </div>
+      </section>
 
       {/* Identity & Status */}
       <Card>
