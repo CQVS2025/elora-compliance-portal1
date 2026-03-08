@@ -314,6 +314,26 @@ export function isBillableScan(scan) {
   return status === 'success' || status === 'exceeded';
 }
 
+/**
+ * Resolve product/application type for a scan from device serial → tank_configurations.
+ * Used to filter usage cost by Acid (FOAM/CONC/GEL) vs Truck Wash (TW).
+ * @param {object} scan - Scan row (deviceSerial or device_serial)
+ * @param {{ byDeviceSerial: Record<string, { productType?: string }> }} sitePricingMaps - from buildSitePricingMaps
+ * @returns {string|null} 'FOAM'|'CONC'|'TW'|'GEL' or null if unknown
+ */
+export function getProductTypeForScan(scan, sitePricingMaps) {
+  if (!scan || !sitePricingMaps?.byDeviceSerial) return null;
+  const deviceSerial = scan.deviceSerial ?? scan.device_serial ?? null;
+  if (!deviceSerial) return null;
+  const entry = sitePricingMaps.byDeviceSerial[String(deviceSerial)];
+  const pt = entry?.productType ?? null;
+  return pt && typeof pt === 'string' ? pt.toUpperCase().trim() : null;
+}
+
+/** Acid = foam + concentrate (and GEL). Truck wash = TW. */
+export const PRODUCT_TAB_ACID = ['FOAM', 'CONC', 'GEL'];
+export const PRODUCT_TAB_TRUCK_WASH = ['TW'];
+
 // ---------------------------------------------------------------------------
 // Core cost calculation — now DB-driven when sitePricingMaps is supplied
 // ---------------------------------------------------------------------------

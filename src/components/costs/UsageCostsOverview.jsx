@@ -12,16 +12,25 @@ import DataPagination from '@/components/ui/DataPagination';
 import { usePermissions } from '@/components/auth/PermissionGuard';
 import { scansOptions, vehiclesOptions, pricingConfigOptions } from '@/query/options';
 import { OverviewGlassySkeleton } from './UsageCostsSkeletons';
-import { calculateScanCostFromScan, isBillableScan, round2, buildVehicleWashTimeMaps, buildSitePricingMaps, formatDateRangeDisplay } from './usageCostUtils';
+import { calculateScanCostFromScan, isBillableScan, round2, buildVehicleWashTimeMaps, buildSitePricingMaps, formatDateRangeDisplay, getProductTypeForScan, PRODUCT_TAB_ACID, PRODUCT_TAB_TRUCK_WASH } from './usageCostUtils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ListFilter } from 'lucide-react';
+import { ListFilter, Droplets, Truck } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const SCANS_PAGE_SIZE = 100;
+
+/** Product filter: All, Acid (foam/concentrate), or Truck Wash - so usage is split by computer/application at sites with multiple devices. */
+const PRODUCT_TAB_VALUES = [
+  { value: 'all', label: 'All' },
+  { value: 'acid', label: 'Acid' },
+  { value: 'truck_wash', label: 'Truck Wash' },
+];
 
 export default function UsageCostsOverview({ selectedCustomer, selectedSite, dateRange }) {
   const permissions = usePermissions();
   const companyId = permissions.userProfile?.company_id ?? 'portal';
+  const [productTab, setProductTab] = useState('all'); // 'all' | 'acid' | 'truck_wash'
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCustomers, setExpandedCustomers] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(1);
@@ -72,14 +81,28 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
     return scans.filter((scan) => isBillableScan(scan));
   }, [scans]);
 
+  const filteredScansByProduct = useMemo(() => {
+    if (productTab === 'all') return filteredScansForCost;
+    const allowed = productTab === 'acid' ? PRODUCT_TAB_ACID : PRODUCT_TAB_TRUCK_WASH;
+    return filteredScansForCost.filter((scan) => {
+      const pt = getProductTypeForScan(scan, sitePricingMaps);
+      return pt && allowed.includes(pt);
+    });
+  }, [filteredScansForCost, productTab, sitePricingMaps]);
+
   useEffect(() => {
     setApiPage(1);
     setCurrentPage(1);
     autoSkippedPagesRef.current.clear();
+    setProductTab('all');
   }, [selectedCustomer, selectedSite, dateRange.start, dateRange.end]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [productTab]);
+
   const costData = useMemo(() => {
-    if (!filteredScansForCost.length) return { vehicles: [], summary: {}, customerSummary: [], dailyCosts: [], topSites: [], scansExcludedConfigMissing: 0, excludedScanRows: [] };
+    if (!filteredScansByProduct.length) return { vehicles: [], summary: {}, customerSummary: [], dailyCosts: [], topSites: [], scansExcludedConfigMissing: 0, excludedScanRows: [] };
     const hasMaps = entitlementMaps && (Object.keys(entitlementMaps.byRef || {}).length > 0 || Object.keys(entitlementMaps.byRfid || {}).length > 0);
     const maps = hasMaps ? entitlementMaps : null;
     const pMaps = sitePricingMaps?.byDeviceSerial != null ? sitePricingMaps : null;
@@ -89,7 +112,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
     const excludedScanRows = [];
     const pricingCache = new Map();
     
-    filteredScansForCost.forEach(scan => {
+    filteredScansByProduct.forEach(scan => {
       const scanKey = `${scan.customerRef}_${scan.siteRef}_${scan.vehicleRef}_${scan.rfid}`;
       let pricing = pricingCache.get(scanKey);
       if (!pricing) {
@@ -181,7 +204,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
     });
 
     const dailyGroups = {};
-    filteredScansForCost.forEach(scan => {
+    filteredScansByProduct.forEach(scan => {
       const date = moment(scan.createdAt ?? scan.timestamp).format('MMM D');
       const scanKey = `${scan.customerRef}_${scan.siteRef}_${scan.vehicleRef}_${scan.rfid}`;
       let pricing = pricingCache.get(scanKey);
@@ -213,7 +236,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
       scansExcludedConfigMissing,
       excludedScanRows,
     };
-  }, [filteredScansForCost, entitlementMaps, sitePricingMaps]);
+  }, [filteredScansByProduct, entitlementMaps, sitePricingMaps]);
 
   useEffect(() => {
     if (isPaginated && scans.length > 0 && filteredScansForCost.length === 0 && currentApiPage < pageCount && !autoSkippedPagesRef.current.has(currentApiPage)) {
@@ -272,6 +295,19 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
     );
   }
 
+  if (!filteredScansByProduct.length && productTab !== 'all') {
+    const productLabel = productTab === 'acid' ? 'Acid (foam/concentrate)' : 'Truck Wash';
+    return (
+      <div className="flex items-center justify-center py-12 rounded-xl border border-border bg-card">
+        <div className="text-center">
+          <Droplet className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground text-lg">No {productLabel} data for selected period</p>
+          <p className="text-sm text-muted-foreground mt-1">Scans are attributed by the computer/device that recorded the wash. Switch to &quot;All&quot; or another tab.</p>
+        </div>
+      </div>
+    );
+  }
+
   const { summary, scansExcludedConfigMissing, excludedScanRows } = costData;
   const dateRangeLabel = formatDateRangeDisplay(dateRange);
 
@@ -280,6 +316,19 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
       {dateRangeLabel && (
         <p className="text-sm text-muted-foreground font-medium">Data for period: {dateRangeLabel}</p>
       )}
+      <Tabs value={productTab} onValueChange={setProductTab} className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="acid" className="flex items-center gap-1.5">
+            <Droplets className="h-4 w-4" />
+            Acid
+          </TabsTrigger>
+          <TabsTrigger value="truck_wash" className="flex items-center gap-1.5">
+            <Truck className="h-4 w-4" />
+            Truck Wash
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
       <Dialog open={showExcludedScansModal} onOpenChange={setShowExcludedScansModal}>
         <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
           <DialogHeader>
@@ -364,7 +413,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-foreground">{filteredScansForCost.length.toLocaleString()}</div>
+              <div className="text-3xl font-bold text-foreground">{(summary.totalScans ?? 0).toLocaleString()}</div>
               <p className="text-xs text-muted-foreground mt-1">{dateRangeLabel || (isPaginated && pageCount > 1 ? `Success scans on page ${currentApiPage}` : 'Success scans (selected period)')}</p>
             </CardContent>
           </Card>
@@ -390,7 +439,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3">
           <p className="text-sm text-muted-foreground">
             Scans page <span className="font-semibold text-foreground">{currentApiPage}</span> of <span className="font-semibold text-foreground">{pageCount.toLocaleString()}</span>
-            {' '}({filteredScansForCost.length.toLocaleString()} success scans on this page)
+            {' '}({filteredScansByProduct.length.toLocaleString()} success scans on this page{productTab !== 'all' ? ` · ${productTab === 'acid' ? 'Acid' : 'Truck Wash'}` : ''})
           </p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setApiPage((p) => Math.max(1, p - 1))} disabled={currentApiPage <= 1 || isFetching}>Previous</Button>
