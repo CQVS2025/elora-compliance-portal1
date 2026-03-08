@@ -144,6 +144,13 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        <Route path="/vehicle-image-log/vehicle/:vehicleRef" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.VehicleImageLogVehicle)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
         <Route path="/dashboard" element={
           <AuthenticatedRoute>
             <DashboardLayout>

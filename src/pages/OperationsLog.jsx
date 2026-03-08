@@ -29,6 +29,7 @@ import {
   Building2,
   Image as ImageIcon,
   ChevronRight,
+  ArrowLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -109,6 +110,7 @@ export default function OperationsLog() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState('feed');
+  const [landingView, setLandingView] = useState('companies'); // 'companies' | 'feed' | 'table' | 'board' | 'calendar' | 'gallery'
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [newEntryOpen, setNewEntryOpen] = useState(false);
@@ -408,6 +410,7 @@ export default function OperationsLog() {
     setCustomerRef('all');
     setSiteRef('all');
     setVehicleRefs([]);
+    setLandingView('companies');
   };
   const handleBackToSites = () => {
     setSiteRef('all');
@@ -440,11 +443,27 @@ export default function OperationsLog() {
     <div className="min-w-0 space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6">
       <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+          <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-1 flex-wrap">
+            {(showLogsView || showSitesView || (showCompaniesView && landingView !== 'companies')) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (showLogsView) handleBackToSites();
+                  else if (showSitesView) handleBackToCompanies();
+                  else if (showCompaniesView && landingView !== 'companies') setLandingView('companies');
+                }}
+                className="shrink-0 gap-1.5 -ml-1"
+              >
+                <ArrowLeft className="size-4" />
+                Back
+              </Button>
+            )}
             <button
               type="button"
               onClick={handleBackToCompanies}
-              className="hover:text-foreground transition-colors"
+              className="hover:text-foreground transition-colors shrink-0"
             >
               Operations Log
             </button>
@@ -475,6 +494,23 @@ export default function OperationsLog() {
           <p className="text-sm text-muted-foreground">Site activity tracking, notes & task management.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {showCompaniesView && (
+            <ToggleGroup
+              type="single"
+              value={landingView === 'companies' ? '' : landingView}
+              onValueChange={(v) => setLandingView(v || 'companies')}
+              className="border rounded-md inline-flex flex-wrap"
+            >
+              {VIEWS.map((v) => {
+                const Icon = v.icon;
+                return (
+                  <ToggleGroupItem key={v.value} value={v.value} aria-label={v.label} className="px-3">
+                    <Icon className="size-4" />
+                  </ToggleGroupItem>
+                );
+              })}
+            </ToggleGroup>
+          )}
           <Button variant="outline" size="sm" onClick={handleExport} disabled={entriesLoading}>
             <Download className="mr-2 size-4" />
             Export
@@ -488,8 +524,8 @@ export default function OperationsLog() {
         </div>
       </div>
 
-      {/* Companies view: grid of companies (customers with logo) */}
-      {showCompaniesView && (
+      {/* Companies view: grid of companies (customers with logo) — only when landing view is companies */}
+      {showCompaniesView && landingView === 'companies' && (
         <>
           {customersLoading ? (
             <FiltersRowSkeleton />
@@ -534,6 +570,277 @@ export default function OperationsLog() {
               )}
             </div>
           )}
+        </>
+      )}
+
+      {/* All-entries view from companies page: same filters/summary/activity, scoped by user permissions */}
+      {showCompaniesView && landingView !== 'companies' && (
+        <>
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <>
+            <div className="w-full min-w-0 sm:min-w-[200px] sm:max-w-[280px]">
+              <MultiSelection
+                value={vehicleRefs}
+                options={vehicleOptions}
+                onValueSelected={(ids) => setVehicleRefs(ids ?? [])}
+                isLoading={vehiclesLoading}
+                placeholder="Select vehicles"
+              />
+            </div>
+            <div className="w-full min-w-0 sm:w-auto flex flex-wrap items-center gap-2 sm:gap-3">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-[140px] min-w-0">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-full sm:w-[160px] min-w-0">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Search…"
+                className="w-full min-w-0 sm:w-[160px] flex-1 sm:flex-initial"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground hover:text-foreground shrink-0">
+                <RotateCcw className="mr-1.5 size-4" />
+                Reset
+              </Button>
+            </div>
+            <div className="w-full sm:w-auto flex items-center justify-end sm:ml-auto">
+              <ToggleGroup type="single" value={landingView} onValueChange={(v) => v && setLandingView(v)} className="border rounded-md inline-flex flex-wrap">
+                {VIEWS.map((v) => {
+                  const Icon = v.icon;
+                  return (
+                    <ToggleGroupItem key={v.value} value={v.value} aria-label={v.label} className="px-3">
+                      <Icon className="size-4" />
+                    </ToggleGroupItem>
+                  );
+                })}
+              </ToggleGroup>
+            </div>
+          </>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {summaryLoading ? (
+          <SummaryCardsSkeleton />
+        ) : (
+          <>
+        <Card className="bg-card border-border overflow-hidden">
+          <CardHeader className="pb-2 px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Open Items</CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6">
+            <div className="text-xl sm:text-2xl font-bold">{summary.openCount}</div>
+                <p className="text-xs text-muted-foreground">
+                  {summary.urgentHigh > 0 ? `${summary.urgentHigh} urgent, high priority` : '—'}
+                </p>
+              </CardContent>
+            </Card>
+        <Card className="bg-card border-border overflow-hidden">
+          <CardHeader className="pb-2 px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6">
+            <div className="text-xl sm:text-2xl font-bold">{summary.inProgressCount}</div>
+              </CardContent>
+            </Card>
+        <Card className="bg-card border-border overflow-hidden">
+          <CardHeader className="pb-2 px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Resolved (This Month)</CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6">
+            <div className="text-xl sm:text-2xl font-bold">{summary.resolvedThisMonth}</div>
+                <p className="text-xs text-muted-foreground">
+                  {summary.pctChange !== 0 ? `↑ ${summary.pctChange}% from last month` : '—'}
+                </p>
+              </CardContent>
+            </Card>
+        <Card className="bg-card border-border overflow-hidden">
+          <CardHeader className="pb-2 px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Avg. Resolution Time</CardTitle>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6">
+            <div className="text-xl sm:text-2xl font-bold">{summary.avgResolutionDays != null ? `${summary.avgResolutionDays}d` : '—'}</div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+
+      <Card className="bg-card border-border overflow-hidden">
+        <CardHeader className="pb-2 px-3 sm:px-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-foreground">
+              Activity
+              {entriesLoading && (
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              )}
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
+              <span className="text-xs text-muted-foreground truncate">
+                {entriesLoading
+                  ? 'Loading…'
+                  : `Showing ${totalEntries === 0 ? 0 : (page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalEntries)} of ${totalEntries}`}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
+                >
+                  <SelectTrigger className="h-8 w-[72px] shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">per page</span>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="px-3 sm:px-6 overflow-x-auto">
+          {entriesLoading ? (
+            landingView === 'feed' ? (
+              <ActivityFeedSkeleton />
+            ) : landingView === 'table' ? (
+              <ActivityTableSkeleton />
+            ) : landingView === 'board' ? (
+              <ActivityBoardSkeleton />
+            ) : landingView === 'gallery' ? (
+              <ActivityGallerySkeleton />
+            ) : (
+              <ActivityCalendarSkeleton />
+            )
+          ) : landingView === 'feed' ? (
+            <OperationsLogFeedView
+              entries={entriesWithDisplayNames}
+              onSelectEntry={onSelectEntry}
+              page={page}
+              total={totalEntries}
+              onPageChange={setPage}
+              pageSize={pageSize}
+            />
+          ) : landingView === 'table' ? (
+            <OperationsLogTableView
+              entries={entriesWithDisplayNames}
+              onSelectEntry={onSelectEntry}
+              page={page}
+              total={totalEntries}
+              onPageChange={setPage}
+              pageSize={pageSize}
+            />
+          ) : landingView === 'board' ? (
+            <OperationsLogBoardView
+              entries={entriesWithDisplayNames}
+              onSelectEntry={onSelectEntry}
+              page={page}
+              total={totalEntries}
+              onPageChange={setPage}
+              pageSize={pageSize}
+            />
+          ) : landingView === 'gallery' ? (
+            <OperationsLogGalleryView
+              entries={entriesWithDisplayNames}
+              onSelectEntry={onSelectEntry}
+            />
+          ) : (
+            <OperationsLogCalendarView
+              entries={entriesWithDisplayNames}
+              onSelectEntry={onSelectEntry}
+              page={page}
+              total={totalEntries}
+              onPageChange={setPage}
+              pageSize={pageSize}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {summaryLoading ? (
+          <ByCategoryBySiteSkeleton />
+        ) : (
+          <>
+        <Card className="bg-card border-border overflow-hidden">
+          <CardHeader className="pb-2 px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium text-foreground">By Category</CardTitle>
+            <p className="text-xs text-muted-foreground">Open and in-progress items by type.</p>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6 min-w-0">
+                {summary.byCategory.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
+                ) : (
+                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
+                    <PieChart>
+                      <ChartTooltip content={<ChartTooltipContent nameKey="name" />} />
+                      <Pie
+                        data={[...summary.byCategory].sort((a, b) => b.count - a.count).slice(0, 8)}
+                        dataKey="count"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={56}
+                        outerRadius={88}
+                        paddingAngle={2}
+                        stroke="hsl(var(--border))"
+                      >
+                        {[...summary.byCategory].sort((a, b) => b.count - a.count).slice(0, 8).map((_, index) => (
+                          <Cell key={index} fill={CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length]} stroke="hsl(var(--border))" />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ChartContainer>
+                )}
+              </CardContent>
+            </Card>
+        <Card className="bg-card border-border overflow-hidden">
+          <CardHeader className="pb-2 px-3 sm:px-6">
+            <CardTitle className="text-sm font-medium text-foreground">Open Items by Site</CardTitle>
+            <p className="text-xs text-muted-foreground">Sites with outstanding tasks.</p>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6 min-w-0">
+                {summary.bySite.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
+                ) : (
+                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
+                    <BarChart
+                      data={[...summary.bySite].sort((a, b) => b.count - a.count).slice(0, 8)}
+                      layout="vertical"
+                      margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis type="category" dataKey="site" width={140} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                      <ChartTooltip content={<ChartTooltipContent nameKey="site" />} />
+                      <Bar dataKey="count" name="Items" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} maxBarSize={24} />
+                    </BarChart>
+                  </ChartContainer>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+
         </>
       )}
 

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
-import { Package, ShoppingCart, ClipboardList, Loader2, Check, X, Download, User, FileCheck, ChevronDown, ChevronUp, List, LayoutGrid } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, Loader2, Check, X, Download, User, FileCheck, ChevronDown, ChevronUp, List, LayoutGrid, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,16 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   allPartsOptions,
   partRequestsOptions,
@@ -360,6 +370,8 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
   const [selectedStockTakeId, setSelectedStockTakeId] = useState(null);
   const [showSubmissionHistory, setShowSubmissionHistory] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'card' — superadmin only
+  const [orderRequestsSubTab, setOrderRequestsSubTab] = useState('active'); // 'active' | 'processed' — superadmin only: active = not delivered, processed = delivered
+  const [deleteConfirmOrderId, setDeleteConfirmOrderId] = useState(null);
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -420,6 +432,17 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
     [pendingItems]
   );
 
+  // Super Admin: active = not delivered (pending, approved, rejected, ordered, in_transit); processed = delivered
+  const activeOrders = useMemo(
+    () => orderRequests.filter((r) => r.status !== 'delivered'),
+    [orderRequests]
+  );
+  const processedOrders = useMemo(
+    () => orderRequests.filter((r) => r.status === 'delivered'),
+    [orderRequests]
+  );
+  const orderListForDisplay = isSuperAdmin && orderRequestsSubTab === 'processed' ? processedOrders : (isSuperAdmin ? activeOrders : orderRequests);
+
   const updateOrderStatusMutation = useMutation({
     mutationFn: async ({ id, status }) => {
       const { error } = await supabase.from('order_requests').update({
@@ -455,6 +478,29 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
       queryClient.invalidateQueries({ queryKey: queryKeys.global.orderRequests() });
       if (selectedOrderId) queryClient.invalidateQueries({ queryKey: [...queryKeys.global.orderRequests(), 'detail', selectedOrderId] });
     },
+  });
+
+  const deleteOrderRequestMutation = useMutation({
+    mutationFn: async ({ id }) => {
+      // Delete order_requests row; DB CASCADE will remove order_request_items.
+      // Use .select() to verify a row was deleted (RLS might otherwise allow request but delete 0 rows).
+      const { data: deleted, error } = await supabase
+        .from('order_requests')
+        .delete()
+        .eq('id', id)
+        .select('id');
+      if (error) throw error;
+      if (!deleted?.length) {
+        throw new Error('Order request could not be deleted. You may not have permission, or it was already removed.');
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.global.orderRequests() });
+      if (selectedOrderId === variables.id) setSelectedOrderId(null);
+      setDeleteConfirmOrderId(null);
+      toast.success('Order request deleted');
+    },
+    onError: (err) => toast.error(err?.message || 'Failed to delete order request'),
   });
 
   const agentsWithStock = useMemo(() => {
@@ -564,6 +610,19 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
           )}
         </div>
         <TabsContent value="order-requests" className="mt-6">
+          {isSuperAdmin && (
+            <Tabs value={orderRequestsSubTab} onValueChange={setOrderRequestsSubTab} className="mb-4">
+              <TabsList className="grid w-full max-w-[280px] grid-cols-2">
+                <TabsTrigger value="active">Active</TabsTrigger>
+                <TabsTrigger value="processed">Processed</TabsTrigger>
+              </TabsList>
+              <p className="text-xs text-muted-foreground mt-1">
+                {orderRequestsSubTab === 'active'
+                  ? 'Pending and in-progress orders. Approve, reject, or update status.'
+                  : 'Delivered orders. You can delete test or old entries here.'}
+              </p>
+            </Tabs>
+          )}
           <div className="flex justify-end mb-2">
             <Button variant="outline" size="sm" onClick={exportToExcel}>
               <Download className="size-4 mr-2" />
@@ -574,7 +633,7 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
             <div className="flex justify-center py-8"><Loader2 className="size-8 animate-spin" /></div>
           ) : (
             <div className={isSuperAdmin && viewMode === 'card' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4' : 'space-y-4'}>
-              {orderRequests.map((order) => {
+              {orderListForDisplay.map((order) => {
                 const isCardView = isSuperAdmin && viewMode === 'card';
                 const requesterName = order.requested_by_name || 'Unknown';
                 const isExpanded = selectedOrderId === order.id;
@@ -628,6 +687,22 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
                               <Button variant="outline" size="sm" className="h-8 ml-auto" onClick={() => setSelectedOrderId(isExpanded ? null : order.id)}>
                                 {isExpanded ? 'Hide items' : 'View items'}
                               </Button>
+                              {isSuperAdmin && orderRequestsSubTab === 'processed' && (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-8 gap-1"
+                                  onClick={() => setDeleteConfirmOrderId(order.id)}
+                                  disabled={deleteOrderRequestMutation.isPending && deleteOrderRequestMutation.variables?.id === order.id}
+                                >
+                                  {deleteOrderRequestMutation.isPending && deleteOrderRequestMutation.variables?.id === order.id ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="size-4" />
+                                  )}
+                                  Delete
+                                </Button>
+                              )}
                             </div>
                           </>
                         ) : (
@@ -662,6 +737,22 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
                               <Button variant="ghost" size="sm" onClick={() => setSelectedOrderId(selectedOrderId === order.id ? null : order.id)}>
                                 {selectedOrderId === order.id ? 'Hide' : 'View'} items
                               </Button>
+                              {isSuperAdmin && orderRequestsSubTab === 'processed' && (
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  className="gap-1"
+                                  onClick={() => setDeleteConfirmOrderId(order.id)}
+                                  disabled={deleteOrderRequestMutation.isPending && deleteOrderRequestMutation.variables?.id === order.id}
+                                >
+                                  {deleteOrderRequestMutation.isPending && deleteOrderRequestMutation.variables?.id === order.id ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="size-4" />
+                                  )}
+                                  Delete
+                                </Button>
+                              )}
                             </div>
                           </>
                         )}
@@ -722,7 +813,11 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
               })}
             </div>
           )}
-          {!ordersLoading && orderRequests.length === 0 && <p className="text-center text-muted-foreground py-8">No order requests yet.</p>}
+          {!ordersLoading && orderListForDisplay.length === 0 && (
+            <p className="text-center text-muted-foreground py-8">
+              {isSuperAdmin && orderRequestsSubTab === 'processed' ? 'No processed (delivered) orders.' : 'No order requests yet.'}
+            </p>
+          )}
         </TabsContent>
         <TabsContent value="stock-takes" className="mt-6 space-y-6">
           {/* Primary: Agent stock levels (what they have + need to order – no request submitted) */}
@@ -948,6 +1043,32 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={!!deleteConfirmOrderId} onOpenChange={(open) => !open && setDeleteConfirmOrderId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete order request</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this order request and all its line items. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteOrderRequestMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteOrderRequestMutation.isPending}
+              onClick={() => {
+                if (deleteConfirmOrderId) {
+                  deleteOrderRequestMutation.mutate({ id: deleteConfirmOrderId });
+                }
+              }}
+            >
+              {deleteOrderRequestMutation.isPending ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

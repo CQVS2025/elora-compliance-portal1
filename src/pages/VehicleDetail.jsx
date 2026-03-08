@@ -816,28 +816,35 @@ export default function VehicleDetail() {
             <ImageIcon className="h-4 w-4" />
             <CardTitle className="text-base">Vehicle Image Log</CardTitle>
           </div>
-          {canManageVehicleImages && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleUploadClick}
-                disabled={uploadImageMutation.isPending}
-                className="gap-1"
-              >
-                {uploadImageMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Upload image
-              </Button>
-            </>
-          )}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to={`/vehicle-image-log/vehicle/${vehicleRef}`} className="gap-1">
+                View full gallery
+              </Link>
+            </Button>
+            {canManageVehicleImages && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUploadClick}
+                  disabled={uploadImageMutation.isPending}
+                  className="gap-1"
+                >
+                  {uploadImageMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  Upload image
+                </Button>
+              </>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {imageLogLoading ? (

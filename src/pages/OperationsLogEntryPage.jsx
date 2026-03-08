@@ -325,9 +325,10 @@ export default function OperationsLogEntryPage() {
   return (
     <div className="w-full min-h-0 flex flex-col p-4 sm:p-6 lg:p-8">
       <div className="flex items-center gap-2 mb-4 sm:mb-6 shrink-0">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to="/operations-log">
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/operations-log" className="flex items-center gap-2">
             <ArrowLeft className="size-5" />
+            Back
           </Link>
         </Button>
         <span className="text-sm font-medium text-muted-foreground">Operations Log</span>
