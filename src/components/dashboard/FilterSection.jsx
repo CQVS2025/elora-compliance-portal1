@@ -143,13 +143,13 @@ export default function FilterSection({
       )}
 
       <div className="rounded-xl border border-border bg-card px-4 py-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           {lockCustomerFilter && displayName ? (
-            <div className="flex h-10 min-w-0 shrink-0 items-center rounded-lg border border-border bg-muted/30 px-3 text-sm font-medium text-foreground w-[180px]">
+            <div className="flex h-10 min-w-0 shrink-0 items-center rounded-lg border border-border bg-muted/30 px-3 text-sm font-medium text-foreground w-full sm:w-[180px]">
               {displayName}
             </div>
           ) : (
-            <div className="w-[180px] shrink-0">
+            <div className="w-full sm:w-[180px] shrink-0">
               <Select
                 value={
                   selectedCustomer === 'all' || customers.some((c) => (c.id || c.ref) === selectedCustomer)
@@ -174,11 +174,11 @@ export default function FilterSection({
           )}
 
           {lockSiteFilter && restrictedSiteName ? (
-            <div className="flex h-10 w-[160px] shrink-0 items-center rounded-lg border border-border bg-muted/30 px-3 text-sm font-medium text-foreground">
+            <div className="flex h-10 w-full sm:w-[160px] shrink-0 items-center rounded-lg border border-border bg-muted/30 px-3 text-sm font-medium text-foreground">
               {restrictedSiteName}
             </div>
           ) : (
-            <div className="w-[160px] shrink-0">
+            <div className="w-full sm:w-[160px] shrink-0">
               <Select
                 value={selectedSite}
                 onValueChange={setSelectedSite}
@@ -199,7 +199,7 @@ export default function FilterSection({
           )}
 
           {typeof setSelectedDriverIds === 'function' && (
-            <div className="w-[220px] min-w-0 shrink-0">
+            <div className="w-full sm:w-[220px] min-w-0 shrink-0">
               <MultiSelection
                 value={selectedDriverIds}
                 options={driverOptions}
@@ -210,7 +210,7 @@ export default function FilterSection({
           )}
 
           {!hideDeviceFilter && typeof setSelectedDeviceId === 'function' && (
-            <div className="w-[160px] shrink-0">
+            <div className="w-full sm:w-[160px] shrink-0">
               <Select
                 value={selectedDeviceId}
                 onValueChange={setSelectedDeviceId}
@@ -231,7 +231,7 @@ export default function FilterSection({
           )}
 
           {!hideDateRange && (
-            <div className="w-[260px] shrink-0">
+            <div className="w-full sm:w-[260px] shrink-0">
               <Popover>
                 <PopoverTrigger asChild>
                   <Button

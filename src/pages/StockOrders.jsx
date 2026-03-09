@@ -758,10 +758,11 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
                         )}
                       </div>
                     </CardHeader>
-                    {selectedOrderId === order.id && (
-                      <CardContent className={isCardView ? 'border-t pt-4' : ''}>
-                        {order.id === orderDetail?.id && orderDetail?.items?.length > 0 ? (
-                          <Table>
+                        {selectedOrderId === order.id && (
+                          <CardContent className={isCardView ? 'border-t pt-4' : ''}>
+                            {order.id === orderDetail?.id && orderDetail?.items?.length > 0 ? (
+                              <div className="overflow-x-auto">
+                              <Table>
                             <TableHeader>
                               <TableRow>
                                 {isSuperAdmin && <TableHead className="w-[80px]">Image</TableHead>}
@@ -801,6 +802,7 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
                               ))}
                             </TableBody>
                           </Table>
+                              </div>
                         ) : selectedOrderId === order.id && (
                           <div className="py-4">
                             <Loader2 className="size-6 animate-spin mx-auto" />
@@ -1091,7 +1093,7 @@ export default function StockOrders() {
   // Super admin: same as manager (Orders & stock takes only; no Agent tab)
   if (isSuperAdmin) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Stock & Orders</h1>
           <p className="text-muted-foreground">Review order requests and stock takes. No Supplier POs.</p>
@@ -1103,7 +1105,7 @@ export default function StockOrders() {
 
   if (isAgent) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Stock & Orders</h1>
           <p className="text-muted-foreground">Browse parts, request parts, and record stock takes.</p>
@@ -1115,7 +1117,7 @@ export default function StockOrders() {
 
   if (isManager) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Stock & Orders</h1>
           <p className="text-muted-foreground">Review order requests and stock takes. No Supplier POs.</p>

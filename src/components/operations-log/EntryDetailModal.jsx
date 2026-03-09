@@ -174,7 +174,7 @@ export function EntryDetailModal({ entryId, open, onOpenChange, effectiveCompany
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden p-0 gap-0 rounded-lg sm:rounded-lg">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden p-0 gap-0 rounded-lg sm:rounded-lg" aria-describedby={undefined}>
         <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b bg-muted/30">
           <DialogTitle className="text-lg sm:text-xl truncate pr-8">Entry details</DialogTitle>
         </DialogHeader>

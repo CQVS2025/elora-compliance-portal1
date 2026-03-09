@@ -25,7 +25,7 @@ export default function AssignVehiclesModal({ open, onClose, site, vehicles }) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Vehicles at {site.name}</DialogTitle>
           <p className="text-sm text-muted-foreground">

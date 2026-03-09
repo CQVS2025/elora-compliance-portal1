@@ -555,12 +555,12 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           <p className="text-muted-foreground mt-1">Advanced analytics with predictive insights</p>
         </div>
         
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
           <Button 
             variant="outline" 
             size="sm"
             onClick={exportComplianceReport}
-            className="gap-2"
+            className="gap-2 w-full sm:w-auto min-h-[44px] sm:min-h-9 touch-manipulation"
             disabled={filteredData.filteredVehicles.length === 0}
           >
             <FileSpreadsheet className="w-4 h-4" />
@@ -683,8 +683,8 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-border overflow-hidden">
-            <Table>
+          <div className="rounded-lg border border-border overflow-x-auto overflow-y-visible">
+            <Table className="min-w-[700px]">
               <TableHeader>
                 <TableRow className="bg-muted/50">
                   <TableHead className="font-semibold">Vehicle</TableHead>
@@ -959,8 +959,8 @@ export default function ReportsDashboard({ vehicles, scans, dateRange, selectedS
             </p>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-border overflow-hidden max-h-[400px] overflow-y-auto">
-              <Table>
+            <div className="rounded-lg border border-border overflow-x-auto max-h-[400px] overflow-y-auto">
+              <Table className="min-w-[500px]">
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="font-semibold">Date</TableHead>

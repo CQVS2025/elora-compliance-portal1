@@ -228,7 +228,7 @@ export default function RoleTabSettings() {
 
   if (userProfile?.role !== 'super_admin') {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <Card className="max-w-md mx-auto border-border">
           <CardContent className="pt-6 text-center">
             <Shield className="w-12 h-12 text-primary mx-auto mb-4" />
@@ -243,7 +243,7 @@ export default function RoleTabSettings() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />

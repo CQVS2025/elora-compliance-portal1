@@ -671,14 +671,14 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
               <CardTitle>Cost Breakdown by Vehicle</CardTitle>
               {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
             </div>
-            <div className="flex items-center gap-3">
-              <div className="relative">
+            <div className="flex items-center gap-3 w-full min-w-0 sm:w-auto">
+              <div className="relative w-full sm:w-72">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search by vehicle or site..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-72"
+                  className="pl-10 w-full"
                 />
               </div>
             </div>
@@ -694,7 +694,7 @@ export default function UsageCostsPerTruck({ selectedCustomer, selectedSite, dat
             <p className="text-xs text-muted-foreground mb-3">Period: {dateRangeLabel}</p>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[900px]">
               <thead>
                 <tr className="bg-primary text-primary-foreground">
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase">Customer</th>

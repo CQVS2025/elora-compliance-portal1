@@ -506,26 +506,26 @@ export default function VehicleDetail() {
   const emailDriverLabel = positionLabel !== EMPTY_LABEL ? `${driverLabel} — ${positionLabel}` : driverLabel;
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-6 max-w-6xl mx-auto">
       <Button variant="ghost" onClick={() => navigate(fromVehicleImageLog ? '/vehicle-image-log' : '/compliance')} className="gap-2 -ml-2 mb-1">
         <ArrowLeft className="h-4 w-4" /> Back to {fromVehicleImageLog ? 'Vehicle Image Log' : 'Compliance'}
       </Button>
 
       {/* Breadcrumb + Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link to={fromVehicleImageLog ? '/vehicle-image-log' : '/compliance'} className="hover:text-foreground transition-colors">
+        <nav className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap min-w-0">
+          <Link to={fromVehicleImageLog ? '/vehicle-image-log' : '/compliance'} className="hover:text-foreground transition-colors shrink-0">
             {fromVehicleImageLog ? 'Vehicle Image Log' : 'Compliance'}
           </Link>
           <span aria-hidden>/</span>
-          <span className="font-medium text-foreground truncate">{customerName}</span>
+          <span className="font-medium text-foreground truncate max-w-[120px] sm:max-w-none">{customerName}</span>
           <span aria-hidden>/</span>
-          <span className="font-semibold text-foreground truncate">{displayName}</span>
+          <span className="font-semibold text-foreground truncate max-w-[120px] sm:max-w-none">{displayName}</span>
         </nav>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2 min-w-[200px] justify-start text-left font-normal">
+              <Button variant="outline" size="sm" className="gap-2 w-full sm:min-w-[200px] sm:w-auto justify-start text-left font-normal">
                 <CalendarIcon className="h-4 w-4 shrink-0" />
                 {selectedDateRange.start && selectedDateRange.end ? (
                   `${format(new Date(selectedDateRange.start), 'dd MMM yyyy')} – ${format(new Date(selectedDateRange.end), 'dd MMM yyyy')}`

@@ -683,7 +683,7 @@ export default function OperationsLog() {
         )}
       </div>
 
-      <Card className="bg-card border-border overflow-hidden">
+      <Card className="bg-card border-border overflow-hidden min-w-0">
         <CardHeader className="pb-2 px-3 sm:px-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <CardTitle className="text-sm font-medium flex items-center gap-2 text-foreground">
@@ -717,7 +717,7 @@ export default function OperationsLog() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-3 sm:px-6 overflow-x-auto">
+        <CardContent className="px-3 sm:px-6 overflow-x-auto min-w-0">
           {entriesLoading ? (
             landingView === 'feed' ? (
               <ActivityFeedSkeleton />
@@ -775,12 +775,12 @@ export default function OperationsLog() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 min-w-0">
         {summaryLoading ? (
           <ByCategoryBySiteSkeleton />
         ) : (
           <>
-        <Card className="bg-card border-border overflow-hidden">
+<Card className="bg-card border-border overflow-hidden min-w-0 w-full">
           <CardHeader className="pb-2 px-3 sm:px-6">
             <CardTitle className="text-sm font-medium text-foreground">By Category</CardTitle>
             <p className="text-xs text-muted-foreground">Open and in-progress items by type.</p>
@@ -789,7 +789,7 @@ export default function OperationsLog() {
                 {summary.byCategory.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
                 ) : (
-                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
+                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[240px] min-h-[200px] sm:h-[280px] w-full min-w-0">
                     <PieChart>
                       <ChartTooltip content={<ChartTooltipContent nameKey="name" />} />
                       <Pie
@@ -812,16 +812,16 @@ export default function OperationsLog() {
                 )}
               </CardContent>
             </Card>
-        <Card className="bg-card border-border overflow-hidden">
+<Card className="bg-card border-border overflow-hidden min-w-0 w-full">
           <CardHeader className="pb-2 px-3 sm:px-6">
             <CardTitle className="text-sm font-medium text-foreground">Open Items by Site</CardTitle>
             <p className="text-xs text-muted-foreground">Sites with outstanding tasks.</p>
           </CardHeader>
-          <CardContent className="px-3 sm:px-6 min-w-0">
+          <CardContent className="px-3 sm:px-6 min-w-0 overflow-x-auto">
                 {summary.bySite.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
                 ) : (
-                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
+                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[240px] min-h-[200px] sm:h-[280px] w-full min-w-[260px]">
                     <BarChart
                       data={[...summary.bySite].sort((a, b) => b.count - a.count).slice(0, 8)}
                       layout="vertical"
@@ -829,7 +829,7 @@ export default function OperationsLog() {
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                      <YAxis type="category" dataKey="site" width={140} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis type="category" dataKey="site" width={100} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                       <ChartTooltip content={<ChartTooltipContent nameKey="site" />} />
                       <Bar dataKey="count" name="Items" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} maxBarSize={24} />
                     </BarChart>
@@ -1003,7 +1003,7 @@ export default function OperationsLog() {
         )}
       </div>
 
-      <Card className="bg-card border-border overflow-hidden">
+      <Card className="bg-card border-border overflow-hidden min-w-0">
         <CardHeader className="pb-2 px-3 sm:px-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <CardTitle className="text-sm font-medium flex items-center gap-2 text-foreground">
@@ -1037,7 +1037,7 @@ export default function OperationsLog() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-3 sm:px-6 overflow-x-auto">
+        <CardContent className="px-3 sm:px-6 overflow-x-auto min-w-0">
           {entriesLoading ? (
             view === 'feed' ? (
               <ActivityFeedSkeleton />
@@ -1095,12 +1095,12 @@ export default function OperationsLog() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 min-w-0">
         {summaryLoading ? (
           <ByCategoryBySiteSkeleton />
         ) : (
           <>
-        <Card className="bg-card border-border overflow-hidden">
+<Card className="bg-card border-border overflow-hidden min-w-0 w-full">
           <CardHeader className="pb-2 px-3 sm:px-6">
             <CardTitle className="text-sm font-medium text-foreground">By Category</CardTitle>
             <p className="text-xs text-muted-foreground">Open and in-progress items by type.</p>
@@ -1109,7 +1109,7 @@ export default function OperationsLog() {
                 {summary.byCategory.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
                 ) : (
-                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
+                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[240px] min-h-[200px] sm:h-[280px] w-full min-w-0">
                     <PieChart>
                       <ChartTooltip content={<ChartTooltipContent nameKey="name" />} />
                       <Pie
@@ -1132,16 +1132,16 @@ export default function OperationsLog() {
                 )}
               </CardContent>
             </Card>
-        <Card className="bg-card border-border overflow-hidden">
+<Card className="bg-card border-border overflow-hidden min-w-0 w-full">
           <CardHeader className="pb-2 px-3 sm:px-6">
             <CardTitle className="text-sm font-medium text-foreground">Open Items by Site</CardTitle>
             <p className="text-xs text-muted-foreground">Sites with outstanding tasks.</p>
           </CardHeader>
-          <CardContent className="px-3 sm:px-6 min-w-0">
+          <CardContent className="px-3 sm:px-6 min-w-0 overflow-x-auto">
                 {summary.bySite.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-6 text-center">No items in current filters.</p>
                 ) : (
-                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[280px] w-full">
+                  <ChartContainer config={OPS_LOG_CHART_CONFIG} className="h-[240px] min-h-[200px] sm:h-[280px] w-full min-w-[260px]">
                     <BarChart
                       data={[...summary.bySite].sort((a, b) => b.count - a.count).slice(0, 8)}
                       layout="vertical"
@@ -1149,7 +1149,7 @@ export default function OperationsLog() {
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                      <YAxis type="category" dataKey="site" width={140} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis type="category" dataKey="site" width={100} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                       <ChartTooltip content={<ChartTooltipContent nameKey="site" />} />
                       <Bar dataKey="count" name="Items" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} maxBarSize={24} />
                     </BarChart>

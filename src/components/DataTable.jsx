@@ -277,8 +277,8 @@ export default function DataTable({
 
   return (
     <Card className={cn('max-w-full min-w-0', className)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        {title && <h3 className="text-lg font-semibold">{title}</h3>}
+      <CardHeader className="flex flex-col gap-3 space-y-0 pb-4 sm:flex-row sm:items-center sm:justify-between">
+        {title && <h3 className="text-lg font-semibold shrink-0">{title}</h3>}
         <div className="flex items-center gap-2 flex-wrap">
           {headerExtra}
           <div className="relative">
@@ -290,7 +290,7 @@ export default function DataTable({
                 setSearch(e.target.value);
                 setInternalPage(1);
               }}
-              className="pl-8 w-[200px]"
+              className="pl-8 w-full sm:w-[200px]"
             />
           </div>
           <DropdownMenu>
@@ -394,23 +394,23 @@ export default function DataTable({
           {tableBody}
         </Table>
         </div>
-        <div className="flex items-center justify-between border-t px-4 py-2">
+        <div className="flex flex-col gap-3 border-t px-3 py-3 sm:px-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           {disablePagination ? (
             <p className="text-sm text-muted-foreground">
               {footerMessage ?? `Showing ${filteredData.length} vehicle${filteredData.length !== 1 ? 's' : ''}`}
             </p>
           ) : (
             <>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground shrink-0">
                 {filteredData.length} row{filteredData.length !== 1 ? 's' : ''}
               </p>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 min-w-0">
                 <select
-                  className="h-8 rounded-md border border-input bg-background text-foreground px-2 text-sm"
+                  className="h-9 min-h-[36px] rounded-md border border-input bg-background text-foreground px-3 text-sm"
                   value={pageSize}
                   onChange={(e) => {
                     const v = Number(e.target.value);
-                    setPageSize(v);
+                    if (onPageSizeChange) onPageSizeChange(v); else setInternalPageSize(v);
                     setInternalPage(1);
                   }}
                 >
@@ -420,8 +420,8 @@ export default function DataTable({
                     </option>
                   ))}
                 </select>
-                <Pagination>
-                  <PaginationContent>
+                <Pagination className="flex-wrap">
+                  <PaginationContent className="flex-wrap gap-1">
                     <PaginationItem>
                       <PaginationPrevious
                         href="#"
@@ -429,7 +429,10 @@ export default function DataTable({
                           e.preventDefault();
                           if (page > 1) setInternalPage((p) => p - 1);
                         }}
-                        className={page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        className={cn(
+                          'min-h-[36px]',
+                          page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'
+                        )}
                         aria-disabled={page <= 1}
                       />
                     </PaginationItem>
@@ -439,7 +442,7 @@ export default function DataTable({
                         <React.Fragment key={p}>
                           {i > 0 && arr[i - 1] !== p - 1 && (
                             <PaginationItem>
-                              <span className="px-2">…</span>
+                              <span className="px-2 py-2 text-muted-foreground">…</span>
                             </PaginationItem>
                           )}
                           <PaginationItem>
@@ -450,7 +453,7 @@ export default function DataTable({
                                 setInternalPage(p);
                               }}
                               isActive={page === p}
-                              className="cursor-pointer"
+                              className="cursor-pointer min-h-[36px] min-w-[36px]"
                             >
                               {p}
                             </PaginationLink>
@@ -464,7 +467,10 @@ export default function DataTable({
                           e.preventDefault();
                           if (page < totalPages) setInternalPage((p) => p + 1);
                         }}
-                        className={page >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        className={cn(
+                          'min-h-[36px]',
+                          page >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'
+                        )}
                         aria-disabled={page >= totalPages}
                       />
                     </PaginationItem>

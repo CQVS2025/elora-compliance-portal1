@@ -223,25 +223,25 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer, 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Site Management</h2>
+        <div className="min-w-0">
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Site Management</h2>
           <p className="text-muted-foreground mt-1">Manage wash station locations and contact information</p>
         </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
+        <div className="relative flex-1 min-w-0 w-full sm:max-w-md">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search sites by name, customer, or city..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 border-border h-9"
+            className="pl-10 border-border h-9 w-full"
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px] h-9">
+            <SelectTrigger className="w-full sm:w-[140px] h-9 min-w-0">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -251,7 +251,7 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer, 
             </SelectContent>
           </Select>
           <Select value={customerFilter} onValueChange={setCustomerFilter}>
-            <SelectTrigger className="w-[180px] h-9">
+            <SelectTrigger className="w-full sm:w-[180px] h-9 min-w-0">
               <SelectValue placeholder="Customer" />
             </SelectTrigger>
             <SelectContent>
@@ -304,7 +304,7 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer, 
 
       <Card className="rounded-xl border border-border overflow-hidden">
         <div className="rounded-lg border-0 overflow-x-auto">
-          <Table>
+          <Table className="min-w-[800px]">
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableHead className="w-24 py-3 pl-4">Logo</TableHead>

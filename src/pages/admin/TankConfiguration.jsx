@@ -174,12 +174,12 @@ export default function TankConfiguration() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 sm:gap-6 p-4 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Droplet className="w-6 h-6 text-primary" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+            <Droplet className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" />
             Tank Configuration
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -189,7 +189,7 @@ export default function TankConfiguration() {
             Tank capacity and calibration rate are not provided by the ACATC API. This table stores them per device so we can calculate % full and consumption. Viewing and editing here lets you add new sites, fix mismatches, and update thresholds without code changes.
           </p>
         </div>
-        <Button onClick={handleCreate}>
+        <Button onClick={handleCreate} className="w-full sm:w-auto shrink-0">
           <Plus className="w-4 h-4 mr-2" />
           Add Configuration
         </Button>

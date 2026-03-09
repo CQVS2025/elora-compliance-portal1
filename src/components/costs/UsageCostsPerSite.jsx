@@ -362,7 +362,7 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
         <p className="text-sm text-muted-foreground font-medium">Data for period: {dateRangeLabel}</p>
       )}
       <ActionLoaderOverlay show={exportLoading} message="Exporting CSV..." />
-      <div className="flex flex-wrap items-center justify-end gap-4">
+      <div className="flex flex-wrap items-center justify-end gap-3">
         {/* <div className="flex flex-wrap gap-2">
           {GRANULARITY_OPTIONS.map((opt) => (
             <Button
@@ -378,7 +378,7 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
         <Button
           variant="outline"
           size="sm"
-          className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+          className="w-full sm:w-auto min-h-[44px] sm:min-h-9 touch-manipulation border-primary text-primary hover:bg-primary hover:text-primary-foreground"
           onClick={exportToCSV}
           disabled={exportLoading}
         >
@@ -527,13 +527,13 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
               <CardTitle>Site Cost Summary</CardTitle>
               {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
             </div>
-            <div className="relative">
+            <div className="relative w-full min-w-0 sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by customer or site..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 w-72"
+                className="pl-10 w-full"
               />
             </div>
           </div>
@@ -548,8 +548,8 @@ export default function UsageCostsPerSite({ selectedCustomer, selectedSite, date
           {dateRangeLabel && (
             <p className="text-xs text-muted-foreground mb-3">Period: {dateRangeLabel}</p>
           )}
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="overflow-x-auto -mx-0">
+            <table className="w-full min-w-[800px]">
               <thead>
                 <tr className="bg-primary text-primary-foreground">
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase">Customer</th>

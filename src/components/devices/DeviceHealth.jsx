@@ -749,37 +749,37 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <CardTitle className="text-lg">Device Monitor</CardTitle>
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+              <CardTitle className="text-lg shrink-0">Device Monitor</CardTitle>
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 {hasActiveFilters && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleClearFilters}
-                    className="gap-2"
+                    className="gap-2 min-h-[44px] sm:min-h-9 touch-manipulation"
                   >
                     <X className="w-4 h-4" />
                     Clear Filters
                   </Button>
                 )}
-                <div className="relative">
+                <div className="relative flex-1 min-w-0 sm:flex-initial sm:w-64">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     placeholder="Search by name, ref, serial, app, note..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 w-64"
+                    className="pl-10 w-full"
                   />
                 </div>
               </div>
             </div>
             {/* Filters */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-              <div>
+              <div className="min-w-0">
                 <label className="text-xs text-muted-foreground mb-1 block">Status</label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue placeholder="All Statuses" />
                   </SelectTrigger>
                   <SelectContent>
@@ -790,10 +790,10 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="text-xs text-muted-foreground mb-1 block">Customer</label>
                 <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue placeholder="All Customers" />
                   </SelectTrigger>
                   <SelectContent>
@@ -805,10 +805,10 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="text-xs text-muted-foreground mb-1 block">Site</label>
                 <Select value={siteFilter} onValueChange={setSiteFilter}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue placeholder="All Sites" />
                   </SelectTrigger>
                   <SelectContent>
@@ -820,10 +820,10 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="text-xs text-muted-foreground mb-1 block">Application</label>
                 <Select value={applicationFilter} onValueChange={setApplicationFilter}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue placeholder="All Applications" />
                   </SelectTrigger>
                   <SelectContent>
@@ -835,10 +835,10 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="text-xs text-muted-foreground mb-1 block">Firmware</label>
                 <Select value={firmwareFilter} onValueChange={setFirmwareFilter}>
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue placeholder="All Versions" />
                   </SelectTrigger>
                   <SelectContent>
@@ -854,8 +854,8 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
+          <div className="overflow-x-auto -mx-0">
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
                   <SortableHead column="device" label="Device / Ref" className="w-[180px]" />

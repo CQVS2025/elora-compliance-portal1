@@ -565,7 +565,7 @@ export default function EloraAI() {
     siteInsights.length === 0;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 sm:p-6">
       {/* Filter Section - Customer and Date range with labels */}
       <Card className="border-muted/50">
         <CardContent className="py-4">

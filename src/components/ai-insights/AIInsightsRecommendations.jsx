@@ -495,7 +495,7 @@ export default function AIInsightsRecommendations({
                 </div>
               </div>
               <div className="overflow-x-auto rounded-lg border border-border">
-                <Table>
+                <Table className="min-w-[600px]">
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableHead className="w-10" />

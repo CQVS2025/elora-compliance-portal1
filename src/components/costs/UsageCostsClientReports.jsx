@@ -459,18 +459,18 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
       </div>
 
       <Card ref={reportCardRef} className="overflow-hidden">
-        <CardHeader className="border-b bg-muted/30">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex flex-col justify-center text-center min-w-0 flex-1">
-              <p className="text-lg font-bold text-foreground truncate">{reportCompanyNameFormatted.toUpperCase()}</p>
+        <CardHeader className="border-b bg-muted/30 px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex flex-col justify-center text-center min-w-0 flex-1 order-2 sm:order-1">
+              <p className="text-base sm:text-lg font-bold text-foreground truncate">{reportCompanyNameFormatted.toUpperCase()}</p>
             </div>
-            <div className="flex flex-col gap-1 text-center flex-[2] min-w-0">
-              <CardTitle className="text-lg font-semibold uppercase tracking-wide">Fleet Wash Program Report</CardTitle>
+            <div className="flex flex-col gap-1 text-center flex-[2] min-w-0 order-1 sm:order-2">
+              <CardTitle className="text-base sm:text-lg font-semibold uppercase tracking-wide">Fleet Wash Program Report</CardTitle>
               <p className="text-sm text-muted-foreground">{reportMonthLabel} · {siteLabel}</p>
               {dateRangeLabel && <p className="text-xs text-muted-foreground">{dateRangeLabel}</p>}
             </div>
-            <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-              <img src={ELORA_LOGO_URL} alt="ELORA" className="h-8 w-auto object-contain" />
+            <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0 order-3">
+              <img src={ELORA_LOGO_URL} alt="ELORA" className="h-8 w-auto object-contain max-w-full" />
               <span className="text-xs text-muted-foreground whitespace-nowrap">Prepared by ELORA</span>
             </div>
           </div>
@@ -529,15 +529,15 @@ export default function UsageCostsClientReports({ selectedCustomer, selectedSite
       </Card>
 
       <div className="flex flex-wrap gap-3">
-        <Button variant="default" onClick={handleExportPdf} disabled={exportPdfLoading}>
+        <Button variant="default" onClick={handleExportPdf} disabled={exportPdfLoading} className="w-full sm:w-auto min-h-[44px] sm:min-h-10 touch-manipulation">
           {exportPdfLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
           Export as PDF
         </Button>
-        <Button variant="outline" onClick={() => setEmailDialogOpen(true)} disabled={emailLoading}>
+        <Button variant="outline" onClick={() => setEmailDialogOpen(true)} disabled={emailLoading} className="w-full sm:w-auto min-h-[44px] sm:min-h-10 touch-manipulation">
           {emailLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
           Email to Customer
         </Button>
-        <Button variant="outline" onClick={() => setScheduleDialogOpen(true)} disabled={scheduleLoading}>
+        <Button variant="outline" onClick={() => setScheduleDialogOpen(true)} disabled={scheduleLoading} className="w-full sm:w-auto min-h-[44px] sm:min-h-10 touch-manipulation">
           <Calendar className="h-4 w-4 mr-2" />
           Schedule Monthly
         </Button>

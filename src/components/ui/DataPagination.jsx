@@ -66,32 +66,32 @@ export default function DataPagination({
   const pageNumbers = getPageNumbers();
 
   return (
-    <div className={cn('flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-border', className)}>
-      <div className="text-sm text-muted-foreground">
+    <div className={cn('flex flex-col gap-3 pt-4 border-t border-border sm:flex-row sm:items-center sm:justify-between sm:gap-4', className)}>
+      <div className="text-sm text-muted-foreground order-2 sm:order-1">
         Showing <span className="font-medium text-foreground">{startItem}</span> to{' '}
         <span className="font-medium text-foreground">{endItem}</span> of{' '}
         <span className="font-medium text-foreground">{totalItems}</span> results
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-2 order-1 sm:order-2 min-h-[44px]">
         <Button
           variant="outline"
           size="sm"
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
           disabled={currentPage === 1}
-          className="h-9 px-3"
+          className="h-9 min-h-[44px] sm:min-h-[36px] px-3 touch-manipulation"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
           Previous
         </Button>
 
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {pageNumbers.map((page, index) => {
             if (page === 'ellipsis') {
               return (
                 <span
                   key={`ellipsis-${index}`}
-                  className="px-2 text-muted-foreground"
+                  className="px-2 py-2 text-muted-foreground"
                 >
                   ...
                 </span>
@@ -104,7 +104,7 @@ export default function DataPagination({
                 variant={currentPage === page ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => onPageChange(page)}
-                className="h-9 w-9 p-0"
+                className="h-9 w-9 min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] p-0 touch-manipulation"
               >
                 {page}
               </Button>
@@ -117,7 +117,7 @@ export default function DataPagination({
           size="sm"
           onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
           disabled={currentPage === totalPages}
-          className="h-9 px-3"
+          className="h-9 min-h-[44px] sm:min-h-[36px] px-3 touch-manipulation"
         >
           Next
           <ChevronRight className="w-4 h-4 ml-1" />

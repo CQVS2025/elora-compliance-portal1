@@ -192,7 +192,7 @@ export default function Leaderboard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Period & filters */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -208,73 +208,73 @@ export default function Leaderboard() {
 
       {/* Top 3 Podium */}
       {driverStats.length >= 3 && (
-        <div className="flex justify-center items-end gap-4 flex-wrap">
+        <div className="flex justify-center items-end gap-2 sm:gap-4 flex-wrap">
           {/* 2nd */}
-          <Card className="w-40 flex-shrink-0">
-            <CardContent className="pt-6 pb-6 text-center">
-              <Medal className="w-6 h-6 text-muted-foreground mx-auto mb-3" />
-              <div className="w-16 h-16 rounded-full bg-muted mx-auto mb-3 flex items-center justify-center">
-                <span className="font-bold text-sm truncate px-1">{driverStats[1].name}</span>
+          <Card className="w-[30%] min-w-[110px] max-w-[160px] flex-shrink-0">
+            <CardContent className="pt-4 pb-4 sm:pt-6 sm:pb-6 text-center">
+              <Medal className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground mx-auto mb-2 sm:mb-3" />
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-muted mx-auto mb-2 sm:mb-3 flex items-center justify-center">
+                <span className="font-bold text-xs sm:text-sm truncate px-1">{driverStats[1].name}</span>
               </div>
               {driverStats[1].customerName && (
-                <Badge variant="secondary" className="mb-1 text-xs">{driverStats[1].customerName}</Badge>
+                <Badge variant="secondary" className="mb-1 text-[10px] sm:text-xs">{driverStats[1].customerName}</Badge>
               )}
-              {driverStats[1].siteName && <p className="text-xs text-muted-foreground">{driverStats[1].siteName}</p>}
-              <p className="text-2xl font-bold text-primary mt-2">{driverStats[1].performanceScore}</p>
-              <p className="text-xs text-muted-foreground">Performance</p>
-              <div className="flex items-center justify-center gap-1 mt-2 text-xs text-muted-foreground">
+              {driverStats[1].siteName && <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{driverStats[1].siteName}</p>}
+              <p className="text-xl sm:text-2xl font-bold text-primary mt-1 sm:mt-2">{driverStats[1].performanceScore}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Performance</p>
+              <div className="hidden sm:flex items-center justify-center gap-1 mt-2 text-xs text-muted-foreground">
                 <Flame className="w-3 h-3 text-orange-500" />
                 {driverStats[1].currentStreak} day streak
               </div>
-              <Badge className="mt-3 bg-muted-foreground text-muted">2nd Place</Badge>
+              <Badge className="mt-2 sm:mt-3 bg-muted-foreground text-muted text-[10px] sm:text-xs">2nd Place</Badge>
             </CardContent>
           </Card>
 
           {/* 1st */}
-          <Card className="w-48 -mt-4 flex-shrink-0 border-2 border-yellow-500/50 dark:border-yellow-400/50">
-            <CardContent className="pt-6 pb-6 text-center relative">
+          <Card className="w-[34%] min-w-[130px] max-w-[192px] -mt-4 flex-shrink-0 border-2 border-yellow-500/50 dark:border-yellow-400/50">
+            <CardContent className="pt-4 pb-4 sm:pt-6 sm:pb-6 text-center relative">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-400 rounded-t-xl" />
-              <Crown className="w-8 h-8 text-yellow-500 dark:text-yellow-400 mx-auto mb-3" />
-              <div className="w-20 h-20 rounded-full bg-yellow-500/10 dark:bg-yellow-400/10 mx-auto mb-3 flex items-center justify-center">
-                <span className="font-bold truncate px-1">{driverStats[0].name}</span>
+              <Crown className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500 dark:text-yellow-400 mx-auto mb-2 sm:mb-3" />
+              <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-yellow-500/10 dark:bg-yellow-400/10 mx-auto mb-2 sm:mb-3 flex items-center justify-center">
+                <span className="font-bold text-xs sm:text-sm truncate px-1">{driverStats[0].name}</span>
               </div>
               {driverStats[0].customerName && (
-                <Badge variant="secondary" className="mb-1 text-xs">{driverStats[0].customerName}</Badge>
+                <Badge variant="secondary" className="mb-1 text-[10px] sm:text-xs">{driverStats[0].customerName}</Badge>
               )}
-              {driverStats[0].siteName && <p className="text-xs text-muted-foreground">{driverStats[0].siteName}</p>}
-              <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-500 mt-2">{driverStats[0].performanceScore}</p>
-              <p className="text-xs text-muted-foreground">Performance</p>
-              <div className="flex items-center justify-center gap-1 mt-2 text-xs text-muted-foreground">
+              {driverStats[0].siteName && <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{driverStats[0].siteName}</p>}
+              <p className="text-2xl sm:text-3xl font-bold text-yellow-600 dark:text-yellow-500 mt-1 sm:mt-2">{driverStats[0].performanceScore}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Performance</p>
+              <div className="hidden sm:flex items-center justify-center gap-1 mt-2 text-xs text-muted-foreground">
                 <Flame className="w-3 h-3 text-orange-500" />
                 {driverStats[0].currentStreak} day streak
               </div>
-              <div className="flex gap-1 justify-center mt-2">
+              <div className="hidden sm:flex gap-1 justify-center mt-2">
                 {driverStats[0].badges.slice(0, 3).map((badge, idx) => (
                   <badge.icon key={idx} className={`w-4 h-4 ${badge.color}`} />
                 ))}
               </div>
-              <Badge className="mt-3 bg-yellow-500 text-white hover:bg-yellow-600">Champion</Badge>
+              <Badge className="mt-2 sm:mt-3 bg-yellow-500 text-white hover:bg-yellow-600 text-[10px] sm:text-xs">Champion</Badge>
             </CardContent>
           </Card>
 
           {/* 3rd */}
-          <Card className="w-40 flex-shrink-0">
-            <CardContent className="pt-6 pb-6 text-center">
-              <Medal className="w-6 h-6 text-amber-600 dark:text-amber-500 mx-auto mb-3" />
-              <div className="w-16 h-16 rounded-full bg-amber-500/10 dark:bg-amber-400/10 mx-auto mb-3 flex items-center justify-center">
-                <span className="font-bold text-sm truncate px-1">{driverStats[2].name}</span>
+          <Card className="w-[30%] min-w-[110px] max-w-[160px] flex-shrink-0">
+            <CardContent className="pt-4 pb-4 sm:pt-6 sm:pb-6 text-center">
+              <Medal className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 dark:text-amber-500 mx-auto mb-2 sm:mb-3" />
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-amber-500/10 dark:bg-amber-400/10 mx-auto mb-2 sm:mb-3 flex items-center justify-center">
+                <span className="font-bold text-xs sm:text-sm truncate px-1">{driverStats[2].name}</span>
               </div>
               {driverStats[2].customerName && (
-                <Badge variant="secondary" className="mb-1 text-xs">{driverStats[2].customerName}</Badge>
+                <Badge variant="secondary" className="mb-1 text-[10px] sm:text-xs">{driverStats[2].customerName}</Badge>
               )}
-              {driverStats[2].siteName && <p className="text-xs text-muted-foreground">{driverStats[2].siteName}</p>}
-              <p className="text-2xl font-bold text-primary mt-2">{driverStats[2].performanceScore}</p>
-              <p className="text-xs text-muted-foreground">Performance</p>
-              <div className="flex items-center justify-center gap-1 mt-2 text-xs text-muted-foreground">
+              {driverStats[2].siteName && <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{driverStats[2].siteName}</p>}
+              <p className="text-xl sm:text-2xl font-bold text-primary mt-1 sm:mt-2">{driverStats[2].performanceScore}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Performance</p>
+              <div className="hidden sm:flex items-center justify-center gap-1 mt-2 text-xs text-muted-foreground">
                 <Flame className="w-3 h-3 text-orange-500" />
                 {driverStats[2].currentStreak} day streak
               </div>
-              <Badge className="mt-3 bg-amber-600 text-white hover:bg-amber-700">3rd Place</Badge>
+              <Badge className="mt-2 sm:mt-3 bg-amber-600 text-white hover:bg-amber-700 text-[10px] sm:text-xs">3rd Place</Badge>
             </CardContent>
           </Card>
         </div>
@@ -293,11 +293,11 @@ export default function Leaderboard() {
             {paginatedRankings.map((driver) => (
               <div
                 key={driver.name}
-                className="px-6 py-4 flex items-center justify-between hover:bg-muted/50 transition-colors"
+                className="px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 hover:bg-muted/50 transition-colors"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm
+                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm shrink-0
                       ${driver.rank === 1 ? 'bg-yellow-500 text-white' :
                         driver.rank === 2 ? 'bg-muted-foreground text-primary-foreground' :
                         driver.rank === 3 ? 'bg-amber-600 text-white' :
@@ -305,19 +305,19 @@ export default function Leaderboard() {
                   >
                     {driver.rank <= 3 ? getRankIcon(driver.rank) : `#${driver.rank}`}
                   </div>
-                  <div>
-                    <p className="font-semibold">{driver.name}</p>
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{driver.name}</p>
                     <div className="flex items-center gap-2 text-xs flex-wrap">
                       {driver.customerName && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                          <Building2 className="w-3 h-3" />
-                          {driver.customerName}
+                          <Building2 className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-[100px] sm:max-w-none">{driver.customerName}</span>
                         </span>
                       )}
                       {driver.siteName && (
                         <span className="text-muted-foreground flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {driver.siteName}
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-[80px] sm:max-w-none">{driver.siteName}</span>
                         </span>
                       )}
                     </div>
@@ -325,11 +325,11 @@ export default function Leaderboard() {
                       <span>{driver.totalWashes} washes</span>
                       <span className="flex items-center gap-1">
                         <Flame className="w-3 h-3 text-orange-500" />
-                        {driver.currentStreak} day streak
+                        {driver.currentStreak}d streak
                       </span>
                     </div>
                     {driver.badges.length > 0 && (
-                      <div className="flex gap-1 mt-2 flex-wrap">
+                      <div className="hidden sm:flex gap-1 mt-2 flex-wrap">
                         {driver.badges.map((badge, idx) => (
                           <span
                             key={idx}
@@ -343,10 +343,10 @@ export default function Leaderboard() {
                     )}
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-primary">{driver.performanceScore}</p>
-                  <p className="text-xs text-muted-foreground">Performance</p>
-                  <div className="w-20 h-1.5 rounded-full bg-muted mt-2">
+                <div className="text-right shrink-0">
+                  <p className="text-xl sm:text-2xl font-bold text-primary">{driver.performanceScore}</p>
+                  <p className="text-xs text-muted-foreground">Perf.</p>
+                  <div className="w-14 sm:w-20 h-1.5 rounded-full bg-muted mt-1 sm:mt-2">
                     <div
                       className="h-full rounded-full bg-primary"
                       style={{ width: `${Math.min(driver.performanceScore, 100)}%` }}

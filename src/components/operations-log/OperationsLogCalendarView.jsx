@@ -320,15 +320,15 @@ export function OperationsLogCalendarView({
     const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
     return (
-      <div className="rounded-lg border overflow-hidden bg-card min-w-0 w-full">
-        <div className="grid grid-cols-7 border-b bg-muted/50">
+      <div className="rounded-lg border overflow-x-auto overflow-y-hidden bg-card min-w-0 w-full [scrollbar-gutter:stable]">
+        <div className="grid grid-cols-7 border-b bg-muted/50 min-w-[280px] sm:min-w-0">
           {weekDays.map((day) => (
             <div key={day} className="p-2 text-center text-xs font-medium text-muted-foreground border-r last:border-r-0 min-w-0">
               {day}
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 auto-rows-fr" style={{ minHeight: 400 }}>
+        <div className="grid grid-cols-7 auto-rows-fr min-w-[280px] sm:min-w-0" style={{ minHeight: 400 }}>
           {days.map((day) => {
             const key = format(day, 'yyyy-MM-dd');
             const dayEntries = entriesByDate[key] ?? [];
@@ -339,7 +339,7 @@ export function OperationsLogCalendarView({
               <div
                 key={key}
                 className={cn(
-                  'min-h-[80px] sm:min-h-[100px] border-b border-r last:border-r-0 p-1 sm:p-2 flex flex-col min-w-0 overflow-hidden',
+                  'min-h-[80px] sm:min-h-[100px] min-w-[40px] sm:min-w-0 border-b border-r last:border-r-0 p-1 sm:p-2 flex flex-col overflow-hidden',
                   !isCurrentMonth && 'bg-muted/30'
                 )}
               >

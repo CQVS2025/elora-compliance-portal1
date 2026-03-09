@@ -148,13 +148,13 @@ export default function OperationsLogCategoriesManagement() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Operations Log Categories</h1>
+    <div className="p-4 sm:p-6 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Operations Log Categories</h1>
           <p className="text-muted-foreground">Keep the default ones and add more. Used in the New Entry form.</p>
         </div>
-        <Button onClick={openCreate}>
+        <Button onClick={openCreate} className="w-full sm:w-auto shrink-0">
           <Plus className="mr-2 size-4" />
           Add Category
         </Button>
@@ -174,6 +174,7 @@ export default function OperationsLogCategoriesManagement() {
               <Loader2 className="size-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -213,6 +214,7 @@ export default function OperationsLogCategoriesManagement() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
           {!isLoading && categories.length === 0 && (
             <p className="text-center text-muted-foreground py-8">No categories yet.</p>
@@ -244,7 +246,7 @@ export default function OperationsLogCategoriesManagement() {
       </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editingCategory ? 'Edit category' : 'Add category'}</DialogTitle>
           </DialogHeader>

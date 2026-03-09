@@ -90,7 +90,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
@@ -135,7 +135,7 @@ export default function Settings() {
       </Card>
 
       {/* Danger zone */}
-      <Card className="border-border border-destructive/30 bg-destructive/5">
+      <Card className="border-destructive/30 bg-destructive/5">
         <CardHeader className="pb-2">
           <CardTitle className="text-base text-destructive">Delete Account</CardTitle>
           <CardDescription>

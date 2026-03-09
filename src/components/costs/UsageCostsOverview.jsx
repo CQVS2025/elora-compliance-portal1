@@ -106,6 +106,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
     const hasMaps = entitlementMaps && (Object.keys(entitlementMaps.byRef || {}).length > 0 || Object.keys(entitlementMaps.byRfid || {}).length > 0);
     const maps = hasMaps ? entitlementMaps : null;
     const pMaps = sitePricingMaps?.byDeviceSerial != null ? sitePricingMaps : null;
+    const isTruckWashView = productTab === 'truck_wash';
     const hasVehicleContext = (s) => s.customerRef != null && s.siteRef != null && s.vehicleRef != null;
     const vehicleGroups = {};
     let scansExcludedConfigMissing = 0;
@@ -116,7 +117,18 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
       const scanKey = `${scan.customerRef}_${scan.siteRef}_${scan.vehicleRef}_${scan.rfid}`;
       let pricing = pricingCache.get(scanKey);
       if (!pricing) {
-        pricing = calculateScanCostFromScan(scan, maps, pMaps);
+        const basePricing = calculateScanCostFromScan(scan, maps, pMaps);
+        if (isTruckWashView && !basePricing.configMissing) {
+          const forcedPricePerLitre = 1.95;
+          const litresUsed = basePricing.litresUsed;
+          pricing = {
+            ...basePricing,
+            pricePerLitre: forcedPricePerLitre,
+            cost: litresUsed * forcedPricePerLitre,
+          };
+        } else {
+          pricing = basePricing;
+        }
         pricingCache.set(scanKey, pricing);
       }
 
@@ -173,7 +185,9 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
 
     const totalCost = round2(vehicles.reduce((sum, v) => sum + v.totalCost, 0));
     const totalScans = vehicles.reduce((sum, v) => sum + v.totalScans, 0);
+    const totalLitres = vehicles.reduce((sum, v) => sum + (v.totalLitres ?? 0), 0);
     const avgCostPerScan = totalScans > 0 ? round2(totalCost / totalScans) : 0;
+    const avgPricePerLitre = totalLitres > 0 ? round2(totalCost / totalLitres) : null;
     const mostExpensiveSite = vehicles.reduce((max, v) => {
       const siteCost = vehicles.filter(x => x.siteRef === v.siteRef).reduce((sum, x) => sum + x.totalCost, 0);
       return siteCost > (max.cost || 0) ? { name: v.siteName, cost: round2(siteCost) } : max;
@@ -229,14 +243,14 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
 
     return {
       vehicles: vehicles.sort((a, b) => b.totalCost - a.totalCost),
-      summary: { totalCost, totalScans, avgCostPerScan, mostExpensiveSite },
+      summary: { totalCost, totalScans, avgCostPerScan, avgPricePerLitre, totalLitres, mostExpensiveSite },
       customerSummary: Object.values(customerGroups),
       dailyCosts,
       topSites,
       scansExcludedConfigMissing,
       excludedScanRows,
     };
-  }, [filteredScansByProduct, entitlementMaps, sitePricingMaps]);
+  }, [filteredScansByProduct, entitlementMaps, sitePricingMaps, productTab]);
 
   useEffect(() => {
     if (isPaginated && scans.length > 0 && filteredScansForCost.length === 0 && currentApiPage < pageCount && !autoSkippedPagesRef.current.has(currentApiPage)) {
@@ -317,28 +331,30 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
         <p className="text-sm text-muted-foreground font-medium">Data for period: {dateRangeLabel}</p>
       )}
       <Tabs value={productTab} onValueChange={setProductTab} className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="acid" className="flex items-center gap-1.5">
-            <Droplets className="h-4 w-4" />
+        <TabsList className="grid w-full max-w-lg grid-cols-3 gap-1.5 bg-card p-2 rounded-xl border-2 border-border shadow-sm min-h-[44px]">
+          <TabsTrigger value="all" className="min-h-[44px] touch-manipulation data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold py-2.5">
+            All
+          </TabsTrigger>
+          <TabsTrigger value="acid" className="flex items-center justify-center gap-1.5 min-h-[44px] touch-manipulation data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold py-2.5">
+            <Droplets className="h-4 w-4 shrink-0" />
             Acid
           </TabsTrigger>
-          <TabsTrigger value="truck_wash" className="flex items-center gap-1.5">
-            <Truck className="h-4 w-4" />
+          <TabsTrigger value="truck_wash" className="flex items-center justify-center gap-1.5 min-h-[44px] touch-manipulation data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold py-2.5">
+            <Truck className="h-4 w-4 shrink-0" />
             Truck Wash
           </TabsTrigger>
         </TabsList>
       </Tabs>
       <Dialog open={showExcludedScansModal} onOpenChange={setShowExcludedScansModal}>
-        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Excluded scans (no configured wash duration)</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             These scans were excluded from cost totals because no configured wash duration was found for the vehicle. A wash duration (e.g. 30s, 60s) must be set on the vehicle to calculate cost.
           </p>
-          <div className="overflow-auto flex-1 min-h-0 border rounded-lg">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0 border rounded-lg">
+            <table className="w-full text-sm min-w-[600px]">
               <thead className="bg-muted/50 sticky top-0">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Date / time</th>
@@ -375,10 +391,10 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
           </div>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-sm font-semibold text-primary">Total Usage Cost</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <DollarSign className="w-5 h-5 text-primary" />
@@ -392,7 +408,7 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-sm font-semibold text-primary">Average Cost Per Scan</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                 <Calculator className="w-5 h-5 text-blue-600" />
@@ -404,9 +420,27 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
             </CardContent>
           </Card>
         </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+          <Card>
+            <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="text-sm font-semibold text-primary">Avg Price/Litre</CardTitle>
+              <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                <Droplets className="w-5 h-5 text-emerald-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">
+                {summary.avgPricePerLitre != null ? `$${summary.avgPricePerLitre.toFixed(2)}` : '—'}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {summary.avgPricePerLitre != null ? `${(summary.totalLitres ?? 0).toFixed(1)}L total · weighted avg` : 'No litres data'}
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-sm font-semibold text-primary">Total Scans</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-cyan-100 flex items-center justify-center">
                 <Droplet className="w-5 h-5 text-cyan-600" />
@@ -418,9 +452,9 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
             </CardContent>
           </Card>
         </motion.div>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-sm font-semibold text-primary">Most Expensive Site</CardTitle>
               <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
                 <MapPin className="w-5 h-5 text-purple-600" />
@@ -436,15 +470,15 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
       </div>
 
       {isPaginated && pageCount > 1 && (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3">
-          <p className="text-sm text-muted-foreground">
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <p className="text-sm text-muted-foreground order-2 sm:order-1 min-w-0">
             Scans page <span className="font-semibold text-foreground">{currentApiPage}</span> of <span className="font-semibold text-foreground">{pageCount.toLocaleString()}</span>
-            {' '}({filteredScansByProduct.length.toLocaleString()} success scans on this page{productTab !== 'all' ? ` · ${productTab === 'acid' ? 'Acid' : 'Truck Wash'}` : ''})
+            {' '}({filteredScansByProduct.length.toLocaleString()} on this page{productTab !== 'all' ? ` · ${productTab === 'acid' ? 'Acid' : 'Truck Wash'}` : ''})
           </p>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setApiPage((p) => Math.max(1, p - 1))} disabled={currentApiPage <= 1 || isFetching}>Previous</Button>
-            <span className="text-sm text-muted-foreground min-w-[6rem] text-center">{currentApiPage} / {pageCount.toLocaleString()}</span>
-            <Button variant="outline" size="sm" onClick={() => setApiPage((p) => Math.min(pageCount, p + 1))} disabled={currentApiPage >= pageCount || isFetching}>Next</Button>
+          <div className="flex items-center gap-2 order-1 sm:order-2 shrink-0">
+            <Button variant="outline" size="sm" className="min-h-[44px] sm:min-h-9 touch-manipulation" onClick={() => setApiPage((p) => Math.max(1, p - 1))} disabled={currentApiPage <= 1 || isFetching}>Previous</Button>
+            <span className="text-sm text-muted-foreground min-w-[5rem] text-center">{currentApiPage} / {pageCount.toLocaleString()}</span>
+            <Button variant="outline" size="sm" className="min-h-[44px] sm:min-h-9 touch-manipulation" onClick={() => setApiPage((p) => Math.min(pageCount, p + 1))} disabled={currentApiPage >= pageCount || isFetching}>Next</Button>
           </div>
         </div>
       )}
@@ -456,10 +490,10 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
               <CardTitle>Cost Breakdown by Vehicle</CardTitle>
               {dateRangeLabel && <p className="text-sm text-muted-foreground mt-0.5">{dateRangeLabel}</p>}
             </div>
-            <div className="flex items-center gap-3">
-              <div className="relative">
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <div className="relative w-full min-w-0 sm:w-72">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Search by customer, site, or vehicle..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 w-72" />
+                <Input placeholder="Search by customer, site, or vehicle..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 w-full" />
               </div>
               {/* {scansExcludedConfigMissing > 0 && (
                 <Button variant="outline" size="sm" className="border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/50" onClick={() => setShowExcludedScansModal(true)}>
@@ -618,8 +652,8 @@ export default function UsageCostsOverview({ selectedCustomer, selectedSite, dat
                   </div>
                 </button>
                 {expandedCustomers.has(customer.customerRef) && (
-                  <div className="p-4 bg-card">
-                    <table className="w-full">
+                  <div className="p-4 bg-card overflow-x-auto">
+                    <table className="w-full min-w-[400px]">
                       <thead>
                         <tr className="border-b">
                           <th className="px-2 py-2 text-left text-xs font-semibold text-muted-foreground">Site</th>

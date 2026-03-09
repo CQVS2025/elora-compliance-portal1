@@ -319,19 +319,19 @@ export default function VehicleImageLog() {
       {/* List view: table */}
       {viewMode === 'list' && (
         <Card className="flex-1 min-h-0 flex flex-col mt-4">
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <CardTitle className="flex items-center gap-2">
-              <ImageIcon className="h-5 w-5" />
+              <ImageIcon className="h-5 w-5 shrink-0" />
               Vehicles
             </CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="relative">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-initial">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by vehicle or site..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 w-[220px]"
+                  className="pl-8 w-full sm:w-[220px]"
                 />
               </div>
             </div>
@@ -347,6 +347,7 @@ export default function VehicleImageLog() {
               </div>
             ) : (
               <>
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -377,6 +378,7 @@ export default function VehicleImageLog() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
                 <DataPagination
                   currentPage={currentPage}
                   totalPages={totalPages}

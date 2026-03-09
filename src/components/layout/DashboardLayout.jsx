@@ -42,6 +42,7 @@ const PATH_TO_HEADER = {
   '/admin/tab-visibility': { title: 'Tab Visibility', description: 'Override which tabs each role can see' },
   '/admin/tank-configuration': { title: 'Tank Configuration', description: 'Manage tank capacities and calibration settings' },
   '/admin/products': { title: 'Products', description: 'Manage products for Operations Log and forms' },
+  '/admin/parts': { title: 'Parts', description: 'Manage parts and stock' },
   '/admin/operations-log-categories': { title: 'Operations Log Categories', description: 'Keep default categories and add more' },
 };
 
@@ -94,6 +95,29 @@ function getAdminBreadcrumbs(pathname) {
   return [base];
 }
 
+/** Breadcrumbs for standalone pages that should show Back to Dashboard (e.g. Settings). */
+function getStandaloneBackBreadcrumbs(pathname) {
+  if (pathname === '/Settings' || pathname === '/settings') {
+    return [{ label: 'Dashboard', path: '/' }, { label: 'Settings', path: null }];
+  }
+  return null;
+}
+
+/** Breadcrumbs for non-admin nested detail pages so header shows explicit Back button. */
+function getNestedDetailBreadcrumbs(pathname) {
+  if (pathname.startsWith('/vehicle/')) {
+    const pathHeader = getPathHeader(pathname);
+    return [{ label: 'Compliance', path: '/compliance' }, { label: pathHeader?.title ?? 'Vehicle', path: null }];
+  }
+  if (pathname.match(/^\/operations-log\/entry\/[^/]+$/)) {
+    return [{ label: 'Operations Log', path: '/operations-log' }, { label: 'Entry details', path: null }];
+  }
+  if (pathname.match(/^\/operations-log\/entry\/[^/]+\/attachment$/)) {
+    return [{ label: 'Operations Log', path: '/operations-log' }, { label: 'Attachment', path: null }];
+  }
+  return null;
+}
+
 /**
  * Dashboard layout using dashboard-01 structure: sidebar (NavMain, NavSecondary, NavUser) + main area with SiteHeader.
  */
@@ -105,7 +129,10 @@ export default function DashboardLayout({ children, title: titleProp, descriptio
   const pathHeader = getPathHeader(location.pathname);
   const title = titleProp ?? pathHeader?.title ?? 'Dashboard';
   const description = descriptionProp ?? pathHeader?.description ?? null;
-  const breadcrumbs = getAdminBreadcrumbs(location.pathname);
+  const adminBreadcrumbs = getAdminBreadcrumbs(location.pathname);
+  const nestedBreadcrumbs = getNestedDetailBreadcrumbs(location.pathname);
+  const standaloneBreadcrumbs = getStandaloneBackBreadcrumbs(location.pathname);
+  const breadcrumbs = adminBreadcrumbs ?? nestedBreadcrumbs ?? standaloneBreadcrumbs;
   const companyName = userProfile?.company_name;
   const companyLogoUrl = userProfile?.company_logo_url;
   const isSuperAdmin = userProfile?.role === 'super_admin';

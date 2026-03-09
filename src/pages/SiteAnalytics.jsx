@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, TrendingUp, AlertTriangle, Droplet, Loader2, Download } from 'lucide-react';
-import Header from '@/components/dashboard/Header';
 import { usePermissions, useFilteredData } from '@/components/auth/PermissionGuard';
 import { sitesOptions, vehiclesOptions, scansOptions } from '@/query/options';
 import { supabase } from '@/lib/supabase';
@@ -185,28 +184,22 @@ export default function SiteAnalytics() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <Header />
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-12 h-12 text-primary animate-spin" />
-        </div>
+      <div className="flex items-center justify-center min-h-[300px]">
+        <Loader2 className="w-12 h-12 text-primary animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Header />
-      
-      <main className="max-w-[1600px] mx-auto px-4 md:px-6 py-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-6 space-y-6">
+        {/* Page header */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800">Site Analytics</h1>
-            <p className="text-slate-600 mt-1">Performance metrics across all sites</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Site Analytics</h1>
+            <p className="text-muted-foreground mt-1">Performance metrics across all sites</p>
           </div>
           {permissions.canExportData && (
-            <Button onClick={exportToCSV}>
+            <Button onClick={exportToCSV} className="w-full sm:w-auto shrink-0">
               <Download className="w-4 h-4 mr-2" />
               Export Report
             </Button>
@@ -216,24 +209,27 @@ export default function SiteAnalytics() {
         {/* Date Range Filter */}
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <Calendar className="w-5 h-5 text-slate-500" />
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
               <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-sm text-muted-foreground font-medium">Date range</span>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Input
                   type="date"
                   value={dateRange.start}
                   onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                  className="w-40"
+                  className="w-full sm:w-40"
                 />
-                <span className="text-slate-500">to</span>
+                <span className="text-muted-foreground text-sm text-center">to</span>
                 <Input
                   type="date"
                   value={dateRange.end}
                   onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                  className="w-40"
+                  className="w-full sm:w-40"
                 />
               </div>
-              <div className="flex gap-2 ml-auto">
+              <div className="flex flex-wrap gap-2 sm:ml-auto">
                 <Button
                   variant="outline"
                   size="sm"
@@ -272,13 +268,13 @@ export default function SiteAnalytics() {
         {/* Summary Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Droplet className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/10 rounded-lg flex items-center justify-center shrink-0">
+                  <Droplet className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-800">{totalWashes.toLocaleString()}</p>
+                <div className="min-w-0">
+                  <p className="text-xl sm:text-2xl font-bold">{totalWashes.toLocaleString()}</p>
                   <p className="text-sm text-primary font-semibold">Total Washes</p>
                 </div>
               </div>
@@ -286,13 +282,13 @@ export default function SiteAnalytics() {
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-green-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500/10 rounded-lg flex items-center justify-center shrink-0">
+                  <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-800">{overallCompliance}%</p>
+                <div className="min-w-0">
+                  <p className="text-xl sm:text-2xl font-bold">{overallCompliance}%</p>
                   <p className="text-sm text-primary font-semibold">Overall Compliance</p>
                 </div>
               </div>
@@ -300,13 +296,13 @@ export default function SiteAnalytics() {
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-6 h-6 text-purple-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-500/10 rounded-lg flex items-center justify-center shrink-0">
+                  <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 dark:text-purple-400" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-800">{filteredSites.length}</p>
+                <div className="min-w-0">
+                  <p className="text-xl sm:text-2xl font-bold">{filteredSites.length}</p>
                   <p className="text-sm text-primary font-semibold">Active Sites</p>
                 </div>
               </div>
@@ -314,13 +310,13 @@ export default function SiteAnalytics() {
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-500/10 rounded-lg flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-800">{totalIssues}</p>
+                <div className="min-w-0">
+                  <p className="text-xl sm:text-2xl font-bold">{totalIssues}</p>
                   <p className="text-sm text-primary font-semibold">Total Issues</p>
                 </div>
               </div>
@@ -421,9 +417,9 @@ export default function SiteAnalytics() {
               <CardTitle>Site Performance Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="max-h-[300px] overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-white border-b">
+              <div className="max-h-[300px] overflow-y-auto overflow-x-auto">
+                <table className="w-full text-sm min-w-[360px]">
+                  <thead className="sticky top-0 bg-card border-b">
                     <tr className="text-left">
                       <th className="pb-2 font-semibold">Site</th>
                       <th className="pb-2 font-semibold text-center">Washes</th>
@@ -433,14 +429,14 @@ export default function SiteAnalytics() {
                   </thead>
                   <tbody>
                     {siteMetrics.map((site, index) => (
-                      <tr key={site.id} className={index % 2 === 0 ? 'bg-slate-50' : ''}>
-                        <td className="py-2">{site.name}</td>
+                      <tr key={site.id} className={index % 2 === 0 ? 'bg-muted/30' : ''}>
+                        <td className="py-2 pr-2">{site.name}</td>
                         <td className="py-2 text-center">{site.totalWashes}</td>
                         <td className="py-2 text-center">
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            site.complianceRate >= 80 ? 'bg-green-100 text-green-800' :
-                            site.complianceRate >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
+                            site.complianceRate >= 80 ? 'bg-green-500/10 text-green-700 dark:text-green-400' :
+                            site.complianceRate >= 60 ? 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400' :
+                            'bg-red-500/10 text-red-700 dark:text-red-400'
                           }`}>
                             {site.complianceRate}%
                           </span>
@@ -456,7 +452,6 @@ export default function SiteAnalytics() {
             </CardContent>
           </Card>
         </div>
-      </main>
     </div>
   );
 }

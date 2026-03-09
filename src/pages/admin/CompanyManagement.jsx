@@ -543,12 +543,12 @@ export default function CompanyManagement() {
   }, [searchQuery]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Filters */}
       <Card className="border-border">
         <CardContent className="p-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 flex-wrap">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search companies..."
@@ -557,14 +557,16 @@ export default function CompanyManagement() {
                 className="pl-10"
               />
             </div>
-            <Button onClick={() => setShowQuickSetupModal(true)}>
-              <Zap className="w-4 h-4 mr-2" />
-              Quick Setup
-            </Button>
-            <Button onClick={() => setShowCreateModal(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Company
-            </Button>
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={() => setShowQuickSetupModal(true)} className="flex-1 sm:flex-initial">
+                <Zap className="w-4 h-4 mr-2" />
+                Quick Setup
+              </Button>
+              <Button onClick={() => setShowCreateModal(true)} className="flex-1 sm:flex-initial">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Company
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -374,7 +374,7 @@ export function NewEntryModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6" aria-describedby={undefined}>
         <div className="relative grid gap-4 min-h-0">
           <DialogHeader className="px-0 sm:px-0">
             <DialogTitle className="text-lg sm:text-xl pr-8">New Operations Log Entry</DialogTitle>

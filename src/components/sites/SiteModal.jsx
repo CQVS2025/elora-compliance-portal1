@@ -122,7 +122,7 @@ export default function SiteModal({ open, onClose, site, customers = [], onSucce
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Edit Site</DialogTitle>
         </DialogHeader>

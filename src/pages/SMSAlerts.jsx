@@ -151,10 +151,10 @@ export default function SMSAlerts() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-6 max-w-6xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <MessageSquare className="h-6 w-6" />
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+          <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 shrink-0" />
           SMS Alerts
         </h1>
         <p className="text-muted-foreground mt-1">
@@ -170,14 +170,14 @@ export default function SMSAlerts() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
             <div>
               <label className="text-xs text-muted-foreground block mb-1">From date</label>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
               />
             </div>
             <div>
@@ -186,13 +186,13 @@ export default function SMSAlerts() {
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
               />
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Customer name</label>
               <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                <SelectTrigger className="w-[200px] h-9">
+                <SelectTrigger className="w-full h-9">
                   <SelectValue placeholder="All customers" />
                 </SelectTrigger>
                 <SelectContent>
@@ -206,7 +206,7 @@ export default function SMSAlerts() {
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Site name</label>
               <Select value={siteFilter} onValueChange={setSiteFilter}>
-                <SelectTrigger className="w-[200px] h-9">
+                <SelectTrigger className="w-full h-9">
                   <SelectValue placeholder="All sites" />
                 </SelectTrigger>
                 <SelectContent>
@@ -220,7 +220,7 @@ export default function SMSAlerts() {
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Type</label>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[140px] h-9">
+                <SelectTrigger className="w-full h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

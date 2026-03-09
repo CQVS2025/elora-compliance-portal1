@@ -371,8 +371,8 @@ export function DeliveryCalendarView({ deliveries = [], drivers = [] }) {
       weekRows.push(days.slice(i, i + 7));
     }
     return (
-      <div className="rounded-lg border overflow-hidden bg-card min-w-0 w-full">
-        <div className="grid grid-cols-7 border-b bg-muted/50">
+      <div className="rounded-lg border overflow-x-auto overflow-y-hidden bg-card min-w-0 w-full [scrollbar-gutter:stable]">
+        <div className="grid grid-cols-7 border-b bg-muted/50 min-w-[280px] sm:min-w-0">
           {weekDays.map((day) => (
             <div
               key={day}
@@ -382,7 +382,7 @@ export function DeliveryCalendarView({ deliveries = [], drivers = [] }) {
             </div>
           ))}
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-[280px] sm:min-w-0">
           {weekRows.map((weekDaysInRow, rowIndex) => {
             const maxEntries = Math.max(
               1,
@@ -404,7 +404,7 @@ export function DeliveryCalendarView({ deliveries = [], drivers = [] }) {
                     <div
                       key={key}
                       className={cn(
-                        'border-r last:border-r-0 p-1 sm:p-2 flex flex-col min-w-0 overflow-hidden',
+                        'border-r last:border-r-0 p-1 sm:p-2 flex flex-col min-w-[40px] sm:min-w-0 overflow-hidden',
                         !isCurrentMonth && 'bg-muted/30'
                       )}
                       style={{ minHeight: rowMinHeight }}
@@ -482,7 +482,7 @@ export function DeliveryCalendarView({ deliveries = [], drivers = [] }) {
       {calendarView === 'month' && renderMonthView()}
 
       <Dialog open={!!selectedDelivery} onOpenChange={(open) => !open && setSelectedDelivery(null)}>
-        <DialogContent className="max-w-sm sm:max-w-md">
+        <DialogContent className="max-w-sm sm:max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="text-base pr-8">
               {selectedDelivery?.title || 'Delivery details'}

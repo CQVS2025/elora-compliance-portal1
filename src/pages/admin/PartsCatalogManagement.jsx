@@ -253,13 +253,13 @@ export default function PartsCatalogManagement() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Parts Catalog</h1>
+    <div className="p-4 sm:p-6 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Parts Catalog</h1>
           <p className="text-muted-foreground">Manage the master parts list for Stock & Orders. Add, edit, or remove parts.</p>
         </div>
-        <Button onClick={openCreate}>
+        <Button onClick={openCreate} className="w-full sm:w-auto shrink-0">
           <Plus className="mr-2 size-4" />
           Add Part
         </Button>
@@ -316,6 +316,7 @@ export default function PartsCatalogManagement() {
               <Loader2 className="size-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -372,6 +373,7 @@ export default function PartsCatalogManagement() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
           {!isLoading && parts.length === 0 && (
             <p className="text-center text-muted-foreground py-8">No parts yet. Add one or run the Excel import script.</p>
@@ -391,7 +393,7 @@ export default function PartsCatalogManagement() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editingPart ? 'Edit part' : 'Add part'}</DialogTitle>
           </DialogHeader>

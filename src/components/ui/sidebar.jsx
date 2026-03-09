@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useLocation } from "react-router-dom"
 import { Slot } from "@radix-ui/react-slot"
 import { cva } from "class-variance-authority";
 import { PanelLeft } from "lucide-react"
@@ -49,6 +50,12 @@ const SidebarProvider = React.forwardRef((
 ) => {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const { pathname } = useLocation()
+
+  // Close mobile sheet on route change so it never blocks the main content after navigation (fixes frozen /admin on mobile when returning).
+  React.useEffect(() => {
+    setOpenMobile(false)
+  }, [pathname])
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.

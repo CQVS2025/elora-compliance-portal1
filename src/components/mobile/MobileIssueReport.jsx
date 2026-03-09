@@ -101,7 +101,7 @@ export default function MobileIssueReport({ open, onClose, vehicles, preselected
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Report an Issue</DialogTitle>
         </DialogHeader>

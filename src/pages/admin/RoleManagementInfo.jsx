@@ -4,9 +4,9 @@ import UserRoleLegend from '@/components/admin/UserRoleLegend';
 
 export default function RoleManagementInfo() {
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <Card className="border-border">
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <UserRoleLegend />
         </CardContent>
       </Card>

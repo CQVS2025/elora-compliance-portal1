@@ -292,13 +292,13 @@ export default function TankLevels() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 sm:gap-6 p-4 sm:p-6">
       {/* Header Section */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Droplet className="w-6 h-6 text-primary" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+              <Droplet className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" />
               Tank Levels
             </h1>
             <p className="text-sm font-medium text-muted-foreground mt-1">
@@ -312,7 +312,7 @@ export default function TankLevels() {
               Tank 1 / Tank 2 = tank slot at the device. ECSR = Concrete Safe Remover, TW = Truck Wash, GEL = Gel.
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             <Badge variant="outline" className="text-xs">
               <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 animate-pulse" />
               Live Monitoring

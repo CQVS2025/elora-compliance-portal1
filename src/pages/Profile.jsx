@@ -163,7 +163,7 @@ export default function Profile() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Profile header: avatar + name + email + role */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-6">
         <div className="relative shrink-0">

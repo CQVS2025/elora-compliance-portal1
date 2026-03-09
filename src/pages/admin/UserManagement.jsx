@@ -807,20 +807,20 @@ export default function UserManagement() {
   // This component will only render if user has admin or super_admin role
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Company Selector - Only for Super Admin */}
       {isSuperAdmin && (
           <Card className="border-border">
             <CardContent className="p-4">
-              <div className="flex items-center gap-4">
-                <Label className="text-sm font-medium text-foreground whitespace-nowrap">Filter by Company:</Label>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <Label className="text-sm font-medium text-foreground whitespace-nowrap shrink-0">Filter by Company:</Label>
                 <Popover open={companyComboboxOpen} onOpenChange={setCompanyComboboxOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       role="combobox"
                       aria-expanded={companyComboboxOpen}
-                      className="w-[300px] justify-between"
+                      className="w-full sm:w-[300px] justify-between"
                     >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         {getSelectedCompanyDisplay().icon}
@@ -1203,7 +1203,7 @@ export default function UserManagement() {
         setShowCreateModal(open);
         if (!open) resetForm(); // Clear form when closing
       }}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col overflow-hidden gap-0">
+        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col overflow-hidden gap-0" aria-describedby={undefined}>
           <DialogHeader className="shrink-0">
             <DialogTitle>Create New User</DialogTitle>
             {selectedCompanyTab !== 'all' && selectedCompanyTab !== 'unassigned' && companies.find(c => c.id === selectedCompanyTab) && (
@@ -1416,7 +1416,7 @@ export default function UserManagement() {
           setSelectedUser(null); // Clear selected user
         }
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
           </DialogHeader>
@@ -1600,7 +1600,7 @@ export default function UserManagement() {
       <Dialog open={showResetPasswordModal} onOpenChange={(open) => {
         if (!open) { setShowResetPasswordModal(false); setResetPasswordUser(null); setResetPasswordNewPassword(''); }
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Reset password</DialogTitle>
             {resetPasswordUser && (
@@ -1639,7 +1639,7 @@ export default function UserManagement() {
       <Dialog open={!!userToAssign} onOpenChange={(open) => {
         if (!open) { setUserToAssign(null); setAssignToCompanyId(''); }
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Assign to company</DialogTitle>
             {userToAssign && (
@@ -1763,7 +1763,7 @@ export default function UserManagement() {
 
       {/* Tab visibility per user */}
       <Dialog open={!!userForTabVisibility} onOpenChange={(open) => { if (!open) setUserForTabVisibility(null); }}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Tab visibility</DialogTitle>
             {userForTabVisibility && (

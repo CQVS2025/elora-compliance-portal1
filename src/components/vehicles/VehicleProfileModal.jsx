@@ -153,7 +153,7 @@ export default function VehicleProfileModal({ vehicle, open, onClose, scans }) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">

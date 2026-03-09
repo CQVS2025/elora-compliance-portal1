@@ -2092,7 +2092,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
 
               {/* Report preview overlay */}
               <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-                <DialogContent className="max-w-[min(92vw,960px)] max-h-[90vh] flex flex-col p-0 gap-0">
+                <DialogContent className="max-w-[min(92vw,960px)] max-h-[90vh] flex flex-col p-0 gap-0" aria-describedby={undefined}>
                   <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
                     <DialogTitle className="text-base">Report preview</DialogTitle>
                     <p className="text-sm text-muted-foreground mt-0.5">

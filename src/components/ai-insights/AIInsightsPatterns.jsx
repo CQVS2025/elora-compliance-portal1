@@ -225,7 +225,7 @@ export default function AIInsightsPatterns({
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-lg border border-border bg-muted/30 p-2">
-            <table className="w-full border-collapse text-xs">
+            <table className="w-full border-collapse text-xs min-w-[500px]">
               <thead>
                 <tr>
                   <th className="rounded-tl p-2 bg-muted/60 font-medium w-14 text-left" />
