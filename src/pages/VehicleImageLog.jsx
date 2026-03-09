@@ -441,7 +441,7 @@ export default function VehicleImageLog() {
         </div>
       )}
 
-      {/* Gallery view: vehicles of selected company */}
+          {/* Gallery view: vehicles of selected company */}
       {viewMode === 'gallery' && galleryCompanyRef && (
         <div className="space-y-4 mt-4">
           <p className="text-sm text-muted-foreground">
@@ -452,30 +452,38 @@ export default function VehicleImageLog() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {galleryVehiclesForCompany.map((v) => (
-                <button
-                  key={v.id ?? v.vehicleRef}
-                  type="button"
-                  onClick={() => navigate(`/vehicle-image-log/vehicle/${v.vehicleRef ?? v.id}`)}
-                  className={cn(
-                    'rounded-xl border border-border bg-card p-5 text-left shadow-sm transition-all',
-                    'hover:border-primary/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2'
-                  )}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="size-14 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <Truck className="size-7 text-muted-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-foreground truncate">{v.name ?? v.vehicleRef ?? '—'}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{v.site_name ?? '—'}</p>
-                    </div>
-                    <ChevronRight className="size-5 text-muted-foreground shrink-0" />
-                  </div>
-                </button>
-              ))}
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {galleryVehiclesForCompany.map((v) => {
+          const company = customerRefToCompany[String(v.customer_ref ?? '')];
+          const logoUrl = company?.logo_url;
+          return (
+          <button
+          key={v.id ?? v.vehicleRef}
+          type="button"
+          onClick={() => navigate(`/vehicle-image-log/vehicle/${v.vehicleRef ?? v.id}`)}
+          className={cn(
+          'rounded-xl border border-border bg-card p-5 text-left shadow-sm transition-all',
+          'hover:border-primary/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2'
+          )}
+          >
+          <div className="flex items-center gap-4">
+          <div className="size-14 rounded-lg bg-muted flex items-center justify-center overflow-hidden shrink-0">
+          {logoUrl ? (
+          <img src={logoUrl} alt="" className="size-full object-contain" />
+          ) : (
+          <Truck className="size-7 text-muted-foreground" />
+          )}
+          </div>
+          <div className="min-w-0 flex-1">
+          <p className="font-semibold text-foreground truncate">{v.name ?? v.vehicleRef ?? '—'}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{v.site_name ?? '—'}</p>
+          </div>
+          <ChevronRight className="size-5 text-muted-foreground shrink-0" />
+          </div>
+          </button>
+          );
+          })}
+          </div>
           )}
           {!vehiclesLoading && galleryVehiclesForCompany.length === 0 && (
             <p className="text-sm text-muted-foreground py-8 text-center">
