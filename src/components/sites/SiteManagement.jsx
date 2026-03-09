@@ -25,13 +25,27 @@ import SiteModal from './SiteModal';
 import AssignVehiclesModal from './AssignVehiclesModal';
 import DataPagination from '@/components/ui/DataPagination';
 import { usePermissions } from '@/components/auth/PermissionGuard';
-import { siteOverridesOptions } from '@/query/options';
+import { siteOverridesOptions, companiesOptions } from '@/query/options';
 
 export default function SiteManagement({ customers, vehicles, selectedCustomer, allowedSiteIds }) {
   const queryClient = useQueryClient();
   const permissions = usePermissions();
+  const companyId = permissions.userProfile?.company_id;
   const isSuperAdmin = permissions.isSuperAdmin ?? false;
   const hasSiteRestriction = Array.isArray(allowedSiteIds) && allowedSiteIds.length > 0;
+
+  const { data: companiesRaw = [] } = useQuery({
+    ...companiesOptions(companyId ?? 'all'),
+    enabled: !!companyId || isSuperAdmin,
+  });
+  const customerRefToLogo = useMemo(() => {
+    const m = {};
+    (companiesRaw || []).forEach((c) => {
+      const ref = c.elora_customer_ref;
+      if (ref != null && ref !== '' && c.logo_url) m[String(ref)] = c.logo_url;
+    });
+    return m;
+  }, [companiesRaw]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -322,12 +336,13 @@ export default function SiteManagement({ customers, vehicles, selectedCustomer, 
                 const addr = [site.address, [site.city, site.state, site.postal_code].filter(Boolean).join(', ')].filter(Boolean).join(' • ') || empty;
                 const contact = [site.contact_name, site.contact_phone, site.contact_email].filter(Boolean).join(' • ') || empty;
                 const vehicleCount = getAssignedVehicles(site.id).length;
+                const siteLogoUrl = site.logo_url || customerRefToLogo[String(site.customer_ref ?? '')];
                 return (
                   <TableRow key={site.id} className="group">
                     <TableCell className="py-3 pl-4 align-middle">
-                      <div className="flex items-center justify-center w-14 h-14 rounded-lg border border-border bg-muted/30 p-1 shrink-0">
-                        {site.logo_url ? (
-                          <img src={site.logo_url} alt="" className="h-full w-full object-contain" />
+                      <div className="flex items-center justify-center w-14 h-14 rounded-lg border border-border bg-muted/30 p-1 shrink-0 overflow-hidden">
+                        {siteLogoUrl ? (
+                          <img src={siteLogoUrl} alt="" className="h-full w-full object-contain" />
                         ) : (
                           <ImageIcon className="w-7 h-7 text-muted-foreground" />
                         )}
