@@ -25,6 +25,7 @@ import OperationsLog from './pages/OperationsLog';
 import OperationsLogEntryPage from './pages/OperationsLogEntryPage';
 import OperationsLogAttachmentPage from './pages/OperationsLogAttachmentPage';
 import DeliveryCalendar from './pages/DeliveryCalendar';
+import ReportSchedules from './pages/ReportSchedules';
 import StockOrders from './pages/StockOrders';
 import VehicleImageLog from './pages/VehicleImageLog';
 import VehicleImageLogVehiclePage from './pages/VehicleImageLogVehiclePage';
@@ -59,6 +60,7 @@ export const PAGES = {
     "OperationsLogEntry": OperationsLogEntryPage,
     "OperationsLogAttachment": OperationsLogAttachmentPage,
     "DeliveryCalendar": DeliveryCalendar,
+    "ReportSchedules": ReportSchedules,
     "StockOrders": StockOrders,
     "VehicleImageLog": VehicleImageLog,
     "VehicleImageLogVehicle": VehicleImageLogVehiclePage,

@@ -254,6 +254,13 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        <Route path="/report-schedules" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.ReportSchedules)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
         <Route path="/stock-orders" element={
           <AuthenticatedRoute>
             <DashboardLayout>

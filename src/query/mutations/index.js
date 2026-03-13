@@ -22,3 +22,6 @@ export * from './admin';
 
 // Operations log
 export * from './operationsLog';
+
+// Report schedules
+export * from './reportSchedules';

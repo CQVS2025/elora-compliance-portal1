@@ -104,6 +104,7 @@ export const supabaseClient = {
     companies: supabase.from('companies'),
     userPermissions: supabase.from('user_permissions'),
     emailTemplates: supabase.from('email_templates'),
+    reportSchedules: supabase.from('report_schedules'),
   },
 };
 

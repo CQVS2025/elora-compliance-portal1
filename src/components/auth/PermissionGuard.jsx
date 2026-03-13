@@ -107,7 +107,7 @@ export function getEffectiveConfig(email) {
   return null;
 }
 
-const ALL_TAB_VALUES = ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+const ALL_TAB_VALUES = ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'report-schedules', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
 
 /**
  * Get tabs allowed by role: Admin Console role override if set, else role default from getAccessibleTabs.
@@ -425,6 +425,7 @@ const TAB_VALUE_TO_PATH = [
   ['vehicle-image-log', '/vehicle-image-log'],
   ['operations-log', '/operations-log'],
   ['delivery-calendar', '/delivery-calendar'],
+  ['report-schedules', '/report-schedules'],
   ['stock-orders', '/stock-orders'],
   ['costs', '/usage-costs'],
   ['refills', '/tank-levels'],

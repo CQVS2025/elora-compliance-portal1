@@ -166,6 +166,9 @@ export const queryKeys = {
       filters,
     ],
 
+    // Report Schedules (who gets what reports, when)
+    reportSchedules: (companyId) => ['tenant', companyId, 'reportSchedules'],
+
     // Operations Log
     operationsLogEntries: (companyId, filters = {}) => [
       'tenant',
