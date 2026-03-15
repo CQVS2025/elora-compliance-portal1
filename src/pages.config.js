@@ -13,7 +13,6 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
 import CompanyManagement from './pages/admin/CompanyManagement';
 import RoleManagementInfo from './pages/admin/RoleManagementInfo';
-import RoleTabSettings from './pages/admin/RoleTabSettings';
 import TankConfiguration from './pages/admin/TankConfiguration';
 import ProductsManagement from './pages/admin/ProductsManagement';
 import PartsCatalogManagement from './pages/admin/PartsCatalogManagement';
@@ -47,7 +46,6 @@ export const PAGES = {
     "admin/users": UserManagement,
     "admin/companies": CompanyManagement,
     "admin/role-management": RoleManagementInfo,
-    "admin/tab-visibility": RoleTabSettings,
     "admin/tank-configuration": TankConfiguration,
     "admin/products": ProductsManagement,
     "admin/parts": PartsCatalogManagement,

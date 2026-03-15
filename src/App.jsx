@@ -308,14 +308,6 @@ const AuthenticatedApp = () => {
           </SuperAdminRoute>
         } />
 
-        <Route path="/admin/tab-visibility" element={
-          <SuperAdminRoute>
-            <DashboardLayout>
-              {React.createElement(Pages['admin/tab-visibility'])}
-            </DashboardLayout>
-          </SuperAdminRoute>
-        } />
-
         <Route path="/admin/tank-configuration" element={
           <SuperAdminRoute>
             <DashboardLayout>
