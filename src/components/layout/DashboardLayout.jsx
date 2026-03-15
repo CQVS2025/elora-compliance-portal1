@@ -40,7 +40,6 @@ const PATH_TO_HEADER = {
   '/admin/users': { title: 'User Management', description: 'Create and manage user accounts' },
   '/admin/companies': { title: 'Company Management', description: 'Manage companies and branding' },
   '/admin/role-management': { title: 'Role Management', description: 'View role definitions and permissions' },
-  '/admin/tab-visibility': { title: 'Tab Visibility', description: 'Override which tabs each role can see' },
   '/admin/tank-configuration': { title: 'Tank Configuration', description: 'Manage tank capacities and calibration settings' },
   '/admin/products': { title: 'Products', description: 'Manage products for Operations Log and forms' },
   '/admin/parts': { title: 'Parts', description: 'Manage parts and stock' },

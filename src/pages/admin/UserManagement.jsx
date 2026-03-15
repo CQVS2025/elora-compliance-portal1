@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
 import { getAccessibleTabs, getDefaultEmailReportTypes } from '@/lib/permissions';
-import { roleTabSettingsOptions, companyTabSettingsOptions, sitesOptions } from '@/query/options';
+import { sitesOptions } from '@/query/options';
 import { getDefaultCostSubtabs, getDefaultEmailReportSubtabs } from '@/lib/permissions';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronRight } from 'lucide-react';
@@ -103,6 +103,27 @@ const TAB_VISIBILITY_OPTIONS = [
   { value: 'sms-alerts', label: 'SMS Alerts' },
 ];
 
+/** Map each tab to the roles that include it by default, for showing helpful messages on disabled tabs. */
+const TAB_ALLOWED_ROLES = (() => {
+  const map = {};
+  TAB_VISIBILITY_OPTIONS.forEach((tab) => { map[tab.value] = []; });
+  const roleTabs = {
+    super_admin: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'],
+    admin: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights'],
+    manager: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'],
+    user: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'],
+    batcher: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'],
+    delivery_manager: ['dashboard', 'delivery-calendar', 'stock-orders'],
+    driver: ['dashboard', 'compliance', 'vehicle-image-log', 'leaderboard', 'delivery-calendar'],
+    viewer: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'],
+  };
+  const roleLabels = { super_admin: 'Super Admin', admin: 'Admin', manager: 'Manager', user: 'User', batcher: 'Batcher', delivery_manager: 'Delivery Manager', driver: 'Driver', viewer: 'Viewer' };
+  Object.entries(roleTabs).forEach(([role, tabs]) => {
+    tabs.forEach((tab) => { if (map[tab]) map[tab].push(roleLabels[role]); });
+  });
+  return map;
+})();
+
 const EMAIL_REPORT_TYPES = [
   { id: 'compliance', label: 'Compliance Summary' },
   { id: 'costs', label: 'Cost Analysis' },
@@ -158,6 +179,7 @@ export default function UserManagement() {
   const [localTabVisibility, setLocalTabVisibility] = useState([]);
   const [localUserCostSubtabs, setLocalUserCostSubtabs] = useState(null);
   const [localUserEmailReportSubtabs, setLocalUserEmailReportSubtabs] = useState(null);
+  const [localUserEmailReportTypes, setLocalUserEmailReportTypes] = useState(null);
   const [localVisibleDeliveryDriverIds, setLocalVisibleDeliveryDriverIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
@@ -187,35 +209,14 @@ export default function UserManagement() {
     enabled: !!isAuthenticated && !!userProfile,
   });
 
-  // Role tab settings (for Tab visibility dialog) - must be declared before getRoleDefaultTabs
-  const { data: roleTabOverrides = {} } = useQuery({
-    ...roleTabSettingsOptions(),
-    enabled: !!userForTabVisibility,
-  });
-  const { data: companyTabs = null } = useQuery({
-    ...companyTabSettingsOptions(userForTabVisibility?.company_id),
-    enabled: !!userForTabVisibility?.company_id,
-  });
   const { data: deliveryDrivers = [] } = useQuery({
     ...deliveryDriversOptions(),
     enabled: ((showCreateModal || showEditModal) && formData.role === 'delivery_manager') || (!!userForTabVisibility && userForTabVisibility.role === 'delivery_manager'),
   });
 
-  function getRoleDefaultTabs(role) {
-    const stored = roleTabOverrides[role];
-    const storedTabs = Array.isArray(stored) ? stored : stored?.visible_tabs;
-    if (storedTabs?.length > 0) return storedTabs;
-    return getAccessibleTabs({ role }) || [];
-  }
-
-  /** Tabs allowed for this user = role ∩ company (company can further restrict). */
+  /** Tabs allowed for this user based on their role defaults. */
   function getBaseTabsForUser(user) {
-    const roleDefault = getRoleDefaultTabs(user?.role);
-    const companyTabList = Array.isArray(companyTabs) ? companyTabs : companyTabs?.visible_tabs;
-    if (companyTabList && companyTabList.length > 0) {
-      return roleDefault.filter((t) => companyTabList.includes(t));
-    }
-    return roleDefault;
+    return getAccessibleTabs({ role: user?.role }) || [];
   }
 
   // When opening Tab visibility dialog, init local state from user override or role default (only tabs allowed by role ∩ company)
@@ -239,6 +240,13 @@ export default function UserManagement() {
           ? [...userForTabVisibility.visible_email_report_subtabs]
           : null
     );
+    setLocalUserEmailReportTypes(
+      userForTabVisibility.visible_email_report_types === null || userForTabVisibility.visible_email_report_types === undefined
+        ? null
+        : Array.isArray(userForTabVisibility.visible_email_report_types)
+          ? [...userForTabVisibility.visible_email_report_types]
+          : null
+    );
     if (userForTabVisibility.role === 'delivery_manager') {
       const assigned = Array.isArray(userForTabVisibility.assigned_delivery_drivers) ? userForTabVisibility.assigned_delivery_drivers : [];
       const visible = Array.isArray(userForTabVisibility.visible_delivery_driver_ids) && userForTabVisibility.visible_delivery_driver_ids.length > 0
@@ -248,7 +256,7 @@ export default function UserManagement() {
     } else {
       setLocalVisibleDeliveryDriverIds([]);
     }
-  }, [userForTabVisibility?.id, userForTabVisibility?.role, userForTabVisibility?.company_id, userForTabVisibility?.visible_tabs, userForTabVisibility?.visible_cost_subtabs, userForTabVisibility?.visible_email_report_subtabs, userForTabVisibility?.assigned_delivery_drivers, userForTabVisibility?.visible_delivery_driver_ids, roleTabOverrides, companyTabs]);
+  }, [userForTabVisibility?.id, userForTabVisibility?.role, userForTabVisibility?.company_id, userForTabVisibility?.visible_tabs, userForTabVisibility?.visible_cost_subtabs, userForTabVisibility?.visible_email_report_subtabs, userForTabVisibility?.visible_email_report_types, userForTabVisibility?.assigned_delivery_drivers, userForTabVisibility?.visible_delivery_driver_ids]);
 
   // Update selected company tab when URL changes
   useEffect(() => {
@@ -548,7 +556,7 @@ export default function UserManagement() {
 
   // Save user tab visibility override
   const saveUserTabVisibilityMutation = useMutation({
-    mutationFn: async ({ userId, visibleTabs, visibleDeliveryDriverIds, visibleCostSubtabs, visibleEmailReportSubtabs }) => {
+    mutationFn: async ({ userId, visibleTabs, visibleDeliveryDriverIds, visibleCostSubtabs, visibleEmailReportSubtabs, visibleEmailReportTypes }) => {
       const payload = { updated_at: new Date().toISOString() };
       if (visibleTabs === null) {
         payload.visible_tabs = null;
@@ -560,6 +568,7 @@ export default function UserManagement() {
       }
       if (visibleCostSubtabs !== undefined) payload.visible_cost_subtabs = visibleCostSubtabs;
       if (visibleEmailReportSubtabs !== undefined) payload.visible_email_report_subtabs = visibleEmailReportSubtabs;
+      if (visibleEmailReportTypes !== undefined) payload.visible_email_report_types = visibleEmailReportTypes;
       const { data, error } = await supabase
         .from('user_profiles')
         .update(payload)
@@ -1769,35 +1778,39 @@ export default function UserManagement() {
             <DialogTitle>Tab visibility</DialogTitle>
             {userForTabVisibility && (
               <p className="text-sm text-muted-foreground">
-                Restrict which tabs <span className="font-medium text-foreground">{userForTabVisibility.full_name || userForTabVisibility.email}</span> can see (within their role). Role: {ROLES.find(r => r.value === userForTabVisibility.role)?.label ?? userForTabVisibility.role}.
+                Restrict which tabs <span className="font-medium text-foreground">{userForTabVisibility.full_name || userForTabVisibility.email}</span> can see. Role: {ROLES.find(r => r.value === userForTabVisibility.role)?.label ?? userForTabVisibility.role}.
               </p>
             )}
           </DialogHeader>
           {userForTabVisibility && (() => {
             const baseTabs = getBaseTabsForUser(userForTabVisibility);
-            const stored = roleTabOverrides[userForTabVisibility.role];
-            const roleEmailReportTypes = stored?.visible_email_report_types !== undefined && stored?.visible_email_report_types !== null
-              ? stored.visible_email_report_types
-              : getDefaultEmailReportTypes({ role: userForTabVisibility.role });
             const defaultEmailReports = getDefaultEmailReportTypes({ role: userForTabVisibility.role });
             return (
             <div className="space-y-4 py-4 overflow-y-auto min-h-0 flex-1 pr-1">
               <div>
                 <h4 className="text-sm font-medium text-foreground mb-3">Tab Visibility</h4>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Only tabs allowed by this role (and company, if set) can be enabled. Toggle off to hide a tab from this user. Tabs not allowed are disabled.
+                  Only tabs allowed by this user's role can be enabled. Toggle off to hide a tab from this user. Tabs not allowed by the role are disabled.
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-4">
                   {TAB_VISIBILITY_OPTIONS.map((tab) => {
                     const roleAllows = baseTabs.includes(tab.value);
                     const checked = localTabVisibility.includes(tab.value);
+                    const allowedRoles = TAB_ALLOWED_ROLES[tab.value] || [];
                     return (
                       <div
                         key={tab.value}
                         className={tab.value === 'costs' || tab.value === 'email-reports' ? 'col-span-2 sm:col-span-4 space-y-2' : ''}
                       >
                         <div className={`flex items-center justify-between p-3 rounded-lg border border-border ${!roleAllows ? 'opacity-60' : ''}`}>
-                          <span className="text-sm font-medium text-foreground">{tab.label}</span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-sm font-medium text-foreground">{tab.label}</span>
+                            {!roleAllows && (
+                              <span className="text-[11px] text-muted-foreground leading-tight">
+                                Available for: {allowedRoles.join(', ')}
+                              </span>
+                            )}
+                          </div>
                           <Switch
                             checked={roleAllows && checked}
                             disabled={!roleAllows}
@@ -1906,26 +1919,38 @@ export default function UserManagement() {
                 );
               })()}
               <div>
-                <h4 className="text-sm font-medium text-foreground mb-3">Email Report Types (Select Reports to Include)</h4>
+                <h4 className="text-sm font-medium text-foreground mb-3">Email Report Types (Reports to Include)</h4>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Which report sections can this user include when sending email reports? Controlled by this user&apos;s role (Tab Visibility). Disabled types will not appear in the Email Reports page.
+                  Which report sections can this user include when sending email reports? Disabled types will not appear in the Email Reports page.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {EMAIL_REPORT_TYPES.map((report) => {
-                    const allowed = roleEmailReportTypes.includes(report.id);
+                    const currentTypes = localUserEmailReportTypes ?? defaultEmailReports;
+                    const isChecked = currentTypes.includes(report.id);
                     return (
                       <div
                         key={report.id}
-                        className={`flex items-center justify-between p-3 rounded-lg border border-border ${!allowed ? 'opacity-60' : ''}`}
+                        className="flex items-center justify-between p-3 rounded-lg border border-border"
                       >
                         <span className="text-sm font-medium text-foreground">{report.label}</span>
-                        <Switch checked={allowed} disabled />
+                        <Switch
+                          checked={isChecked}
+                          onCheckedChange={(on) => {
+                            const current = localUserEmailReportTypes ?? [...defaultEmailReports];
+                            const next = on
+                              ? [...current, report.id]
+                              : current.filter((id) => id !== report.id);
+                            // null means "use default" — only set to array if different from default
+                            const isDefault = defaultEmailReports.length === next.length && defaultEmailReports.every((id) => next.includes(id));
+                            setLocalUserEmailReportTypes(isDefault ? null : next);
+                          }}
+                        />
                       </div>
                     );
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Role allows: {roleEmailReportTypes.join(', ') || 'none'} (Default: {defaultEmailReports.join(', ') || 'none'})
+                  Role default: {defaultEmailReports.join(', ') || 'none'}
                 </p>
               </div>
             </div>
@@ -1949,6 +1974,7 @@ export default function UserManagement() {
                       visibleDeliveryDriverIds: userForTabVisibility.role === 'delivery_manager' ? null : undefined,
                       visibleCostSubtabs: null,
                       visibleEmailReportSubtabs: null,
+                      visibleEmailReportTypes: null,
                     })
                   }
                   disabled={saveUserTabVisibilityMutation.isPending}
@@ -1973,6 +1999,7 @@ export default function UserManagement() {
                         : undefined,
                       visibleCostSubtabs: localUserCostSubtabs,
                       visibleEmailReportSubtabs: localUserEmailReportSubtabs,
+                      visibleEmailReportTypes: localUserEmailReportTypes,
                     });
                   }}
                   disabled={saveUserTabVisibilityMutation.isPending}

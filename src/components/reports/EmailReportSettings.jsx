@@ -6,8 +6,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabaseClient } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
-import { roleTabSettingsOptions } from '@/query/options';
-import { getDefaultEmailReportTypes, isAdmin } from '@/lib/permissions';
+import { isAdmin } from '@/lib/permissions';
 import { supabase } from '@/lib/supabase';
 import { Mail, Send, Clock, CheckCircle, Loader2, FileDown, Info, Calendar, Plus, X, FileText, Eye } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -45,7 +44,7 @@ const EMAIL_REPORT_SUBTABS = [
 export default function EmailReportSettings({ reportData, onSetDateRange, isReportDataUpdating = false }) {
   const queryClient = useQueryClient();
   const { user: currentUser, userProfile, isLoading: userLoading } = useAuth();
-  const { effectiveEmailReportSubtabs = [] } = usePermissions();
+  const { effectiveEmailReportSubtabs = [], effectiveEmailReportTypes = ['compliance', 'costs'] } = usePermissions();
   const [userError, setUserError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -193,16 +192,7 @@ export default function EmailReportSettings({ reportData, onSetDateRange, isRepo
     { id: 'costs', label: 'Cost Analysis', icon: '💰', description: 'Cost and financial trends' }
   ];
 
-  const { data: roleTabSettings = {} } = useQuery(roleTabSettingsOptions());
-  const allowedEmailReportTypeIds = useMemo(() => {
-    const role = userProfile?.role;
-    if (!role) return ['compliance', 'costs'];
-    const stored = roleTabSettings[role];
-    if (stored?.visible_email_report_types !== undefined && stored?.visible_email_report_types !== null) {
-      return stored.visible_email_report_types;
-    }
-    return getDefaultEmailReportTypes(userProfile);
-  }, [userProfile, roleTabSettings]);
+  const allowedEmailReportTypeIds = effectiveEmailReportTypes;
 
   const reportTypes = useMemo(() =>
     ALL_REPORT_TYPES.filter(r => allowedEmailReportTypeIds.includes(r.id)),

@@ -2,8 +2,7 @@ import React, { createContext, useContext, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabaseClient } from "@/api/supabaseClient";
 import { useAuth } from '@/lib/AuthContext';
-import { getAccessibleTabs, COST_SUBTAB_IDS, EMAIL_REPORT_SUBTAB_IDS, getDefaultCostSubtabs, getDefaultEmailReportSubtabs } from '@/lib/permissions';
-import { roleTabSettingsOptions, companyTabSettingsOptions } from '@/query/options';
+import { getAccessibleTabs, COST_SUBTAB_IDS, EMAIL_REPORT_SUBTAB_IDS, getDefaultCostSubtabs, getDefaultEmailReportSubtabs, getDefaultEmailReportTypes } from '@/lib/permissions';
 
 /**
  * Database-Driven Permission System
@@ -110,85 +109,50 @@ export function getEffectiveConfig(email) {
 const ALL_TAB_VALUES = ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'report-schedules', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
 
 /**
- * Get tabs allowed by role: Admin Console role override if set, else role default from getAccessibleTabs.
- * When an override exists, we merge in any tabs from the role default that are missing (so new tabs
- * like delivery-calendar appear without requiring a DB migration or re-saving Tab Visibility).
- */
-function getRoleTabs(userProfile, roleTabOverrides) {
-  const role = userProfile?.role;
-  if (!role) return ALL_TAB_VALUES;
-  const defaultTabs = getAccessibleTabs(userProfile) || ALL_TAB_VALUES;
-  const roleData = roleTabOverrides?.[role];
-  const overrideTabs = Array.isArray(roleData) ? roleData : roleData?.visible_tabs;
-  if (overrideTabs && overrideTabs.length > 0) {
-    const combined = [...overrideTabs];
-    defaultTabs.forEach((t) => {
-      if (!combined.includes(t)) combined.push(t);
-    });
-    return combined;
-  }
-  return defaultTabs;
-}
-
-/**
  * Compute effective visible tab values for the current user.
- * companyTabsOrArray: object { visible_tabs } or legacy array of visible_tabs.
+ * Uses role defaults from getAccessibleTabs, then applies individual user override if set.
  */
-function getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides, companyTabsOrArray) {
-  const companyTabList = Array.isArray(companyTabsOrArray)
-    ? companyTabsOrArray
-    : companyTabsOrArray?.visible_tabs;
-  const roleTabs = getRoleTabs(userProfile, roleTabOverrides);
-  // Super admin always sees all role tabs (e.g. Stock & Orders); skip company filter
-  const baseTabs = userProfile?.role === 'super_admin'
-    ? roleTabs
-    : (companyTabList && companyTabList.length > 0
-      ? roleTabs.filter((t) => companyTabList.includes(t))
-      : roleTabs);
+function getEffectiveVisibleTabValues(perms, userProfile) {
+  const role = userProfile?.role;
+  const roleTabs = role ? (getAccessibleTabs(userProfile) || ALL_TAB_VALUES) : ALL_TAB_VALUES;
+  // Individual user override: only allow tabs that are within the role's defaults
   if (userProfile?.visible_tabs != null && Array.isArray(userProfile.visible_tabs)) {
-    return userProfile.visible_tabs.filter((t) => baseTabs.includes(t));
+    return userProfile.visible_tabs.filter((t) => roleTabs.includes(t));
   }
   if (perms.visible_tabs && perms.visible_tabs.length > 0) {
-    return perms.visible_tabs.filter((t) => baseTabs.includes(t));
+    return perms.visible_tabs.filter((t) => roleTabs.includes(t));
   }
   if (perms.hidden_tabs && perms.hidden_tabs.length > 0) {
-    return baseTabs.filter((v) => !perms.hidden_tabs.includes(v));
+    return roleTabs.filter((v) => !perms.hidden_tabs.includes(v));
   }
-  return baseTabs;
+  return roleTabs;
 }
 
-/** Effective Usage Costs sub-tabs: Role (null = all) → Company restrict → User restrict. Empty array = none visible. */
-function getEffectiveCostSubtabs(userProfile, roleTabOverrides, companyTabs) {
-  const role = userProfile?.role;
-  const roleData = role ? roleTabOverrides?.[role] : null;
-  const roleSubtabs = roleData?.visible_cost_subtabs != null && roleData.visible_cost_subtabs.length > 0
-    ? roleData.visible_cost_subtabs
-    : getDefaultCostSubtabs();
-  let list = roleData?.visible_cost_subtabs != null && roleData.visible_cost_subtabs.length === 0 ? [] : roleSubtabs;
-  if (companyTabs?.visible_cost_subtabs != null) {
-    list = companyTabs.visible_cost_subtabs.length === 0 ? [] : list.filter((t) => companyTabs.visible_cost_subtabs.includes(t));
-  }
+/** Effective Usage Costs sub-tabs: defaults then individual user override. */
+function getEffectiveCostSubtabs(userProfile) {
+  let list = getDefaultCostSubtabs();
   if (userProfile?.visible_cost_subtabs != null) {
     list = userProfile.visible_cost_subtabs.length === 0 ? [] : list.filter((t) => userProfile.visible_cost_subtabs.includes(t));
   }
   return list;
 }
 
-/** Effective Email Reports sub-tabs: Role (null = all) → Company restrict → User restrict. Empty array = none visible. */
-function getEffectiveEmailReportSubtabs(userProfile, roleTabOverrides, companyTabs) {
-  const role = userProfile?.role;
-  const roleData = role ? roleTabOverrides?.[role] : null;
-  const roleSubtabs = roleData?.visible_email_report_subtabs != null && roleData.visible_email_report_subtabs.length > 0
-    ? roleData.visible_email_report_subtabs
-    : getDefaultEmailReportSubtabs();
-  let list = roleData?.visible_email_report_subtabs != null && roleData.visible_email_report_subtabs.length === 0 ? [] : roleSubtabs;
-  if (companyTabs?.visible_email_report_subtabs != null) {
-    list = companyTabs.visible_email_report_subtabs.length === 0 ? [] : list.filter((t) => companyTabs.visible_email_report_subtabs.includes(t));
-  }
+/** Effective Email Reports sub-tabs: defaults then individual user override. */
+function getEffectiveEmailReportSubtabs(userProfile) {
+  let list = getDefaultEmailReportSubtabs();
   if (userProfile?.visible_email_report_subtabs != null) {
     list = userProfile.visible_email_report_subtabs.length === 0 ? [] : list.filter((t) => userProfile.visible_email_report_subtabs.includes(t));
   }
   return list;
+}
+
+/** Effective Email Report Types (compliance, costs): role default then individual user override. */
+function getEffectiveEmailReportTypes(userProfile) {
+  const defaults = getDefaultEmailReportTypes(userProfile);
+  if (userProfile?.visible_email_report_types != null && Array.isArray(userProfile.visible_email_report_types)) {
+    return userProfile.visible_email_report_types;
+  }
+  return defaults;
 }
 
 /**
@@ -199,14 +163,13 @@ export function usePermissions() {
   const userEmail = authUser?.email || userProfile?.email;
 
   const { permissions: dbPermissions, isLoading: permissionsLoading } = useUserPermissions(userEmail);
-  const { data: roleTabOverrides = {} } = useQuery(roleTabSettingsOptions());
-  const { data: companyTabs = null } = useQuery(companyTabSettingsOptions(userProfile?.company_id));
 
   const permissions = useMemo(() => {
     const perms = dbPermissions || DEFAULT_PERMISSIONS;
-    const effectiveTabs = getEffectiveVisibleTabValues(perms, userProfile, roleTabOverrides, companyTabs);
-    const effectiveCostSubtabs = getEffectiveCostSubtabs(userProfile, roleTabOverrides, companyTabs);
-    const effectiveEmailReportSubtabs = getEffectiveEmailReportSubtabs(userProfile, roleTabOverrides, companyTabs);
+    const effectiveTabs = getEffectiveVisibleTabValues(perms, userProfile);
+    const effectiveCostSubtabs = getEffectiveCostSubtabs(userProfile);
+    const effectiveEmailReportSubtabs = getEffectiveEmailReportSubtabs(userProfile);
+    const effectiveEmailReportTypes = getEffectiveEmailReportTypes(userProfile);
     const hideLeaderboard = !effectiveTabs.includes('leaderboard');
 
     return {
@@ -243,10 +206,11 @@ export function usePermissions() {
       showAllData: perms.show_all_data ?? true,
       defaultSite: perms.default_site ?? 'all',
 
-      // Tab visibility: effective set after Role → Company → User
+      // Tab visibility: role defaults + individual user override
       effectiveTabValues: effectiveTabs,
       effectiveCostSubtabs,
       effectiveEmailReportSubtabs,
+      effectiveEmailReportTypes,
       canEditOperationsLog: effectiveTabs.includes('operations-log-edit'),
       showProductsInOpsLogEntry: effectiveTabs.includes('operations-log-products'),
       visibleTabs: perms.visible_tabs,
@@ -265,7 +229,7 @@ export function usePermissions() {
       // Raw permissions data
       _raw: perms,
     };
-  }, [dbPermissions, authUser, userProfile, permissionsLoading, roleTabOverrides, companyTabs]);
+  }, [dbPermissions, authUser, userProfile, permissionsLoading]);
 
   return permissions;
 }
@@ -407,7 +371,7 @@ export function useFilteredData(vehicles, sites, customers = []) {
 
 /**
  * Hook to get available tabs based on permissions.
- * Uses effective tab values (Role → Company → User priority).
+ * Uses effective tab values (role defaults + individual user override).
  */
 export function useAvailableTabs(allTabs) {
   const permissions = usePermissions();

@@ -163,17 +163,9 @@ Deno.serve(async (req) => {
       viewer: ['compliance', 'costs'],
     };
     let allowedReportTypes: string[] = defaultAllowedByRole[userRole] ?? ['compliance', 'costs'];
-    try {
-      const { data: roleSettings } = await supabase
-        .from('role_tab_settings')
-        .select('visible_email_report_types')
-        .eq('role', userRole)
-        .single();
-      if (roleSettings?.visible_email_report_types && Array.isArray(roleSettings.visible_email_report_types) && roleSettings.visible_email_report_types.length > 0) {
-        allowedReportTypes = roleSettings.visible_email_report_types;
-      }
-    } catch (e) {
-      console.warn('Role tab settings fetch error:', e);
+    // Individual user-level override takes priority
+    if (user.visible_email_report_types && Array.isArray(user.visible_email_report_types) && user.visible_email_report_types.length > 0) {
+      allowedReportTypes = user.visible_email_report_types;
     }
 
     const requestedTypes = Array.isArray(reportTypes) && reportTypes.length > 0 ? reportTypes : allowedReportTypes;

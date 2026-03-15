@@ -11,7 +11,6 @@ import {
   Building2,
   Shield,
   Settings,
-  LayoutGrid,
   ArrowRight,
   CheckCircle2,
   Package,
@@ -122,12 +121,6 @@ export default function AdminDashboard() {
       description: 'View role definitions and permissions (read-only)',
       icon: Shield,
       path: '/admin/role-management',
-    },
-    {
-      title: 'Tab Visibility by Role',
-      description: 'Override which tabs each role can see on the dashboard',
-      icon: LayoutGrid,
-      path: '/admin/tab-visibility',
     },
     {
       title: 'Products',
