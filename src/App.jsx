@@ -239,6 +239,14 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        {/* Alerts – Super Admin real-time alert monitoring */}
+        <Route path="/alerts" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.Alerts)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
 
         <Route path="/operations-log" element={
           <AuthenticatedRoute>
@@ -251,6 +259,13 @@ const AuthenticatedApp = () => {
           <AuthenticatedRoute>
             <DashboardLayout>
               {React.createElement(Pages.DeliveryCalendar)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/report-schedules" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.ReportSchedules)}
             </DashboardLayout>
           </AuthenticatedRoute>
         } />

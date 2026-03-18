@@ -26,8 +26,10 @@ const PATH_TO_HEADER = {
   '/branding': { title: 'Branding', description: 'Customize branding' },
   '/ai-insights': { title: 'Elora AI', description: 'Intelligent wash optimization & predictions' },
   '/sms-alerts': { title: 'SMS Alerts', description: 'Risk prediction alert history' },
+  '/alerts': { title: 'Alerts', description: 'Configure and monitor your real-time notification triggers' },
   '/operations-log': { title: 'Operations Log', description: 'Site activity tracking, notes & task management' },
   '/delivery-calendar': { title: 'Delivery Calendar', description: 'Delivery schedule from Notion' },
+  '/report-schedules': { title: 'Report Schedules', description: 'Manage client report delivery, who gets what, and when' },
   '/stock-orders': { title: 'Stock & Orders', description: 'Stock take and request parts' },
   '/Settings': { title: 'Settings', description: 'Manage your account preferences' },
   '/settings': { title: 'Settings', description: 'Manage your account preferences' },
@@ -64,8 +66,10 @@ const PATH_TO_TAB = {
   '/leaderboard': 'leaderboard',
   '/ai-insights': 'ai-insights',
   '/sms-alerts': 'sms-alerts',
+  '/alerts': 'alerts',
   '/operations-log': 'operations-log',
   '/delivery-calendar': 'delivery-calendar',
+  '/report-schedules': 'report-schedules',
   '/stock-orders': 'stock-orders',
 };
 

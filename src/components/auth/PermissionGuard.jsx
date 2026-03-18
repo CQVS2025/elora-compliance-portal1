@@ -106,7 +106,7 @@ export function getEffectiveConfig(email) {
   return null;
 }
 
-const ALL_TAB_VALUES = ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+const ALL_TAB_VALUES = ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'alerts', 'report-schedules', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
 
 /**
  * Compute effective visible tab values for the current user.
@@ -394,6 +394,8 @@ const TAB_VALUE_TO_PATH = [
   ['vehicle-image-log', '/vehicle-image-log'],
   ['operations-log', '/operations-log'],
   ['delivery-calendar', '/delivery-calendar'],
+  ['alerts', '/alerts'],
+  ['report-schedules', '/report-schedules'],
   ['stock-orders', '/stock-orders'],
   ['costs', '/usage-costs'],
   ['refills', '/tank-levels'],
