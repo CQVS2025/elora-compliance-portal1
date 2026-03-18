@@ -60,6 +60,10 @@ export default function AlertsConfiguredTab({ configurations, stats, isLoading, 
         map[config.category].push(config);
       }
     }
+    // Sort each category by alert_type so order stays consistent after toggling
+    for (const cat of CATEGORY_ORDER) {
+      map[cat].sort((a, b) => a.alert_type.localeCompare(b.alert_type));
+    }
     return map;
   }, [configurations]);
 
