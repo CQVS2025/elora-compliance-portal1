@@ -277,15 +277,24 @@ export const AuthProvider = ({ children }) => {
         companyEloraCustomerRef: enrichedProfile.company_elora_customer_ref ?? null,
         isSuperAdmin: enrichedProfile.role === 'super_admin',
       });
-      // Detect first-time login before updating presence
+      // Detect first-time login: check if we've EVER sent this alert for this user
       try {
         const { data: existingPresence } = await supabase
           .from('user_presence')
           .select('last_login_at')
           .eq('user_id', user.id)
           .maybeSingle();
+        // Only trigger if user has never logged in before (no presence record or no last_login)
         if (!existingPresence || !existingPresence.last_login_at) {
-          triggerNewUserFirstLogin({ id: user.id, full_name: enrichedProfile.full_name, email: enrichedProfile.email });
+          // Double-check: also verify no NEW_USER_FIRST_LOGIN alert exists for this user already
+          const { count: existingAlertCount } = await supabase
+            .from('alerts')
+            .select('id', { count: 'exact', head: true })
+            .eq('type', 'NEW_USER_FIRST_LOGIN')
+            .eq('entity_id', user.id);
+          if ((existingAlertCount || 0) === 0) {
+            triggerNewUserFirstLogin({ id: user.id, full_name: enrichedProfile.full_name, email: enrichedProfile.email });
+          }
         }
       } catch (_) { /* silent — don't block login */ }
       // Update presence (last_login + last_seen) and start heartbeat

@@ -5,23 +5,53 @@ import { cn } from '@/lib/utils';
 import {
   Activity, AlertTriangle, Calendar, CheckCircle2,
   ClipboardList, Lock, Package, Droplets, Bell,
+  Truck, Shield, CalendarClock, Clock,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 const TYPE_ICONS = {
+  // Operations
+  NEW_ENTRY_CREATED: ClipboardList,
+  ENTRY_OPEN_5_DAYS: Clock,
+  ENTRY_RESOLVED: CheckCircle2,
+  ENTRY_NO_ASSIGNEE: ClipboardList,
+  ENTRY_NO_DUE_DATE: ClipboardList,
+  // Orders
+  ORDER_REQUEST_HIGH_PRIORITY: Package,
+  ORDER_REQUEST_ANY: Package,
+  ORDER_PENDING_APPROVAL: Package,
+  ORDER_STATUS_CHANGED: Package,
+  STOCK_TAKE_SUBMITTED: Package,
+  AGENT_PARTS_NO_REQUEST: Package,
+  // Delivery
+  DELIVERY_SCHEDULED_TODAY: Truck,
+  SITE_NO_DELIVERY: Truck,
+  SITE_APPROACHING_REFILL: Truck,
+  SITE_OVERDUE_REFILL: Truck,
+  UNUSUAL_CONSUMPTION: AlertTriangle,
+  // Devices
   DEVICE_OFFLINE: Activity,
   DEVICE_BACK_ONLINE: CheckCircle2,
   DEVICE_OFFLINE_EXTENDED: Activity,
+  // Chemicals
+  LOW_CHEMICAL_LEVEL: Droplets,
+  // Security
+  FAILED_LOGIN_ATTEMPTS: Lock,
+  NEW_USER_FIRST_LOGIN: Shield,
+  MANAGER_NOT_LOGGED_IN_7_DAYS: Shield,
+  ENTRY_ASSIGNED_INACTIVE_USER: Shield,
+  // Report Scheduling
   REPORT_DUE_TODAY: Calendar,
   REPORT_DUE_IN_X_DAYS: Calendar,
   REPORT_OVERDUE: AlertTriangle,
   REPORT_SENT: CheckCircle2,
-  LOW_CHEMICAL_LEVEL: Droplets,
-  NEW_ENTRY_CREATED: ClipboardList,
-  ENTRY_NO_ASSIGNEE: ClipboardList,
-  ORDER_REQUEST_HIGH_PRIORITY: Package,
-  ORDER_REQUEST_ANY: Package,
-  FAILED_LOGIN_ATTEMPTS: Lock,
+  NEW_REPORT_SCHEDULE: CalendarClock,
+  REPORT_SCHEDULE_MODIFIED: CalendarClock,
+  CONTACT_ADDED_TO_SCHEDULE: CalendarClock,
+  CONTACT_REMOVED_FROM_SCHEDULE: CalendarClock,
+  COMPANY_NO_REPORT_SCHEDULE: CalendarClock,
+  SCHEDULE_NO_REPORTS: CalendarClock,
+  WEEKLY_REPORT_DIGEST: CalendarClock,
 };
 
 export default function AlertsLiveFeedSidebar({ alerts = [] }) {

@@ -7,6 +7,7 @@ import { Truck } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { getUserFriendlyError } from '@/utils/errorMessages';
 import { LoginForm } from '@/components/login-form';
+import { triggerFailedLogin } from '@/lib/alertTrigger';
 
 const DEFAULT_BRANDING = {
   company_name: 'Fleet Compliance Portal',
@@ -25,10 +26,9 @@ export default function LoginShadcn() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  // const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  // const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [error, setError] = useState('');
+  const [failedAttempts, setFailedAttempts] = useState(0);
 
   const { data: branding = DEFAULT_BRANDING } = useQuery({
     queryKey: ['loginBranding'],
@@ -81,9 +81,16 @@ export default function LoginShadcn() {
     try {
       const result = await login(email, password);
       if (result.success) {
+        setFailedAttempts(0);
         toast.success('Welcome back!', { description: 'Logging you in...' });
         navigate('/');
       } else {
+        const newAttempts = failedAttempts + 1;
+        setFailedAttempts(newAttempts);
+        // Trigger alert after 3 failed attempts
+        if (newAttempts >= 3 && newAttempts % 3 === 0) {
+          triggerFailedLogin(email, newAttempts);
+        }
         const errorMessage = result.error || authError?.message || 'Invalid email or password';
         // Set inline error by auth type so company vs account deactivation are clear
         if (authError?.type === 'company_deactivated') {
@@ -103,6 +110,11 @@ export default function LoginShadcn() {
         }
       }
     } catch (err) {
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+      if (newAttempts >= 3 && newAttempts % 3 === 0) {
+        triggerFailedLogin(email, newAttempts);
+      }
       setError(getUserFriendlyError(err, 'logging in'));
     } finally {
       setIsLoading(false);

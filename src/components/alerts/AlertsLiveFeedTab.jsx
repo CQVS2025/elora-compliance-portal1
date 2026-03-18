@@ -23,25 +23,53 @@ import {
   Activity, AlertTriangle, Calendar, CheckCircle2,
   ClipboardList, Lock, Package, Droplets, Bell, Trash2,
   Clock, TrendingUp, Loader2, ChevronLeft, ChevronRight,
+  Truck, Shield, CalendarClock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const TYPE_ICONS = {
+  // Operations
+  NEW_ENTRY_CREATED: ClipboardList,
+  ENTRY_OPEN_5_DAYS: Clock,
+  ENTRY_RESOLVED: CheckCircle2,
+  ENTRY_NO_ASSIGNEE: ClipboardList,
+  ENTRY_NO_DUE_DATE: ClipboardList,
+  // Orders
+  ORDER_REQUEST_HIGH_PRIORITY: Package,
+  ORDER_REQUEST_ANY: Package,
+  ORDER_PENDING_APPROVAL: Package,
+  ORDER_STATUS_CHANGED: Package,
+  STOCK_TAKE_SUBMITTED: Package,
+  AGENT_PARTS_NO_REQUEST: Package,
+  // Delivery
+  DELIVERY_SCHEDULED_TODAY: Truck,
+  SITE_NO_DELIVERY: Truck,
+  SITE_APPROACHING_REFILL: Truck,
+  SITE_OVERDUE_REFILL: Truck,
+  UNUSUAL_CONSUMPTION: AlertTriangle,
+  // Devices
   DEVICE_OFFLINE: Activity,
   DEVICE_BACK_ONLINE: CheckCircle2,
   DEVICE_OFFLINE_EXTENDED: Activity,
+  // Chemicals
+  LOW_CHEMICAL_LEVEL: Droplets,
+  // Security
+  FAILED_LOGIN_ATTEMPTS: Lock,
+  NEW_USER_FIRST_LOGIN: Shield,
+  MANAGER_NOT_LOGGED_IN_7_DAYS: Shield,
+  ENTRY_ASSIGNED_INACTIVE_USER: Shield,
+  // Report Scheduling
   REPORT_DUE_TODAY: Calendar,
   REPORT_DUE_IN_X_DAYS: Calendar,
   REPORT_OVERDUE: AlertTriangle,
   REPORT_SENT: CheckCircle2,
-  LOW_CHEMICAL_LEVEL: Droplets,
-  NEW_ENTRY_CREATED: ClipboardList,
-  ENTRY_NO_ASSIGNEE: ClipboardList,
-  ENTRY_RESOLVED: CheckCircle2,
-  ORDER_REQUEST_HIGH_PRIORITY: Package,
-  ORDER_REQUEST_ANY: Package,
-  FAILED_LOGIN_ATTEMPTS: Lock,
-  NEW_USER_FIRST_LOGIN: Lock,
+  NEW_REPORT_SCHEDULE: CalendarClock,
+  REPORT_SCHEDULE_MODIFIED: CalendarClock,
+  CONTACT_ADDED_TO_SCHEDULE: CalendarClock,
+  CONTACT_REMOVED_FROM_SCHEDULE: CalendarClock,
+  COMPANY_NO_REPORT_SCHEDULE: CalendarClock,
+  SCHEDULE_NO_REPORTS: CalendarClock,
+  WEEKLY_REPORT_DIGEST: CalendarClock,
 };
 
 const ITEMS_PER_PAGE = 15;
@@ -116,6 +144,21 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
   const totalForRate = todayCount + (stats?.weekCount ?? alerts.length);
   const resolutionRate = totalForRate > 0 ? Math.round((resolvedCount / totalForRate) * 100) : 0;
 
+  // Compute average response time from resolved alerts (time between created_at and resolved_at)
+  const avgResponseTime = useMemo(() => {
+    const resolvedAlerts = alerts.filter(a => a.status === 'resolved' && a.resolved_at);
+    if (resolvedAlerts.length === 0) return null;
+    const totalMs = resolvedAlerts.reduce((sum, a) => {
+      return sum + (new Date(a.resolved_at) - new Date(a.created_at));
+    }, 0);
+    const avgMs = totalMs / resolvedAlerts.length;
+    const avgMins = Math.round(avgMs / (60 * 1000));
+    if (avgMins < 60) return `${avgMins}m`;
+    const hours = Math.floor(avgMins / 60);
+    const mins = avgMins % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }, [alerts]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -155,7 +198,7 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
         <StatsCard
           label="TODAY'S ALERTS"
           value={todayCount}
-          description={`${criticalToday} critical need attention`}
+          description="need attention"
           borderColor="border-t-red-500"
           criticalCount={criticalToday}
         />
@@ -173,8 +216,8 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
         />
         <StatsCard
           label="AVG RESPONSE"
-          value="42m"
-          description="Time to action"
+          value={avgResponseTime || '—'}
+          description={avgResponseTime ? 'Time to resolve' : 'No resolved alerts yet'}
           borderColor="border-t-blue-500"
         />
       </div>

@@ -100,7 +100,8 @@ export const alertsApi = {
       .from('alerts')
       .select('*', { count: 'exact', head: true })
       .eq('severity', 'critical')
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .gte('created_at', todayStart);
 
     // This week
     const { count: weekCount } = await supabase
