@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { supabaseClient } from '@/api/supabaseClient';
-import { getAccessibleTabs, getDefaultEmailReportTypes } from '@/lib/permissions';
+import { getAccessibleTabs, getDefaultEmailReportTypes, DELIVERY_MANAGER_DEFAULT_TABS } from '@/lib/permissions';
 import { sitesOptions } from '@/query/options';
 import { getDefaultCostSubtabs, getDefaultEmailReportSubtabs } from '@/lib/permissions';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -113,7 +113,7 @@ const TAB_ALLOWED_ROLES = (() => {
     manager: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'],
     user: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'],
     batcher: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'],
-    delivery_manager: ['dashboard', 'delivery-calendar', 'stock-orders'],
+    delivery_manager: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'],
     driver: ['dashboard', 'compliance', 'vehicle-image-log', 'leaderboard', 'delivery-calendar'],
     viewer: ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'delivery-calendar', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'leaderboard', 'ai-insights'],
   };
@@ -224,7 +224,8 @@ export default function UserManagement() {
     if (!userForTabVisibility) return;
     const baseTabs = getBaseTabsForUser(userForTabVisibility);
     const current = userForTabVisibility.visible_tabs;
-    const base = Array.isArray(current) ? current : baseTabs;
+    const defaultTabs = userForTabVisibility.role === 'delivery_manager' ? DELIVERY_MANAGER_DEFAULT_TABS : baseTabs;
+    const base = Array.isArray(current) ? current : defaultTabs;
     setLocalTabVisibility(base.filter((t) => baseTabs.includes(t)));
     setLocalUserCostSubtabs(
       userForTabVisibility.visible_cost_subtabs === null || userForTabVisibility.visible_cost_subtabs === undefined

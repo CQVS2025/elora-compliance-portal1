@@ -2,7 +2,7 @@ import React, { createContext, useContext, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabaseClient } from "@/api/supabaseClient";
 import { useAuth } from '@/lib/AuthContext';
-import { getAccessibleTabs, COST_SUBTAB_IDS, EMAIL_REPORT_SUBTAB_IDS, getDefaultCostSubtabs, getDefaultEmailReportSubtabs, getDefaultEmailReportTypes } from '@/lib/permissions';
+import { getAccessibleTabs, DELIVERY_MANAGER_DEFAULT_TABS, COST_SUBTAB_IDS, EMAIL_REPORT_SUBTAB_IDS, getDefaultCostSubtabs, getDefaultEmailReportSubtabs, getDefaultEmailReportTypes } from '@/lib/permissions';
 
 /**
  * Database-Driven Permission System
@@ -124,6 +124,11 @@ function getEffectiveVisibleTabValues(perms, userProfile) {
   }
   if (perms.hidden_tabs && perms.hidden_tabs.length > 0) {
     return roleTabs.filter((v) => !perms.hidden_tabs.includes(v));
+  }
+  // Delivery managers fall back to a conservative default set so existing users aren't suddenly shown all tabs.
+  // Only tabs listed in DELIVERY_MANAGER_DEFAULT_TABS are shown unless the admin has saved a visible_tabs override.
+  if (role === 'delivery_manager') {
+    return DELIVERY_MANAGER_DEFAULT_TABS.filter((t) => roleTabs.includes(t));
   }
   return roleTabs;
 }

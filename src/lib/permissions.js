@@ -193,6 +193,12 @@ export function canViewCosts(userProfile) {
 }
 
 /**
+ * Default tabs shown to a delivery manager when no individual override has been set.
+ * Admins can override this per delivery manager via the Tab Visibility dialog.
+ */
+export const DELIVERY_MANAGER_DEFAULT_TABS = ['dashboard', 'delivery-calendar', 'stock-orders'];
+
+/**
  * Get user's accessible tabs based on role
  */
 export function getAccessibleTabs(userProfile) {
@@ -230,9 +236,9 @@ export function getAccessibleTabs(userProfile) {
     return ['dashboard', 'compliance', 'vehicle-image-log', 'leaderboard', 'delivery-calendar'];
   }
 
-  // Delivery Manager: Delivery Calendar + Stock & Orders (Agent view: Stock Take + Request Parts)
+  // Delivery Manager: admin can toggle any tab on/off per individual delivery manager
   if (role === 'delivery_manager') {
-    return ['dashboard', 'delivery-calendar', 'stock-orders'];
+    return ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
   }
 
   // Viewer sees read-only tabs (no operations-log-edit)
