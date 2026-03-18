@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { queryKeys } from '../keys';
+import { triggerNewEntryCreated, triggerEntryResolved } from '@/lib/alertTrigger';
 
 /**
  * Create operations log entry with vehicle links
@@ -64,9 +65,11 @@ export function useCreateOperationsLogEntry() {
 
       return entry;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (entry, variables) => {
       const companyId = variables.companyId ?? 'global';
       queryClient.invalidateQueries({ queryKey: queryKeys.tenant.operationsLogEntries(companyId) });
+      // Fire alert triggers (fire-and-forget, won't block)
+      triggerNewEntryCreated(entry, variables.payload);
     },
   });
 }
@@ -132,8 +135,12 @@ export function useUpdateOperationsLogStatus() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tenant'], exact: false });
+      // Fire alert when entry is resolved
+      if (variables.status === 'resolved') {
+        triggerEntryResolved(data);
+      }
     },
   });
 }

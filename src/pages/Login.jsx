@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Truck, Mail, Lock, AlertCircle } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { getUserFriendlyError } from '@/utils/errorMessages';
+import { triggerFailedLogin } from '@/lib/alertTrigger';
 
 // Default branding
 const DEFAULT_BRANDING = {
@@ -34,6 +35,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [error, setError] = useState('');
+  const [failedAttempts, setFailedAttempts] = useState(0);
 
   // Get branding based on custom domain or default
   const { data: branding = DEFAULT_BRANDING } = useQuery({
@@ -87,9 +89,16 @@ export default function Login() {
       const result = await login(email, password);
 
       if (result.success) {
+        setFailedAttempts(0);
         toast.success("Welcome back!", { description: "Logging you in..." });
         navigate('/');
       } else {
+        const newAttempts = failedAttempts + 1;
+        setFailedAttempts(newAttempts);
+        // Trigger alert after 3 failed attempts
+        if (newAttempts >= 3) {
+          triggerFailedLogin(email, newAttempts);
+        }
         // Check for deactivated account error specifically
         const errorMessage = result.error || authError?.message || 'Invalid email or password';
         setError(getUserFriendlyError(errorMessage));

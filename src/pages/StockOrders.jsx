@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { triggerStockTakeSubmitted, triggerOrderRequestSubmitted, triggerOrderStatusChanged } from '@/lib/alertTrigger';
 import * as XLSX from 'xlsx';
 import { Package, ShoppingCart, ClipboardList, Loader2, Check, X, Download, User, FileCheck, ChevronDown, ChevronUp, List, LayoutGrid, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -127,6 +128,7 @@ function AgentView({ userProfile }) {
       queryClient.invalidateQueries({ queryKey: queryKeys.global.agentStock(userId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.global.stockTakes() });
       toast.success('Stock take saved', { description: 'Manager can see your current stock.' });
+      triggerStockTakeSubmitted({ site_name: userProfile?.full_name || 'Agent' });
     },
     onError: (err) => {
       toast.error(err?.message || 'Failed to save stock take');
@@ -183,6 +185,10 @@ function AgentView({ userProfile }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.global.orderRequests() });
+      triggerOrderRequestSubmitted(
+        { description: `${requestOrderLines.length} parts requested` },
+        requestPriority
+      );
       setRequestQuantities({});
       setRequestNotes('');
       toast.success('Request submitted', { description: 'Manager will be notified.' });
@@ -455,6 +461,7 @@ function ManagerView({ userProfile, isSuperAdmin = false }) {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.global.orderRequests() });
       if (selectedOrderId) queryClient.invalidateQueries({ queryKey: [...queryKeys.global.orderRequests(), 'detail', selectedOrderId] });
+      triggerOrderStatusChanged({ id: variables.id }, variables.status);
       // Notify the delivery manager (agent) who submitted the request
       edgeFetch('sendOrderStatusNotification', {
         orderRequestId: variables.id,

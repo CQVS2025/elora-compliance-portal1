@@ -28,6 +28,7 @@ import ReportSchedules from './pages/ReportSchedules';
 import StockOrders from './pages/StockOrders';
 import VehicleImageLog from './pages/VehicleImageLog';
 import VehicleImageLogVehiclePage from './pages/VehicleImageLogVehiclePage';
+import Alerts from './pages/Alerts';
 import __Layout from './Layout.jsx';
 
 
@@ -62,6 +63,7 @@ export const PAGES = {
     "StockOrders": StockOrders,
     "VehicleImageLog": VehicleImageLog,
     "VehicleImageLogVehicle": VehicleImageLogVehiclePage,
+    "Alerts": Alerts,
 }
 
 export const pagesConfig = {

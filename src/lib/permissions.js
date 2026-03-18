@@ -202,7 +202,7 @@ export function getAccessibleTabs(userProfile) {
 
   // Super admin sees all tabs (Users tab moved to Admin console). SMS Alerts on by default only for super_admin. Edit Operations Log on by default for super_admin.
   if (role === 'super_admin') {
-    return ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'report-schedules', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
+    return ['dashboard', 'compliance', 'vehicle-image-log', 'operations-log', 'operations-log-edit', 'operations-log-products', 'delivery-calendar', 'alerts', 'report-schedules', 'stock-orders', 'costs', 'refills', 'devices', 'sites', 'reports', 'email-reports', 'branding', 'leaderboard', 'ai-insights', 'sms-alerts'];
   }
 
   // Admin and all other roles: SMS Alerts off by default. Edit Operations Log on by default for admin.

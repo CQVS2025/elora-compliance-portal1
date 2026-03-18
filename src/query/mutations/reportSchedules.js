@@ -1,6 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { queryKeys } from '../keys';
+import {
+  triggerReportScheduleCreated,
+  triggerReportScheduleModified,
+  triggerReportMarkedSent,
+  triggerContactAddedToSchedule,
+  triggerContactRemovedFromSchedule,
+} from '@/lib/alertTrigger';
 
 /**
  * Map form payload to DB columns
@@ -54,8 +61,10 @@ export function useCreateReportSchedule() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tenant', variables.companyId ?? 'all', 'reportSchedules'] });
+      triggerReportScheduleCreated(data);
+      triggerContactAddedToSchedule(data, data.contact_name);
     },
   });
 }
@@ -80,8 +89,9 @@ export function useUpdateReportSchedule() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tenant', variables.companyId ?? 'all', 'reportSchedules'] });
+      triggerReportScheduleModified(data);
     },
   });
 }
@@ -129,8 +139,11 @@ export function useMarkReportScheduleSent() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tenant', variables.companyId ?? 'all', 'reportSchedules'] });
+      if (variables.markedAsSent) {
+        triggerReportMarkedSent(data);
+      }
     },
   });
 }
@@ -142,16 +155,29 @@ export function useDeleteReportSchedule() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id }) => {
+    mutationFn: async ({ id, contactName }) => {
+      // If contactName wasn't passed, fetch it before deleting
+      let name = contactName;
+      if (!name) {
+        const { data: sched } = await supabase
+          .from('report_schedules')
+          .select('contact_name')
+          .eq('id', id)
+          .single();
+        name = sched?.contact_name;
+      }
+
       const { error } = await supabase
         .from('report_schedules')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
+      return { id, contactName: name };
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tenant', variables.companyId ?? 'all', 'reportSchedules'] });
+      triggerContactRemovedFromSchedule({ id: result.id }, result.contactName);
     },
   });
 }

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Plus, List, CalendarDays, Loader2, FileDown, CalendarClock, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { companiesOptions, reportSchedulesOptions } from '@/query/options';
-import { useCreateReportSchedule, useUpdateReportSchedule, useMarkReportScheduleSent } from '@/query/mutations/reportSchedules';
+import { useCreateReportSchedule, useUpdateReportSchedule, useMarkReportScheduleSent, useDeleteReportSchedule } from '@/query/mutations/reportSchedules';
 import { useAuth } from '@/lib/AuthContext';
 import ReportScheduleModal from '@/components/report-schedules/ReportScheduleModal';
 import ReportScheduleListView from '@/components/report-schedules/ReportScheduleListView';
@@ -67,6 +67,7 @@ export default function ReportSchedules() {
   const createMutation = useCreateReportSchedule();
   const updateMutation = useUpdateReportSchedule();
   const markSentMutation = useMarkReportScheduleSent();
+  const deleteMutation = useDeleteReportSchedule();
 
   const handleSaveSchedule = (payload) => {
     const companyId = userProfile?.company_id ?? companyIdForQuery;
@@ -149,6 +150,25 @@ export default function ReportSchedules() {
         },
         onError: (err) => {
           toast.error(err?.message || 'Failed to update');
+        },
+      }
+    );
+  };
+
+  const handleDelete = (schedule) => {
+    const companyId = userProfile?.company_id ?? companyIdForQuery;
+    deleteMutation.mutate(
+      {
+        id: schedule.id,
+        contactName: schedule.contactName || schedule.contact_name,
+        companyId,
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Schedule for ${schedule.contactName || schedule.contact_name} deleted`);
+        },
+        onError: (err) => {
+          toast.error(err?.message || 'Failed to delete schedule');
         },
       }
     );
@@ -259,6 +279,8 @@ export default function ReportSchedules() {
               companies={companies}
               onEdit={handleEdit}
               onMarkSent={handleMarkSent}
+              onDelete={handleDelete}
+              isDeletingId={deleteMutation.isPending ? deleteMutation.variables?.id : null}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               companyFilter={companyFilter}

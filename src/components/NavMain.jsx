@@ -17,6 +17,7 @@ import {
   CalendarClock,
   Package,
   ImageIcon,
+  Bell,
 } from 'lucide-react';
 import { useAvailableTabs, usePermissions } from '@/components/auth/PermissionGuard';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -39,6 +40,7 @@ const ALL_TABS = [
   { value: 'vehicle-image-log', label: 'Vehicle Image Log', icon: ImageIcon, path: '/vehicle-image-log' },
   { value: 'operations-log', label: 'Operations Log', icon: ClipboardList, path: '/operations-log' },
   { value: 'delivery-calendar', label: 'Delivery Calendar', icon: CalendarDays, path: '/delivery-calendar' },
+  { value: 'alerts', label: 'Alerts', icon: Bell, path: '/alerts', showNewBadge: false },
   { value: 'report-schedules', label: 'Report Schedules', icon: CalendarClock, path: '/report-schedules', showNewBadge: false },
   { value: 'stock-orders', label: 'Stock & Orders', icon: Package, path: '/stock-orders' },
   { value: 'costs', label: 'Usage Costs', icon: DollarSign, path: '/usage-costs' },

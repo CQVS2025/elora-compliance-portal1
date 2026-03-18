@@ -239,6 +239,14 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        {/* Alerts – Super Admin real-time alert monitoring */}
+        <Route path="/alerts" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages.Alerts)}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
 
         <Route path="/operations-log" element={
           <AuthenticatedRoute>

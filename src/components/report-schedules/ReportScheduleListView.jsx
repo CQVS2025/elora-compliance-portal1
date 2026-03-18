@@ -1,12 +1,22 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import {
   Search, Pencil, Check, Building2, CalendarClock, AlertCircle,
   CalendarCheck, Users, FileBarChart, User, Send, Clock, Mail,
-  CalendarDays, MailCheck, X,
+  CalendarDays, MailCheck, X, Trash2, Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -69,6 +79,8 @@ export default function ReportScheduleListView({
   companies = [],
   onEdit,
   onMarkSent,
+  onDelete,
+  isDeletingId,
   searchQuery = '',
   onSearchChange,
   companyFilter = 'all',
@@ -78,6 +90,7 @@ export default function ReportScheduleListView({
   statusFilter = 'all',
   onStatusFilterChange,
 }) {
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const filteredSchedules = useMemo(() => {
     let list = [...schedules];
     if (searchQuery.trim()) {
@@ -423,6 +436,26 @@ export default function ReportScheduleListView({
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
+                                  onClick={() => setDeleteTarget(s)}
+                                  disabled={isDeletingId === s.id}
+                                >
+                                  {isDeletingId === s.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top"><p>Delete schedule</p></TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </td>
                     </tr>
@@ -433,6 +466,36 @@ export default function ReportScheduleListView({
           </table>
         </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Report Schedule</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the report schedule for{' '}
+              <span className="font-semibold text-foreground">
+                {deleteTarget?.contactName || deleteTarget?.contact_name || 'this contact'}
+              </span>
+              ? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) {
+                  onDelete?.(deleteTarget);
+                  setDeleteTarget(null);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

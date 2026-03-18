@@ -5,6 +5,7 @@ import { queryClientInstance, clearAllCache } from '@/lib/query-client';
 import { clearTenantContextCache } from '@/api/edgeFetch';
 import { setEloraTenantContext, clearEloraTenantContext } from '@/lib/eloraTenantContext';
 import { upsertPresenceOnLogin, startHeartbeat, stopHeartbeat } from '@/lib/userPresence';
+import { triggerNewUserFirstLogin } from '@/lib/alertTrigger';
 
 const AuthContext = createContext();
 
@@ -276,6 +277,17 @@ export const AuthProvider = ({ children }) => {
         companyEloraCustomerRef: enrichedProfile.company_elora_customer_ref ?? null,
         isSuperAdmin: enrichedProfile.role === 'super_admin',
       });
+      // Detect first-time login before updating presence
+      try {
+        const { data: existingPresence } = await supabase
+          .from('user_presence')
+          .select('last_login_at')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (!existingPresence || !existingPresence.last_login_at) {
+          triggerNewUserFirstLogin({ id: user.id, full_name: enrichedProfile.full_name, email: enrichedProfile.email });
+        }
+      } catch (_) { /* silent — don't block login */ }
       // Update presence (last_login + last_seen) and start heartbeat
       upsertPresenceOnLogin(user.id, enrichedProfile.company_id ?? null);
       startHeartbeat(user.id, enrichedProfile.company_id ?? null);
