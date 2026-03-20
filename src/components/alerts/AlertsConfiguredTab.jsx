@@ -26,7 +26,7 @@ const CATEGORY_ICONS = {
   report_scheduling: CalendarClock,
 };
 
-export default function AlertsConfiguredTab({ configurations, stats, isLoading, alerts }) {
+export default function AlertsConfiguredTab({ configurations, stats, dedupedStats, isLoading, alerts }) {
   const queryClient = useQueryClient();
   const [openCategories, setOpenCategories] = useState(
     Object.fromEntries(CATEGORY_ORDER.map(c => [c, true]))
@@ -126,14 +126,14 @@ export default function AlertsConfiguredTab({ configurations, stats, isLoading, 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatsCard
             label="CRITICAL ACTIVE"
-            value={stats?.criticalCount ?? 0}
+            value={dedupedStats?.criticalCount ?? stats?.criticalCount ?? 0}
             description="Device offline + refill overdue"
             borderColor="border-t-red-500"
           />
           <StatsCard
             label="WARNINGS TODAY"
-            value={stats?.warningsToday ?? 0}
-            description={`${stats?.warningsToday || 0} new since this morning`}
+            value={dedupedStats?.warningsToday ?? stats?.warningsToday ?? 0}
+            description={`${dedupedStats?.warningsToday ?? stats?.warningsToday ?? 0} new since this morning`}
             borderColor="border-t-amber-500"
           />
           <StatsCard

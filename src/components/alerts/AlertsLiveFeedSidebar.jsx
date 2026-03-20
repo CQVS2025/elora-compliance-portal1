@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { SEVERITY_CONFIG, ALERT_TYPE_LABELS } from '@/lib/alertConstants';
+import { formatEntityName, formatAlertMessage } from '@/lib/alertFormatters';
 import { cn } from '@/lib/utils';
 import {
   Activity, AlertTriangle, Calendar, CheckCircle2,
@@ -74,6 +75,8 @@ export default function AlertsLiveFeedSidebar({ alerts = [] }) {
             const Icon = TYPE_ICONS[alert.type] || Bell;
             const severity = SEVERITY_CONFIG[alert.severity] || SEVERITY_CONFIG.info;
             const timeAgo = formatDistanceToNow(new Date(alert.created_at), { addSuffix: false });
+            const entityDisplay = formatEntityName(alert);
+            const messageDisplay = formatAlertMessage(alert);
 
             return (
               <div key={alert.id} className="flex gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
@@ -96,9 +99,9 @@ export default function AlertsLiveFeedSidebar({ alerts = [] }) {
                     </Badge>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-snug truncate">
-                    {alert.entity_name && <span className="font-medium text-foreground">{alert.entity_name}</span>}
-                    {alert.entity_name && ' — '}
-                    {alert.message}
+                    {entityDisplay && <span className="font-medium text-foreground">{entityDisplay}</span>}
+                    {entityDisplay && ' - '}
+                    {messageDisplay}
                   </p>
                   <div className="flex items-center gap-1.5 mt-1">
                     <span className="text-[10px] text-muted-foreground">{timeAgo} ago</span>

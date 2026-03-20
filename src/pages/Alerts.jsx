@@ -1,8 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { alertsApi } from '@/api/alertsApi';
 import { useAlertSocket } from '@/hooks/useAlertSocket';
+import { devicesOptions } from '@/query/options';
+import { usePermissions } from '@/components/auth/PermissionGuard';
 import { toast } from 'sonner';
 import AlertsConfiguredTab from '@/components/alerts/AlertsConfiguredTab';
 import AlertsLiveFeedTab from '@/components/alerts/AlertsLiveFeedTab';
@@ -41,6 +43,35 @@ export default function Alerts() {
   });
 
   const alerts = alertsData?.data || [];
+
+  // ── Devices (for enriching device alerts with customer / site) ──
+  const permissions = usePermissions();
+  const companyId = permissions.userProfile?.company_id;
+  const { data: allDevices = [] } = useQuery(
+    devicesOptions(companyId, { status: '1,2' })
+  );
+
+  // ── Deduplicated alerts and stats (same logic as LiveFeedTab: keep latest per type + entity_name) ──
+  const { dedupedAlertCount, dedupedStats } = useMemo(() => {
+    const seen = new Set();
+    const deduped = [];
+    const todayStr = new Date().toDateString();
+    for (const a of alerts) {
+      const key = `${a.type}|${(a.entity_name || a.entity_id || a.id || '').toLowerCase().trim()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(a);
+      }
+    }
+    const todayAlerts = deduped.filter(a => new Date(a.created_at).toDateString() === todayStr);
+    return {
+      dedupedAlertCount: deduped.length,
+      dedupedStats: {
+        criticalCount: deduped.filter(a => a.severity === 'critical' && a.status === 'active').length,
+        warningsToday: todayAlerts.filter(a => a.severity === 'warning').length,
+      },
+    };
+  }, [alerts]);
 
   // ── WebSocket ────────────────────────────────────────────────
   const handleNewAlert = useCallback((alert) => {
@@ -86,7 +117,7 @@ export default function Alerts() {
           });
         }
         if (successes.length > 0) {
-          toast.success(`Test alert sent — ${successes.length} notification${successes.length > 1 ? 's' : ''} delivered`);
+          toast.success(`Test alert sent - ${successes.length} notification${successes.length > 1 ? 's' : ''} delivered`);
         } else if (errors.length === 0) {
           toast.success('Test alert created (portal only)');
         }
@@ -194,16 +225,10 @@ export default function Alerts() {
   }
 
   const enabledCount = configurations.filter(c => c.enabled).length;
-  // Use DB-backed count for accurate "today" number
-  const liveFeedCount = stats?.todayCount ?? alerts.filter(a => {
-    const d = new Date(a.created_at);
-    const now = new Date();
-    return d.toDateString() === now.toDateString();
-  }).length;
 
   const tabs = [
     { id: 'configured', label: 'Configured', count: enabledCount },
-    { id: 'live-feed', label: 'Live Feed', count: liveFeedCount },
+    { id: 'live-feed', label: 'Live Feed', count: dedupedAlertCount },
     { id: 'delivery-settings', label: 'Delivery Settings' },
   ];
 
@@ -315,6 +340,7 @@ export default function Alerts() {
         <AlertsConfiguredTab
           configurations={configurations}
           stats={stats}
+          dedupedStats={dedupedStats}
           isLoading={configLoading || statsLoading}
           alerts={alerts}
         />
@@ -324,6 +350,7 @@ export default function Alerts() {
           alerts={alerts}
           stats={stats}
           isLoading={alertsLoading}
+          devices={allDevices}
         />
       )}
       {activeTab === 'delivery-settings' && (

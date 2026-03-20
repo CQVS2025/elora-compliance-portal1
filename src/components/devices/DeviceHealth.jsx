@@ -28,6 +28,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import moment from 'moment';
+import momentTz from 'moment-timezone';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import DataPagination from '@/components/ui/DataPagination';
@@ -49,7 +50,11 @@ const getDeviceLastScan = (device) =>
   device?._raw?.devices_lastscan ??
   null;
 
-// Normalize to UTC ISO. Only append Z when NO timezone is present (avoid corrupting +11:00 etc).
+// ACATC API returns timestamps in Australian Eastern Time (AEST/AEDT)
+// but often with an incorrect 'Z' suffix or no timezone indicator at all.
+// Always interpret as Australia/Sydney and convert to true UTC.
+const ACATC_TIMEZONE = 'Australia/Sydney';
+
 function toUTCISO(value) {
   if (value == null || value === '') return null;
 
@@ -61,10 +66,11 @@ function toUTCISO(value) {
   const s = String(value).trim();
   if (!s) return null;
 
-  const hasTimezone = /[Zz]|[+-]\d{2}:?\d{2}$/.test(s);
-  const d = hasTimezone ? new Date(s) : new Date(s + 'Z');
+  // Strip any timezone indicator — the API timestamps are always local Australian time
+  const stripped = s.replace(/[Zz]$/, '').replace(/[+-]\d{2}:?\d{2}$/, '');
+  const m = momentTz.tz(stripped, ACATC_TIMEZONE);
 
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  return m.isValid() ? m.utc().toISOString() : null;
 }
 
 // Compare in UTC so relative time matches old platform / server (same as client’s expectation).
@@ -160,26 +166,26 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
   );
 
   // Calculate device health stats (use canonical last scan; compare in UTC)
+  // Uses same thresholds as getDeviceStatus: Online < 1h, Active 1–24h, Offline ≥ 24h
   const stats = useMemo(() => {
     const now = moment.utc();
-    const online = devices.filter(d => {
+    let online = 0;
+    let active = 0;
+    let offline = 0;
+    devices.forEach(d => {
       const lastScan = d.normalizedLastScan ?? d.lastScanAt;
-      if (!lastScan) return false;
-      return now.diff(moment.utc(lastScan), 'hours') < 24;
-    }).length;
-    const offline = devices.filter(d => {
-      const lastScan = d.normalizedLastScan ?? d.lastScanAt;
-      if (!lastScan) return true;
-      return now.diff(moment.utc(lastScan), 'hours') >= 24;
-    }).length;
-
-
+      if (!lastScan) { offline++; return; }
+      const hoursSince = now.diff(moment.utc(lastScan), 'hours');
+      if (hoursSince < 1) online++;
+      else if (hoursSince < 24) active++;
+      else offline++;
+    });
 
     const healthScore = devices.length > 0
-      ? Math.round((online / devices.length) * 100)
+      ? Math.round(((online + active) / devices.length) * 100)
       : 0;
 
-    return { online, offline, healthScore, total: devices.length };
+    return { online, active, offline, healthScore, total: devices.length };
   }, [devices]);
 
   // Filter devices: search + status, site, customer, application, firmware
@@ -513,7 +519,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
               <div>
                 <p className="text-sm text-primary font-semibold">Online</p>
                 <p className="text-3xl font-bold text-primary mt-1">{stats.online}</p>
-                <p className="text-xs text-muted-foreground mt-2">Last 24 hours</p>
+                <p className="text-xs text-muted-foreground mt-2">Last 1 hour</p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-primary" />
@@ -528,7 +534,7 @@ export default function DeviceHealth({ selectedCustomer, selectedSite }) {
               <div>
                 <p className="text-sm text-primary font-semibold">Offline</p>
                 <p className="text-3xl font-bold text-destructive mt-1">{stats.offline}</p>
-                <p className="text-xs text-muted-foreground mt-2">Needs attention</p>
+                <p className="text-xs text-muted-foreground mt-2">No scan in 24+ hours</p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-destructive/10 flex items-center justify-center">
                 <XCircle className="w-6 h-6 text-destructive" />

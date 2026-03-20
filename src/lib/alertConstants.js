@@ -22,20 +22,20 @@ export const ALERT_TYPE_LABELS = {
   // Orders
   ORDER_REQUEST_HIGH_PRIORITY: 'New order request submitted (HIGH priority)',
   ORDER_REQUEST_ANY: 'New order request submitted (any priority)',
-  ORDER_PENDING_APPROVAL: 'Order pending approval for more than X hours',
+  ORDER_PENDING_APPROVAL: 'Order pending approval',
   ORDER_STATUS_CHANGED: 'Order status changed (approved / rejected / in transit)',
   STOCK_TAKE_SUBMITTED: 'Stock take submitted by agent',
   AGENT_PARTS_NO_REQUEST: 'Agent has parts marked "need to order" with no request raised',
   // Delivery
   DELIVERY_SCHEDULED_TODAY: 'Delivery scheduled for today (morning digest)',
-  SITE_NO_DELIVERY: 'No delivery recorded at a site for X days',
+  SITE_NO_DELIVERY: 'No delivery recorded at site',
   SITE_APPROACHING_REFILL: 'Site approaching refill threshold',
   SITE_OVERDUE_REFILL: 'Site overdue for refill',
   UNUSUAL_CONSUMPTION: 'Unusually high consumption at a site',
   // Devices
   DEVICE_OFFLINE: 'Device offline',
   DEVICE_BACK_ONLINE: 'Device back online (resolved)',
-  DEVICE_OFFLINE_EXTENDED: 'Device offline for more than X hours',
+  DEVICE_OFFLINE_EXTENDED: 'Device offline - extended',
   // Chemicals
   LOW_CHEMICAL_LEVEL: 'Low chemical level warning',
   // Security
@@ -45,8 +45,8 @@ export const ALERT_TYPE_LABELS = {
   ENTRY_ASSIGNED_INACTIVE_USER: 'Entry assigned to member who has not logged in',
   // Report Scheduling
   REPORT_DUE_TODAY: 'Report due today (for a contact or company)',
-  REPORT_DUE_IN_X_DAYS: 'Report due in X days (upcoming reminder)',
-  REPORT_OVERDUE: 'Report overdue — due date passed, not marked sent',
+  REPORT_DUE_IN_X_DAYS: 'Report due soon (upcoming reminder)',
+  REPORT_OVERDUE: 'Report overdue - due date passed, not marked sent',
   REPORT_SENT: 'Report sent / marked as delivered',
   NEW_REPORT_SCHEDULE: 'New report schedule created for a contact',
   REPORT_SCHEDULE_MODIFIED: 'Report schedule modified (frequency, reports, or recipient)',

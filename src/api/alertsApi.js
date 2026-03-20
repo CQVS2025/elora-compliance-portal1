@@ -187,7 +187,7 @@ export const alertsApi = {
           type: 'DEVICE_OFFLINE',
           category: 'devices',
           severity: 'critical',
-          entity_name: 'TEST DEVICE — Simulation',
+          entity_name: 'TEST DEVICE - Simulation',
           message: 'This is a test alert. Device offline simulation triggered manually.',
         }),
       });
@@ -200,7 +200,7 @@ export const alertsApi = {
           type: 'DEVICE_OFFLINE',
           category: 'devices',
           severity: 'critical',
-          entity_name: 'TEST DEVICE — Simulation',
+          entity_name: 'TEST DEVICE - Simulation',
           message: 'This is a test alert. Device offline simulation triggered manually.',
           status: 'active',
           delivery_channels: ['portal'],

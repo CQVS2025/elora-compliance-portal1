@@ -222,15 +222,15 @@ export default function AlertsDeliverySettingsTab() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
-              <span className="font-medium text-foreground">Portal</span> — Alerts appear instantly in the Live Feed tab and as a notification in the portal.
+              <span className="font-medium text-foreground">Portal</span> - Alerts appear instantly in the Live Feed tab and as a notification in the portal.
             </p>
             <Separator />
             <p>
-              <span className="font-medium text-foreground">Email</span> — Alert details are sent to the configured email addresses via Mailgun.
+              <span className="font-medium text-foreground">Email</span> - Alert details are sent to the configured email addresses via Mailgun.
             </p>
             <Separator />
             <p>
-              <span className="font-medium text-foreground">SMS</span> — Critical and high-priority alerts are sent via Twilio to the configured phone numbers. Quiet hours can suppress SMS during overnight periods.
+              <span className="font-medium text-foreground">SMS</span> - Critical and high-priority alerts are sent via Twilio to the configured phone numbers. Quiet hours can suppress SMS during overnight periods.
             </p>
             <Separator />
             <p>
@@ -253,7 +253,7 @@ export default function AlertsDeliverySettingsTab() {
             <p className="mt-2">
               {form.quiet_hours_enabled
                 ? <>Currently set: <span className="font-medium text-foreground">{form.quiet_hours_start}</span> to <span className="font-medium text-foreground">{form.quiet_hours_end}</span></>
-                : <span className="font-medium text-foreground">Disabled — SMS sent 24/7</span>
+                : <span className="font-medium text-foreground">Disabled - SMS sent 24/7</span>
               }
             </p>
           </CardContent>

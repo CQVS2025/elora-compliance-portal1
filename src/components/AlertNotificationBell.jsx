@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { alertsApi } from '@/api/alertsApi';
 import { useAlertSocket } from '@/hooks/useAlertSocket';
 import { SEVERITY_CONFIG, ALERT_TYPE_LABELS } from '@/lib/alertConstants';
+import { formatEntityName, formatAlertMessage } from '@/lib/alertFormatters';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -79,7 +80,22 @@ export default function AlertNotificationBell() {
   });
 
   const alerts = alertsData?.data || [];
-  const recentAlerts = alerts.slice(0, 50);
+
+  // Deduplicate: keep only the latest alert per (type + entity_name)
+  const dedupedAlerts = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (const a of alerts) {
+      const key = `${a.type}|${(a.entity_name || a.entity_id || a.id || '').toLowerCase().trim()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(a);
+      }
+    }
+    return result;
+  }, [alerts]);
+
+  const recentAlerts = dedupedAlerts.slice(0, 50);
 
   // WebSocket — real-time alerts
   const handleNewAlert = useCallback((alert) => {
@@ -116,10 +132,20 @@ export default function AlertNotificationBell() {
     if (isOpen) setUnreadCount(0);
   };
 
-  const todayCount = alerts.filter(a => {
-    const d = new Date(a.created_at);
-    return d.toDateString() === new Date().toDateString();
-  }).length;
+  // Deduplicated count: only count unique type + entity_name combos for today
+  const todayCount = useMemo(() => {
+    const seen = new Set();
+    let count = 0;
+    const todayStr = new Date().toDateString();
+    for (const a of alerts) {
+      const key = `${a.type}|${(a.entity_name || a.entity_id || a.id || '').toLowerCase().trim()}`;
+      if (!seen.has(key) && new Date(a.created_at).toDateString() === todayStr) {
+        seen.add(key);
+        count++;
+      }
+    }
+    return count;
+  }, [alerts]);
 
   const displayCount = unreadCount > 0 ? unreadCount : todayCount;
 
@@ -187,7 +213,7 @@ export default function AlertNotificationBell() {
               className="w-full text-xs text-muted-foreground hover:text-foreground"
               onClick={() => { setOpen(false); navigate('/alerts'); }}
             >
-              See all {alerts.length} alerts
+              See all {dedupedAlerts.length} alerts
             </Button>
           </div>
         )}
@@ -203,6 +229,9 @@ function AlertItem({ alert, onDelete, isDeleting }) {
 
   const friendlyTitle = ALERT_TYPE_LABELS[alert.type]?.split('(')[0]?.trim()
     || alert.type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+  const entityDisplay = formatEntityName(alert);
+  const messageDisplay = formatAlertMessage(alert);
 
   return (
     <div className={cn(
@@ -226,9 +255,9 @@ function AlertItem({ alert, onDelete, isDeleting }) {
           </Badge>
         </div>
         <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">
-          {alert.entity_name && <span className="font-medium text-foreground">{alert.entity_name}</span>}
-          {alert.entity_name && ' — '}
-          {alert.message}
+          {entityDisplay && <span className="font-medium text-foreground">{entityDisplay}</span>}
+          {entityDisplay && ' - '}
+          {messageDisplay}
         </p>
         <div className="flex items-center gap-1.5 mt-1">
           <span className="text-[10px] text-muted-foreground">{timeAgo} ago</span>

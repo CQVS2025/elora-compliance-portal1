@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { alertsApi } from '@/api/alertsApi';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { SEVERITY_CONFIG, ALERT_TYPE_LABELS, ALERT_CATEGORIES } from '@/lib/alertConstants';
+import { formatEntityName, formatAlertMessage } from '@/lib/alertFormatters';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -74,7 +75,16 @@ const TYPE_ICONS = {
 
 const ITEMS_PER_PAGE = 15;
 
-export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
+// Device alert types
+const DEVICE_ALERT_TYPES = new Set(['DEVICE_OFFLINE', 'DEVICE_BACK_ONLINE', 'DEVICE_OFFLINE_EXTENDED']);
+
+// Site/delivery alert types that can be enriched with customer info
+const SITE_ALERT_TYPES = new Set([
+  'SITE_NO_DELIVERY', 'SITE_APPROACHING_REFILL', 'SITE_OVERDUE_REFILL',
+  'DELIVERY_SCHEDULED_TODAY', 'UNUSUAL_CONSUMPTION', 'LOW_CHEMICAL_LEVEL',
+]);
+
+export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading, devices = [] }) {
   const queryClient = useQueryClient();
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -82,6 +92,91 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
   const [deleteMode, setDeleteMode] = useState('all'); // 'all' | 'range'
   const [deleteFrom, setDeleteFrom] = useState('');
   const [deleteTo, setDeleteTo] = useState('');
+
+  // Build device lookup: match by computerName, computerSerialId, or deviceRef
+  const deviceLookup = useMemo(() => {
+    const map = {};
+    for (const d of devices) {
+      if (d.computerName) map[d.computerName.toLowerCase()] = d;
+      if (d.computerSerialId) map[d.computerSerialId.toLowerCase()] = d;
+      if (d.deviceRef) map[d.deviceRef.toLowerCase()] = d;
+    }
+    return map;
+  }, [devices]);
+
+  // Build site name → customer name lookup from devices (devices have both siteName and customerName)
+  const siteToCustomer = useMemo(() => {
+    const map = {};
+    for (const d of devices) {
+      if (d.siteName && d.customerName) {
+        map[d.siteName.toLowerCase()] = d.customerName;
+      }
+    }
+    return map;
+  }, [devices]);
+
+  // Find the matching device for a device alert
+  const findDeviceForAlert = (alert) => {
+    const raw = (alert.entity_name || '').trim();
+    if (!raw) return null;
+    const tokens = raw.split(/[\s\-—()]+/).filter(Boolean);
+    for (const token of [raw, ...tokens]) {
+      const key = token.toLowerCase();
+      if (deviceLookup[key]) return deviceLookup[key];
+    }
+    if (alert.entity_id) {
+      const key = String(alert.entity_id).toLowerCase();
+      if (deviceLookup[key]) return deviceLookup[key];
+    }
+    return null;
+  };
+
+  // Find customer name for a site-based alert
+  const findCustomerForSiteAlert = (alert) => {
+    const raw = (alert.entity_name || '').trim().toLowerCase();
+    if (!raw) return null;
+    return siteToCustomer[raw] || null;
+  };
+
+  // Deduplicate ALL alerts: keep only the latest per (type + entity_name) combo.
+  // Also enrich device & site alerts with customer/site context.
+  const enrichedAlerts = useMemo(() => {
+    const seen = new Map(); // "type|entity_key" → true
+    const result = [];
+
+    for (const alert of alerts) {
+      // Deduplication key: type + normalised entity_name (alerts are sorted newest first)
+      const entityKey = (alert.entity_name || alert.entity_id || alert.id || '').toLowerCase().trim();
+      const dedupKey = `${alert.type}|${entityKey}`;
+
+      if (seen.has(dedupKey)) continue;
+      seen.set(dedupKey, true);
+
+      const enriched = { ...alert };
+
+      // Enrich device alerts
+      if (DEVICE_ALERT_TYPES.has(alert.type)) {
+        const device = findDeviceForAlert(alert);
+        enriched._device = device;
+        if (device) {
+          const parts = [device.customerName, device.siteName].filter(Boolean);
+          enriched._deviceLabel = device.computerName || device.deviceRef || alert.entity_name;
+          enriched._customerSite = parts.length > 0 ? parts.join(' - ') : null;
+        }
+      }
+
+      // Enrich site/delivery alerts with customer name
+      if (SITE_ALERT_TYPES.has(alert.type)) {
+        const customer = findCustomerForSiteAlert(alert);
+        if (customer) {
+          enriched._customerName = customer;
+        }
+      }
+
+      result.push(enriched);
+    }
+    return result;
+  }, [alerts, deviceLookup, siteToCustomer]);
 
   const deleteMutation = useMutation({
     mutationFn: alertsApi.deleteAlert,
@@ -105,9 +200,9 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
   });
 
   const filteredAlerts = useMemo(() => {
-    if (categoryFilter === 'all') return alerts;
-    return alerts.filter(a => a.category === categoryFilter);
-  }, [alerts, categoryFilter]);
+    if (categoryFilter === 'all') return enrichedAlerts;
+    return enrichedAlerts.filter(a => a.category === categoryFilter);
+  }, [enrichedAlerts, categoryFilter]);
 
   // Reset to page 1 when filter changes
   const handleCategoryChange = (val) => {
@@ -137,16 +232,17 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
     return groups;
   }, [paginatedAlerts]);
 
-  // Use DB-backed stats for accurate counts (not limited by fetch limit)
-  const todayCount = stats?.todayCount ?? alerts.filter(a => isToday(new Date(a.created_at))).length;
-  const criticalToday = stats?.criticalCount ?? 0;
-  const resolvedCount = stats?.resolvedCount ?? alerts.filter(a => a.status === 'resolved').length;
-  const totalForRate = todayCount + (stats?.weekCount ?? alerts.length);
+  // Stats based on deduplicated alerts (enrichedAlerts) so counts match what the user sees
+  const todayCount = enrichedAlerts.filter(a => isToday(new Date(a.created_at))).length;
+  const criticalToday = enrichedAlerts.filter(a => a.severity === 'critical' && a.status === 'active').length;
+  const resolvedCount = enrichedAlerts.filter(a => a.status === 'resolved').length;
+  const weekAlerts = enrichedAlerts.length;
+  const totalForRate = todayCount + weekAlerts;
   const resolutionRate = totalForRate > 0 ? Math.round((resolvedCount / totalForRate) * 100) : 0;
 
   // Compute average response time from resolved alerts (time between created_at and resolved_at)
   const avgResponseTime = useMemo(() => {
-    const resolvedAlerts = alerts.filter(a => a.status === 'resolved' && a.resolved_at);
+    const resolvedAlerts = enrichedAlerts.filter(a => a.status === 'resolved' && a.resolved_at);
     if (resolvedAlerts.length === 0) return null;
     const totalMs = resolvedAlerts.reduce((sum, a) => {
       return sum + (new Date(a.resolved_at) - new Date(a.created_at));
@@ -157,7 +253,7 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
     const hours = Math.floor(avgMins / 60);
     const mins = avgMins % 60;
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-  }, [alerts]);
+  }, [enrichedAlerts]);
 
   if (isLoading) {
     return (
@@ -204,7 +300,7 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
         />
         <StatsCard
           label="THIS WEEK"
-          value={stats?.weekCount ?? 0}
+          value={weekAlerts}
           description="Across all categories"
           borderColor="border-t-amber-500"
         />
@@ -216,7 +312,7 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
         />
         <StatsCard
           label="AVG RESPONSE"
-          value={avgResponseTime || '—'}
+          value={avgResponseTime || '-'}
           description={avgResponseTime ? 'Time to resolve' : 'No resolved alerts yet'}
           borderColor="border-t-blue-500"
         />
@@ -225,12 +321,12 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
       {/* Filter & Alerts List */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">All Alerts — {Object.keys(grouped)[0] || 'Today'}</h2>
+          <h2 className="text-lg font-semibold">All Alerts - {Object.keys(grouped)[0] || 'Today'}</h2>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
               {filteredAlerts.length} alert{filteredAlerts.length !== 1 ? 's' : ''}
             </span>
-            {alerts.length > 0 && (
+            {enrichedAlerts.length > 0 && (
               <Button
                 variant="outline"
                 size="sm"
@@ -293,7 +389,7 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-6 border-t mt-6">
             <p className="text-sm text-muted-foreground">
-              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredAlerts.length)} of {filteredAlerts.length}
+              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredAlerts.length)} of {filteredAlerts.length}
             </p>
             <div className="flex items-center gap-1">
               <Button
@@ -355,7 +451,7 @@ export default function AlertsLiveFeedTab({ alerts = [], stats, isLoading }) {
                     className="flex-1"
                     onClick={() => setDeleteMode('all')}
                   >
-                    Delete All ({alerts.length})
+                    Delete All ({enrichedAlerts.length})
                   </Button>
                   <Button
                     type="button"
@@ -447,6 +543,18 @@ function AlertRow({ alert, onDelete, isDeleting }) {
     ? alert.delivery_channels.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(' + ') + ' sent'
     : null;
 
+  const isDevice = DEVICE_ALERT_TYPES.has(alert.type);
+  const isSiteAlert = SITE_ALERT_TYPES.has(alert.type);
+  const entityDisplay = isDevice ? (alert._deviceLabel || formatEntityName(alert)) : formatEntityName(alert);
+  const messageDisplay = formatAlertMessage(alert);
+  // Context line: customer - site for devices, or customer name for site alerts
+  const contextLine = isDevice
+    ? alert._customerSite
+    : isSiteAlert && alert._customerName
+      ? alert._customerName
+      : null;
+  const deviceApp = isDevice && alert._device?.application ? alert._device.application : null;
+
   return (
     <Card className={cn('group hover:shadow-md transition-all', isDeleting && 'opacity-50 scale-[0.99]')}>
       <CardContent className="flex items-start gap-4 p-4">
@@ -467,11 +575,17 @@ function AlertRow({ alert, onDelete, isDeleting }) {
             <Badge className={cn('text-[10px] px-1.5 py-0 font-medium text-white', severity.badgeBg)}>
               {severity.label.toUpperCase()}
             </Badge>
+            {deviceApp && (
+              <span className="text-[10px] px-1.5 py-0 rounded bg-muted text-muted-foreground font-medium">{deviceApp}</span>
+            )}
           </div>
+          {contextLine && (
+            <p className="text-xs text-muted-foreground mb-0.5">{contextLine}</p>
+          )}
           <p className="text-sm text-muted-foreground leading-relaxed">
-            {alert.entity_name && <span className="font-medium text-foreground">{alert.entity_name}</span>}
-            {alert.entity_name && ' — '}
-            {alert.message}
+            {entityDisplay && <span className="font-medium text-foreground">{entityDisplay}</span>}
+            {entityDisplay && ' - '}
+            {messageDisplay}
           </p>
           <div className="flex items-center gap-2 mt-1.5">
             <span className="text-xs text-muted-foreground">{timeStr}</span>
