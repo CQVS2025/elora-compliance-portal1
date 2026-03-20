@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import ReportScheduleModal from '@/components/report-schedules/ReportScheduleModal';
 import ReportScheduleListView from '@/components/report-schedules/ReportScheduleListView';
 import ReportScheduleCalendarView from '@/components/report-schedules/ReportScheduleCalendarView';
+import ExportExcelModal from '@/components/report-schedules/ExportExcelModal';
 import { toast } from '@/lib/toast';
 import { format } from 'date-fns';
 import { getNextDue } from '@/components/report-schedules/scheduleUtils';
@@ -47,6 +48,8 @@ export default function ReportSchedules() {
   const [view, setView] = useState('list');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportSchedule, setExportSchedule] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [companyFilter, setCompanyFilter] = useState('all');
   const [frequencyFilter, setFrequencyFilter] = useState('all');
@@ -130,6 +133,11 @@ export default function ReportSchedules() {
     }
   };
 
+  const handleExportExcel = (schedule) => {
+    setExportSchedule(schedule);
+    setExportModalOpen(true);
+  };
+
   const handleEdit = (schedule) => {
     setEditingSchedule(schedule);
     setModalOpen(true);
@@ -208,7 +216,7 @@ export default function ReportSchedules() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Report Schedules</h1>
             <p className="text-muted-foreground text-sm">
-              Manage client report delivery &mdash; who gets what, and when
+              Manage client report delivery - who gets what, and when
             </p>
           </div>
         </div>
@@ -280,6 +288,7 @@ export default function ReportSchedules() {
               onEdit={handleEdit}
               onMarkSent={handleMarkSent}
               onDelete={handleDelete}
+              onExportExcel={handleExportExcel}
               isDeletingId={deleteMutation.isPending ? deleteMutation.variables?.id : null}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
@@ -308,6 +317,13 @@ export default function ReportSchedules() {
         schedule={editingSchedule}
         companies={companies}
         onSave={handleSaveSchedule}
+      />
+
+      <ExportExcelModal
+        open={exportModalOpen}
+        onOpenChange={setExportModalOpen}
+        schedule={exportSchedule}
+        companies={companies}
       />
     </div>
   );

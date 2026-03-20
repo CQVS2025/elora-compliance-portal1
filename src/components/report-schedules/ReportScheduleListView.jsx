@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import {
   Search, Pencil, Check, Building2, CalendarClock, AlertCircle,
   CalendarCheck, Users, FileBarChart, User, Send, Clock, Mail,
-  CalendarDays, MailCheck, X, Trash2, Loader2,
+  CalendarDays, MailCheck, X, Trash2, Loader2, FileSpreadsheet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -80,6 +80,7 @@ export default function ReportScheduleListView({
   onEdit,
   onMarkSent,
   onDelete,
+  onExportExcel,
   isDeletingId,
   searchQuery = '',
   onSearchChange,
@@ -261,7 +262,7 @@ export default function ReportScheduleListView({
                 <th className="text-left px-4 py-3 font-medium text-xs uppercase tracking-wider text-muted-foreground">Frequency</th>
                 <th className="text-left px-4 py-3 font-medium text-xs uppercase tracking-wider text-muted-foreground">Next Due</th>
                 <th className="text-left px-4 py-3 font-medium text-xs uppercase tracking-wider text-muted-foreground">Last Sent</th>
-                <th className="w-[100px] px-4 py-3 font-medium text-xs uppercase tracking-wider text-muted-foreground text-center">Actions</th>
+                <th className="w-[160px] px-4 py-3 font-medium text-xs uppercase tracking-wider text-muted-foreground text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -398,6 +399,22 @@ export default function ReportScheduleListView({
                       {/* Actions */}
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-0.5 opacity-70 group-hover:opacity-100 transition-opacity">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 rounded-md gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-[11px] font-medium px-2"
+                                  onClick={() => onExportExcel?.(s)}
+                                >
+                                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                                  Export Excel
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top"><p>Generate branded Excel report</p></TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
