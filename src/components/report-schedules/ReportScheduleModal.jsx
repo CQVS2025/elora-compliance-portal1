@@ -28,17 +28,13 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
-const REPORT_TYPES = [
-  { id: 'compliance_rate', label: 'Compliance Rate' },
-  { id: 'total_washes', label: 'Total Washes' },
-  { id: 'per_vehicle_breakdown', label: 'Per Vehicle Breakdown' },
-  { id: 'compliant_vs_non_compliant', label: 'Compliant vs Non-Compliant' },
-  { id: 'last_scan_date', label: 'Last Scan Date' },
-  { id: 'total_program_cost', label: 'Total Program Cost' },
-  { id: 'avg_cost_per_truck', label: 'Avg Cost per Truck' },
-  { id: 'avg_cost_per_wash', label: 'Avg Cost per Wash' },
-  { id: 'site_summary', label: 'Site Summary' },
+const REPORT_TABS = [
+  { id: 'dashboard', label: 'Fleet Compliance Report', description: 'KPIs, washes by site, wash frequency' },
+  { id: 'site_summary', label: 'Site Summary', description: 'Per-site cost & compliance metrics' },
+  { id: 'vehicle_breakdown', label: 'Vehicle Breakdown', description: 'Every vehicle with progress & status' },
+  { id: 'compliance_status', label: 'Compliance Status', description: 'Compliant vs at-risk vs zero-wash' },
 ];
+const ALL_TAB_IDS = REPORT_TABS.map((t) => t.id);
 
 const FREQUENCIES = [
   { value: 'daily', label: 'Daily' },
@@ -117,6 +113,14 @@ export default function ReportScheduleModal({ open, onClose, schedule, companies
       reportTypes: prev.reportTypes.includes(id)
         ? prev.reportTypes.filter((r) => r !== id)
         : [...prev.reportTypes, id],
+    }));
+  };
+
+  const allSelected = ALL_TAB_IDS.every((id) => formData.reportTypes.includes(id));
+  const toggleAll = () => {
+    setFormData((prev) => ({
+      ...prev,
+      reportTypes: allSelected ? [] : [...ALL_TAB_IDS],
     }));
   };
 
@@ -221,11 +225,25 @@ export default function ReportScheduleModal({ open, onClose, schedule, companies
             </div>
           </div>
 
-          {/* Reports section */}
-          <SectionHeading icon={FileBarChart}>Reports to Include</SectionHeading>
+          {/* Reports section — Excel tab selection */}
+          <SectionHeading icon={FileBarChart}>Excel Tabs to Include</SectionHeading>
           <div className="rounded-lg border bg-muted/20 p-3">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              {REPORT_TYPES.map((r) => {
+            {/* Select All toggle */}
+            <label
+              className={cn(
+                'flex items-center gap-2.5 cursor-pointer rounded-md px-2 py-1.5 text-sm transition-colors mb-1 border-b pb-2',
+                allSelected ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={toggleAll}
+              />
+              <span className={cn('text-[13px]', allSelected && 'font-semibold')}>All Tabs</span>
+              <span className="text-[11px] text-muted-foreground ml-auto">Include all 4 report tabs</span>
+            </label>
+            <div className="space-y-0.5 mt-1">
+              {REPORT_TABS.map((r) => {
                 const checked = formData.reportTypes.includes(r.id);
                 return (
                   <label
@@ -239,14 +257,18 @@ export default function ReportScheduleModal({ open, onClose, schedule, companies
                       checked={checked}
                       onCheckedChange={() => toggleReportType(r.id)}
                     />
-                    <span className={cn('text-[13px]', checked && 'font-medium')}>{r.label}</span>
+                    <div className="flex flex-col">
+                      <span className={cn('text-[13px]', checked && 'font-medium')}>{r.label}</span>
+                      <span className="text-[10px] text-muted-foreground leading-tight">{r.description}</span>
+                    </div>
                   </label>
                 );
               })}
             </div>
             {selectedCount > 0 && (
               <p className="text-[11px] text-muted-foreground mt-2 pt-2 border-t">
-                {selectedCount} report{selectedCount !== 1 ? 's' : ''} selected
+                {selectedCount} tab{selectedCount !== 1 ? 's' : ''} selected
+                {allSelected && ' (all)'}
               </p>
             )}
           </div>

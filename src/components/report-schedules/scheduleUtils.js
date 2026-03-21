@@ -207,15 +207,19 @@ export function getInitials(name) {
 }
 
 export const REPORT_TYPE_LABELS = {
-  compliance_rate: 'Compliance Rate',
-  total_washes: 'Total Washes',
-  per_vehicle_breakdown: 'Per Vehicle',
-  compliant_vs_non_compliant: 'Non-Compliant',
-  last_scan_date: 'Last Scan',
-  total_program_cost: 'Total Cost',
-  avg_cost_per_truck: 'Avg Cost/Truck',
-  avg_cost_per_wash: 'Avg Cost/Wash',
+  dashboard: 'Dashboard',
   site_summary: 'Site Summary',
+  vehicle_breakdown: 'Vehicle Breakdown',
+  compliance_status: 'Compliance Status',
+  // Legacy keys for existing schedules saved with old IDs
+  compliance_rate: 'Dashboard',
+  total_washes: 'Dashboard',
+  per_vehicle_breakdown: 'Vehicle Breakdown',
+  compliant_vs_non_compliant: 'Compliance Status',
+  last_scan_date: 'Vehicle Breakdown',
+  total_program_cost: 'Dashboard',
+  avg_cost_per_truck: 'Dashboard',
+  avg_cost_per_wash: 'Dashboard',
 };
 
 export const FREQUENCY_LABELS = {

@@ -90,6 +90,57 @@ export default function ExportExcelModal({ open, onOpenChange, schedule, compani
   const companyName = schedule?.companyName || schedule?.company_name || company?.name || 'Unknown';
   const customerRef = company?.elora_customer_ref || null;
 
+  // Tab selection — default from schedule, or all tabs
+  const ALL_TABS = ['dashboard', 'site_summary', 'vehicle_breakdown', 'compliance_status'];
+  const TAB_LABELS = {
+    dashboard: 'Fleet Compliance Report',
+    site_summary: 'Site Summary',
+    vehicle_breakdown: 'Vehicle Breakdown',
+    compliance_status: 'Compliance Status',
+  };
+
+  // Normalize legacy report types from schedule to new tab IDs
+  const normalizeToTabs = (types) => {
+    if (!types || types.length === 0) return [...ALL_TABS];
+    const LEGACY_MAP = {
+      compliance_rate: 'dashboard',
+      total_washes: 'dashboard',
+      total_program_cost: 'dashboard',
+      avg_cost_per_truck: 'dashboard',
+      avg_cost_per_wash: 'dashboard',
+      per_vehicle_breakdown: 'vehicle_breakdown',
+      last_scan_date: 'vehicle_breakdown',
+      compliant_vs_non_compliant: 'compliance_status',
+      site_summary: 'site_summary',
+    };
+    const mapped = new Set();
+    for (const t of types) {
+      if (ALL_TABS.includes(t)) mapped.add(t);
+      else if (LEGACY_MAP[t]) mapped.add(LEGACY_MAP[t]);
+    }
+    return mapped.size > 0 ? [...mapped] : [...ALL_TABS];
+  };
+
+  const scheduleTabs = useMemo(
+    () => normalizeToTabs(schedule?.reportTypes || schedule?.report_types),
+    [schedule],
+  );
+
+  const [selectedTabs, setSelectedTabs] = useState(scheduleTabs);
+
+  // Reset when schedule changes
+  React.useEffect(() => { setSelectedTabs(scheduleTabs); }, [scheduleTabs]);
+
+  const allTabsSelected = ALL_TABS.every((t) => selectedTabs.includes(t));
+  const toggleTab = (tabId) => {
+    setSelectedTabs((prev) =>
+      prev.includes(tabId) ? prev.filter((t) => t !== tabId) : [...prev, tabId],
+    );
+  };
+  const toggleAllTabs = () => {
+    setSelectedTabs(allTabsSelected ? [] : [...ALL_TABS]);
+  };
+
   // Date range state
   const [datePreset, setDatePreset] = useState('last_month');
   const [customFrom, setCustomFrom] = useState('');
@@ -260,12 +311,13 @@ export default function ExportExcelModal({ open, onOpenChange, schedule, compani
         ? sites.filter((s) => selectedSites.includes(s.ref || s.id)).map((s) => s.name)
         : [];
 
-      // Generate and download
+      // Generate and download — only include selected tabs
       await generateFleetReport(reportData, {
         clientLogoUrl: company?.logo_url || null,
         eloraLogoUrl: '/eloralogo.png',
         dateRange: { start: dateRange.start, end: dateRange.end },
         selectedSiteNames,
+        includeTabs: selectedTabs.length > 0 ? selectedTabs : ALL_TABS,
       });
 
       toast.success(`Report generated: ${custName} ${region ? '- ' + region : ''}`);
@@ -304,7 +356,7 @@ export default function ExportExcelModal({ open, onOpenChange, schedule, compani
               </p>
             </div>
             <Badge variant="secondary" className="ml-auto text-[10px]">
-              4-tab layout
+              {selectedTabs.length === ALL_TABS.length ? 'All tabs' : `${selectedTabs.length} tab${selectedTabs.length !== 1 ? 's' : ''}`}
             </Badge>
             <Badge variant="outline" className="text-[10px]">
               {schedule?.frequency ? schedule.frequency.charAt(0).toUpperCase() + schedule.frequency.slice(1) : 'Monthly'} schedule
@@ -403,6 +455,39 @@ export default function ExportExcelModal({ open, onOpenChange, schedule, compani
             </div>
           </div>
 
+          {/* Tab selection */}
+          <div className="space-y-2">
+            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              Excel tabs to include
+            </Label>
+            <div className="rounded-md border p-2 space-y-0.5">
+              <div
+                className={cn(
+                  'flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer hover:bg-muted/50 transition-colors border-b pb-1.5 mb-1',
+                  allTabsSelected && 'bg-emerald-50 dark:bg-emerald-900/20',
+                )}
+                onClick={toggleAllTabs}
+              >
+                <Checkbox checked={allTabsSelected} />
+                <span className="text-xs font-medium">All Tabs</span>
+              </div>
+              {ALL_TABS.map((tabId) => (
+                <div
+                  key={tabId}
+                  className={cn(
+                    'flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer hover:bg-muted/50 transition-colors',
+                    selectedTabs.includes(tabId) && 'bg-emerald-50 dark:bg-emerald-900/20',
+                  )}
+                  onClick={() => toggleTab(tabId)}
+                >
+                  <Checkbox checked={selectedTabs.includes(tabId)} />
+                  <span className="text-xs">{TAB_LABELS[tabId]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Footer note */}
           <p className="text-[11px] text-muted-foreground text-center">
             Generates branded .xlsx - Arial font - No gridlines
@@ -419,7 +504,7 @@ export default function ExportExcelModal({ open, onOpenChange, schedule, compani
           </Button>
           <Button
             onClick={handleGenerate}
-            disabled={generating || !dateRange || !customerRef}
+            disabled={generating || !dateRange || !customerRef || selectedTabs.length === 0}
             className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
           >
             {generating ? (

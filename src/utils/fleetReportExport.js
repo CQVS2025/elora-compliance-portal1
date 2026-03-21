@@ -136,9 +136,46 @@ function svgToPng(svgText, width = 400, height = 200) {
 }
 
 /**
+ * Load an image buffer into an HTMLImageElement to get its natural dimensions.
+ * Returns { width, height } or null.
+ */
+function getImageDimensions(buffer, extension) {
+  return new Promise((resolve) => {
+    try {
+      const blob = new Blob([buffer], {
+        type: extension === 'jpeg' ? 'image/jpeg' : extension === 'gif' ? 'image/gif' : 'image/png',
+      });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+      img.src = url;
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Scale image to fit within maxW x maxH while preserving aspect ratio.
+ * Returns { width, height }.
+ */
+function fitImage(naturalW, naturalH, maxW, maxH) {
+  if (!naturalW || !naturalH) return { width: maxW, height: maxH };
+  const ratio = Math.min(maxW / naturalW, maxH / naturalH);
+  return { width: Math.round(naturalW * ratio), height: Math.round(naturalH * ratio) };
+}
+
+/**
  * Fetch an image as an ArrayBuffer for ExcelJS.
  * SVGs are automatically converted to PNG.
- * Returns { buffer, extension } or null if fetch fails.
+ * Returns { buffer, extension, naturalWidth, naturalHeight } or null if fetch fails.
  */
 async function fetchImageBuffer(url) {
   if (!url) return null;
@@ -148,18 +185,30 @@ async function fetchImageBuffer(url) {
     const contentType = resp.headers.get('content-type') || '';
     const imgType = detectImageType(url, contentType);
 
+    let buffer;
+    let extension;
+
     if (imgType === 'svg') {
-      // Convert SVG to PNG since Excel doesn't support SVG
       const svgText = await resp.text();
       if (!svgText || svgText.length === 0) return null;
       const pngBuffer = await svgToPng(svgText, 400, 200);
       if (!pngBuffer || pngBuffer.byteLength === 0) return null;
-      return { buffer: pngBuffer, extension: 'png' };
+      buffer = pngBuffer;
+      extension = 'png';
+    } else {
+      buffer = await resp.arrayBuffer();
+      if (!buffer || buffer.byteLength === 0) return null;
+      extension = imgType;
     }
 
-    const buffer = await resp.arrayBuffer();
-    if (!buffer || buffer.byteLength === 0) return null;
-    return { buffer, extension: imgType };
+    // Detect natural dimensions so we can scale without distortion
+    const dims = await getImageDimensions(buffer, extension);
+    return {
+      buffer,
+      extension,
+      naturalWidth: dims?.width || 0,
+      naturalHeight: dims?.height || 0,
+    };
   } catch {
     return null;
   }
@@ -176,25 +225,27 @@ function writeHeader(wb, ws, title, subtitle, nCols, colWidths, opts = {}) {
     ws.getColumn(i + 1).width = w;
   });
 
-  // Row 1 — header bar with title (tall enough for logos)
-  ws.getRow(1).height = 56;
+  // Row 1 — header bar with title (tall enough for bigger logos)
+  const HDR_ROW_H = 80;
+  ws.getRow(1).height = HDR_ROW_H;
   fillRow(ws, 1, HDR, nCols);
   mc(ws, 1, 1, 1, nCols, {
     value: title,
-    font: F(true, 20, WHITE),
+    font: F(true, 22, WHITE),
     fill: FL(HDR),
     alignment: AL('center', 'middle'),
   });
 
-  // Logos — generous fixed pixel sizes so no logo gets shrunk.
-  // Client logo: 160x42 px (left side) — fits most company logos comfortably.
-  // ELORA logo:  38x38 px (right side).
+  // Logos — scale to fit within bounding box, preserving aspect ratio.
   if (opts.clientLogoBuffer) {
     try {
+      const maxW = 240; const maxH = 65;
+      const scaled = fitImage(opts.clientLogoNatW || 0, opts.clientLogoNatH || 0, maxW, maxH);
       const imgId = wb.addImage({ buffer: opts.clientLogoBuffer, extension: opts.clientLogoExt || 'png' });
+      const yOffset = Math.max(0, (HDR_ROW_H - scaled.height) / 2) / HDR_ROW_H;
       ws.addImage(imgId, {
-        tl: { col: 0.1, row: 0.1 },
-        ext: { width: 160, height: 42 },
+        tl: { col: 0.1, row: yOffset },
+        ext: { width: scaled.width, height: scaled.height },
         editAs: 'oneCell',
       });
     } catch { /* skip logo */ }
@@ -202,10 +253,13 @@ function writeHeader(wb, ws, title, subtitle, nCols, colWidths, opts = {}) {
 
   if (opts.eloraLogoBuffer) {
     try {
+      const maxW = 60; const maxH = 60;
+      const scaled = fitImage(opts.eloraLogoNatW || 0, opts.eloraLogoNatH || 0, maxW, maxH);
       const imgId = wb.addImage({ buffer: opts.eloraLogoBuffer, extension: opts.eloraLogoExt || 'png' });
+      const yOffset = Math.max(0, (HDR_ROW_H - scaled.height) / 2) / HDR_ROW_H;
       ws.addImage(imgId, {
-        tl: { col: Math.max(0, nCols - 2) + 0.2, row: 0.1 },
-        ext: { width: 38, height: 38 },
+        tl: { col: Math.max(0, nCols - 2) + 0.2, row: yOffset },
+        ext: { width: scaled.width, height: scaled.height },
         editAs: 'oneCell',
       });
     } catch { /* skip logo */ }
@@ -545,6 +599,15 @@ function buildDashboard(wb, data, logos) {
   setCell(ws, TR, 5, kpis.totalWashes, { font: F(true, 9, WHITE), fill: FL(HDR), alignment: AL(), border: BD(true) });
   setCell(ws, TR, 6, kpis.totalLitres, { font: F(true, 9, WHITE), fill: FL(HDR), alignment: AL(), border: BD(true), numFmt: '0.0"L"' });
   setCell(ws, TR, 7, kpis.totalCost, { font: F(true, 9, WHITE), fill: FL(HDR), alignment: AL(), border: BD(true), numFmt: '$#,##0.00' });
+
+  // AutoFilter on the "Washes by Site" table
+  ws.autoFilter = { from: { row: 11, column: 3 }, to: { row: TR, column: 7 } };
+
+  // Print settings — page break after KPI section
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  if (sites.length > 10) {
+    ws.getRow(DS + Math.min(sites.length, 20)).addPageBreak();
+  }
 }
 
 function buildSiteSummary(wb, data, logos) {
@@ -612,6 +675,12 @@ function buildSiteSummary(wb, data, logos) {
       ...(nf ? { numFmt: nf } : {}),
     });
   });
+
+  // AutoFilter on all columns
+  ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: TR, column: 12 } };
+
+  // Print settings
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 }
 
 function buildVehicleBreakdown(wb, data, logos) {
@@ -666,6 +735,16 @@ function buildVehicleBreakdown(wb, data, logos) {
         color: { argb: 'FF' + DB_GREEN },
       }],
     });
+
+    // AutoFilter on all columns
+    ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: lastRow, column: 9 } };
+  }
+
+  // Print settings — landscape, fit to width, page breaks every ~50 rows
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  const totalRows = data.vehicleList.length;
+  for (let pb = 50; pb < totalRows; pb += 50) {
+    ws.getRow(DS + pb).addPageBreak();
   }
 }
 
@@ -755,6 +834,19 @@ function buildComplianceStatus(wb, data, logos) {
       setCell(ws, r, 3, v.target, { font: F(false, 9), fill: FL(bg), alignment: AL(), border: BD(true) });
       setCell(ws, r, 4, lastScan, { font: F(false, 9), fill: FL(bg), alignment: AL(), border: BD(true) });
     });
+
+    // Page break before zero-wash section
+    ws.getRow(zeroStart).addPageBreak();
+  }
+
+  // Print settings
+  ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+
+  // Page breaks for long compliant/at-risk tables
+  if (maxRows > 50) {
+    for (let pb = 50; pb < maxRows; pb += 50) {
+      ws.getRow(13 + pb).addPageBreak();
+    }
   }
 }
 
@@ -778,16 +870,18 @@ function buildWelcomePage(wb, data, logos, opts = {}) {
   R++; ws.getRow(R).height = 20;
   R++; ws.getRow(R).height = 10;
 
-  // ── Client logo (big — 280x75 px with 80px row height) ───────────────
+  // ── Client logo (scaled to fit 320x90 bounding box, aspect-ratio preserved) ─
   R++; // row 5
   const logoRow = R;
-  ws.getRow(R).height = 80;
+  ws.getRow(R).height = 95;
   if (logos.clientLogoBuffer) {
     try {
+      const maxW = 320; const maxH = 90;
+      const scaled = fitImage(logos.clientLogoNatW || 0, logos.clientLogoNatH || 0, maxW, maxH);
       const imgId = wb.addImage({ buffer: logos.clientLogoBuffer, extension: logos.clientLogoExt || 'png' });
       ws.addImage(imgId, {
         tl: { col: 2.2, row: logoRow - 1 + 0.05 },
-        ext: { width: 280, height: 75 },
+        ext: { width: scaled.width, height: scaled.height },
         editAs: 'oneCell',
       });
     } catch { /* skip */ }
@@ -902,13 +996,15 @@ function buildWelcomePage(wb, data, logos, opts = {}) {
     alignment: AL('center', 'middle'),
   });
 
-  // ── Tab descriptions table ────────────────────────────────────────────
-  const tabs = [
-    ['Dashboard', 'KPIs, performance metrics, cost metrics, washes by site, and wash frequency distribution'],
-    ['Site Summary', 'Per-site breakdown with vehicle count, washes, cost per truck, cost per wash, and compliance rate'],
-    ['Vehicle Breakdown', 'Every vehicle listed with wash count, target, progress, compliance status, and last scan date'],
-    ['Compliance Status', 'Compliant vehicles, at-risk vehicles (partial washes), and zero-wash vehicles with last known scan'],
+  // ── Tab descriptions table — only show included tabs ─────────────────
+  const allTabs = [
+    ['dashboard', 'Dashboard', 'KPIs, performance metrics, cost metrics, washes by site, and wash frequency distribution'],
+    ['site_summary', 'Site Summary', 'Per-site breakdown with vehicle count, washes, cost per truck, cost per wash, and compliance rate'],
+    ['vehicle_breakdown', 'Vehicle Breakdown', 'Every vehicle listed with wash count, target, progress, compliance status, and last scan date'],
+    ['compliance_status', 'Compliance Status', 'Compliant vehicles, at-risk vehicles (partial washes), and zero-wash vehicles with last known scan'],
   ];
+  const incTabs = opts.includeTabs || ['dashboard', 'site_summary', 'vehicle_breakdown', 'compliance_status'];
+  const tabs = allTabs.filter(([id]) => incTabs.includes(id)).map(([, label, desc]) => [label, desc]);
 
   // Table header row
   R++;
@@ -948,10 +1044,11 @@ function buildWelcomePage(wb, data, logos, opts = {}) {
   ws.getRow(R).height = 30;
   if (logos.eloraLogoBuffer) {
     try {
+      const scaled = fitImage(logos.eloraLogoNatW || 0, logos.eloraLogoNatH || 0, 24, 24);
       const imgId = wb.addImage({ buffer: logos.eloraLogoBuffer, extension: logos.eloraLogoExt || 'png' });
       ws.addImage(imgId, {
         tl: { col: 3.8, row: R - 1 + 0.05 },
-        ext: { width: 24, height: 24 },
+        ext: { width: scaled.width, height: scaled.height },
         editAs: 'oneCell',
       });
     } catch { /* skip */ }
@@ -1002,19 +1099,29 @@ export async function generateFleetReport(reportData, opts = {}) {
   const logos = {
     clientLogoBuffer: clientLogoResult?.buffer || null,
     clientLogoExt: clientLogoResult?.extension || 'png',
+    clientLogoNatW: clientLogoResult?.naturalWidth || 0,
+    clientLogoNatH: clientLogoResult?.naturalHeight || 0,
     eloraLogoBuffer: eloraLogoResult?.buffer || null,
     eloraLogoExt: eloraLogoResult?.extension || 'png',
+    eloraLogoNatW: eloraLogoResult?.naturalWidth || 0,
+    eloraLogoNatH: eloraLogoResult?.naturalHeight || 0,
     customerName: reportData.customerName,
   };
 
-  // Build 5 tabs — Welcome page first
+  // Determine which tabs to include (default: all)
+  const includeTabs = opts.includeTabs || ['dashboard', 'site_summary', 'vehicle_breakdown', 'compliance_status'];
+
+  // Always build the welcome page first
   buildWelcomePage(wb, reportData, logos, {
     selectedSiteNames: opts.selectedSiteNames,
+    includeTabs,
   });
-  buildDashboard(wb, reportData, logos);
-  buildSiteSummary(wb, reportData, logos);
-  buildVehicleBreakdown(wb, reportData, logos);
-  buildComplianceStatus(wb, reportData, logos);
+
+  // Conditionally build each data tab
+  if (includeTabs.includes('dashboard')) buildDashboard(wb, reportData, logos);
+  if (includeTabs.includes('site_summary')) buildSiteSummary(wb, reportData, logos);
+  if (includeTabs.includes('vehicle_breakdown')) buildVehicleBreakdown(wb, reportData, logos);
+  if (includeTabs.includes('compliance_status')) buildComplianceStatus(wb, reportData, logos);
 
   // Generate file
   const buffer = await wb.xlsx.writeBuffer();
