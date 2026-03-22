@@ -215,9 +215,14 @@ async function fetchImageBuffer(url) {
 }
 
 function writeHeader(wb, ws, title, subtitle, nCols, colWidths, opts = {}) {
-  // Grid lines off — do NOT set state:'frozen' with ySplit:0 (causes Excel repair warning)
+  // Grid lines off; optionally freeze header rows so they stay visible when scrolling
   const viewOpts = { showGridLines: false };
   if (opts.zoom) viewOpts.zoomScale = opts.zoom;
+  if (opts.freezeRow && opts.freezeRow > 0) {
+    viewOpts.state = 'frozen';
+    viewOpts.ySplit = opts.freezeRow;
+    viewOpts.xSplit = 0;
+  }
   ws.views = [viewOpts];
 
   // Column widths
@@ -486,7 +491,7 @@ function buildDashboard(wb, data, logos) {
   const ws = wb.addWorksheet('Dashboard');
   const CW = [1, 2, 18, 14, 13, 13, 13, 3, 18, 14, 13, 13, 13, 2];
   writeHeader(wb, ws, 'Fleet Compliance Report',
-    `${data.company}  -  ${data.period}  -  All Sites`, 14, CW, { zoom: 140, ...logos });
+    `${data.company}  -  ${data.period}  -  All Sites`, 14, CW, { zoom: 140, freezeRow: 4, ...logos });
 
   const { kpis, sites, hasCostData } = data;
 
@@ -613,7 +618,7 @@ function buildDashboard(wb, data, logos) {
 function buildSiteSummary(wb, data, logos) {
   const ws = wb.addWorksheet('Site Summary');
   const CW = [22, 10, 13, 13, 12, 13, 13, 13, 13, 13, 13, 13];
-  writeHeader(wb, ws, 'Site Summary', `${data.company}  -  ${data.period}`, 12, CW, logos);
+  writeHeader(wb, ws, 'Site Summary', `${data.company}  -  ${data.period}`, 12, CW, { freezeRow: 5, ...logos });
 
   // Row 5 — headers
   ws.getRow(5).height = 19.5;
@@ -687,7 +692,7 @@ function buildVehicleBreakdown(wb, data, logos) {
   const ws = wb.addWorksheet('Vehicle Breakdown');
   const CW = [18, 22, 10, 13, 12, 14, 12, 14, 22, 10];
   writeHeader(wb, ws, 'Vehicle Breakdown',
-    `${data.company}  -  ${data.period}  -  ${data.kpis.totalVehicles} Vehicles`, 10, CW, logos);
+    `${data.company}  -  ${data.period}  -  ${data.kpis.totalVehicles} Vehicles`, 10, CW, { freezeRow: 5, ...logos });
 
   // Row 5 — headers
   ws.getRow(5).height = 19.5;
@@ -751,7 +756,7 @@ function buildVehicleBreakdown(wb, data, logos) {
 function buildComplianceStatus(wb, data, logos) {
   const ws = wb.addWorksheet('Compliance Status');
   const CW = [20, 22, 10, 21.83, 20, 22, 10, 13];
-  writeHeader(wb, ws, 'Compliance Status', `${data.company}  -  ${data.period}`, 8, CW, logos);
+  writeHeader(wb, ws, 'Compliance Status', `${data.company}  -  ${data.period}`, 8, CW, { freezeRow: 4, ...logos });
 
   const { kpis, compliantVehicles, atRiskVehicles, zeroWashVehicles } = data;
 

@@ -161,7 +161,7 @@ export default function ExportExcelModal({ open, onOpenChange, schedule, compani
   );
 
   // Fetch sites for the customer (for site filter)
-  const { data: sites = [] } = useQuery({
+  const { data: sites = [], isLoading: sitesLoading } = useQuery({
     ...sitesOptions(companyId, { customerId: customerRef, allTenants: true }),
     enabled: open && !!customerRef,
   });
@@ -504,13 +504,18 @@ export default function ExportExcelModal({ open, onOpenChange, schedule, compani
           </Button>
           <Button
             onClick={handleGenerate}
-            disabled={generating || !dateRange || !customerRef || selectedTabs.length === 0}
+            disabled={generating || sitesLoading || !dateRange || !customerRef || selectedTabs.length === 0}
             className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
           >
             {generating ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Generating...
+              </>
+            ) : sitesLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading data...
               </>
             ) : (
               <>
