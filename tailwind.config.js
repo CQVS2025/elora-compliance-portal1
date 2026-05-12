@@ -129,6 +129,23 @@ module.exports = {
   					height: '0'
   				}
   			},
+  			// Radix Collapsible exposes its own --radix-collapsible-content-height
+  			// var; mirror the accordion keyframes so we can use the same
+  			// data-[state=open] / data-[state=closed] pattern on a Collapsible.
+  			'collapsible-down': {
+  				from: { height: '0', opacity: '0' },
+  				to: {
+  					height: 'var(--radix-collapsible-content-height)',
+  					opacity: '1'
+  				}
+  			},
+  			'collapsible-up': {
+  				from: {
+  					height: 'var(--radix-collapsible-content-height)',
+  					opacity: '1'
+  				},
+  				to: { height: '0', opacity: '0' }
+  			},
   			// Apple-style fade in
   			'fade-in': {
   				from: { opacity: '0' },
@@ -160,6 +177,8 @@ module.exports = {
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
   			'accordion-up': 'accordion-up 0.2s ease-out',
+  			'collapsible-down': 'collapsible-down 0.22s ease-out',
+  			'collapsible-up': 'collapsible-up 0.18s ease-out',
   			'fade-in': 'fade-in 0.3s ease-out',
   			'fade-in-up': 'fade-in-up 0.4s ease-out',
   			'scale-in': 'scale-in 0.2s ease-out',

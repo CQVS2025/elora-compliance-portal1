@@ -29,6 +29,16 @@ import StockOrders from './pages/StockOrders';
 import VehicleImageLog from './pages/VehicleImageLog';
 import VehicleImageLogVehiclePage from './pages/VehicleImageLogVehiclePage';
 import Alerts from './pages/Alerts';
+// Marketplace (M1)
+import MarketplaceCatalog from './pages/marketplace/MarketplaceCatalog';
+import MarketplaceProductDetail from './pages/marketplace/MarketplaceProductDetail';
+import MarketplaceCart from './pages/marketplace/MarketplaceCart';
+import MarketplaceAdminDashboard from './pages/admin/marketplace/MarketplaceAdminDashboard';
+import MarketplaceCompanies from './pages/admin/marketplace/MarketplaceCompanies';
+import MarketplaceWarehouses from './pages/admin/marketplace/MarketplaceWarehouses';
+import MarketplaceProducts from './pages/admin/marketplace/MarketplaceProducts';
+import MarketplaceProductEditor from './pages/admin/marketplace/MarketplaceProductEditor';
+import MarketplaceCompanyPricing from './pages/admin/marketplace/MarketplaceCompanyPricing';
 import __Layout from './Layout.jsx';
 
 
@@ -64,6 +74,16 @@ export const PAGES = {
     "VehicleImageLog": VehicleImageLog,
     "VehicleImageLogVehicle": VehicleImageLogVehiclePage,
     "Alerts": Alerts,
+    // Marketplace (M1)
+    "MarketplaceCatalog": MarketplaceCatalog,
+    "MarketplaceProductDetail": MarketplaceProductDetail,
+    "MarketplaceCart": MarketplaceCart,
+    "admin/marketplace": MarketplaceAdminDashboard,
+    "admin/marketplace/companies": MarketplaceCompanies,
+    "admin/marketplace/warehouses": MarketplaceWarehouses,
+    "admin/marketplace/products": MarketplaceProducts,
+    "admin/marketplace/product-editor": MarketplaceProductEditor,
+    "admin/marketplace/pricing": MarketplaceCompanyPricing,
 }
 
 export const pagesConfig = {

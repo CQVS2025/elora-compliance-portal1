@@ -243,7 +243,7 @@ export const AuthProvider = ({ children }) => {
       if (profile.company_id) {
         const { data: company } = await supabase
           .from('companies')
-          .select('name, logo_url, is_active, elora_customer_ref')
+          .select('name, logo_url, is_active, elora_customer_ref, marketplace_enabled, marketplace_invoice_email, marketplace_default_address')
           .eq('id', profile.company_id)
           .single();
         // If company is set inactive by super_admin, no user from that company can log in (including company admin)
@@ -267,9 +267,15 @@ export const AuthProvider = ({ children }) => {
         enrichedProfile.company_name = company?.name ?? null;
         enrichedProfile.company_logo_url = company?.logo_url ?? null;
         enrichedProfile.company_elora_customer_ref = company?.elora_customer_ref ?? null;
+        // Marketplace flags exposed at the top level so route guards / nav can read
+        // them without re-fetching. Mirrors what useMarketplaceAccess expects.
+        enrichedProfile.marketplace_enabled = !!company?.marketplace_enabled;
+        enrichedProfile.marketplace_invoice_email = company?.marketplace_invoice_email ?? null;
+        enrichedProfile.marketplace_default_address = company?.marketplace_default_address ?? null;
       } else if (profile.role === 'super_admin') {
         enrichedProfile.company_name = null; // super_admin may not belong to a company
         enrichedProfile.company_logo_url = null;
+        enrichedProfile.marketplace_enabled = false; // super_admins gate via role, not company
       }
       setUserProfile(enrichedProfile);
       userProfileRef.current = enrichedProfile;

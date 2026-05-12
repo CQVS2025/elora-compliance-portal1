@@ -184,6 +184,70 @@ export const queryKeys = {
       'entry',
       entryId,
     ],
+
+    // Marketplace — buyer-facing (tenant-scoped because pricing is per-company)
+    marketplaceCatalog: (companyId, filters = {}) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'catalog',
+      filters,
+    ],
+    marketplaceProductDetail: (companyId, productSlug) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'product',
+      productSlug,
+    ],
+    marketplaceCart: (companyId, userId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'cart',
+      userId,
+    ],
+    marketplaceCompanySettings: (companyId, targetCompanyId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'companySettings',
+      targetCompanyId,
+    ],
+    // Marketplace — admin-facing
+    marketplaceAdminProducts: (companyId, filters = {}) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'adminProducts',
+      filters,
+    ],
+    marketplaceAdminProduct: (companyId, productId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'adminProduct',
+      productId,
+    ],
+    marketplaceAdminCompanyPricing: (companyId, targetCompanyId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'adminCompanyPricing',
+      targetCompanyId,
+    ],
+    marketplaceWarehouses: (companyId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'warehouses',
+    ],
+    marketplaceCompanies: (companyId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'companies',
+    ],
   },
   
   // User-scoped resources (not tenant-specific)
@@ -234,6 +298,9 @@ export const queryKeys = {
     stockTakes: (companyId = null) => (companyId ? ['stockTakes', companyId] : ['stockTakes']),
     // Pricing config: tank_configurations + products for data-driven cost calculation
     pricingConfig: () => ['pricingConfig'],
+    // Marketplace global lookups (packaging sizes, settings — readable by all)
+    marketplacePackagingSizes: () => ['marketplace', 'packagingSizes'],
+    marketplaceSettings: () => ['marketplace', 'settings'],
     // Current user's operations log permissions (can_create, etc.)
     operationsLogMyPermissions: (userId) => ['operationsLogMyPermissions', userId],
     // Delivery calendar (Notion-synced)

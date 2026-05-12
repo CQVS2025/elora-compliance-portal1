@@ -16,6 +16,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import ProtectedRoute, { AdminRoute, SuperAdminRoute, AuthenticatedRoute, PublicRoute } from '@/components/auth/ProtectedRoute';
+import { MarketplaceAdminRoute, MarketplaceBuyerRoute } from '@/components/auth/MarketplaceRoute';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
 const LOADING_MESSAGE_INTERVAL_MS = 5 * 1000;
@@ -353,6 +354,91 @@ const AuthenticatedApp = () => {
               {React.createElement(Pages['admin/operations-log-categories'])}
             </DashboardLayout>
           </SuperAdminRoute>
+        } />
+
+        {/* Marketplace — buyer-facing routes (gated by company.marketplace_enabled OR admin) */}
+        <Route path="/marketplace" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceBuyerRoute>
+                {React.createElement(Pages.MarketplaceCatalog)}
+              </MarketplaceBuyerRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/marketplace/products/:slug" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceBuyerRoute>
+                {React.createElement(Pages.MarketplaceProductDetail)}
+              </MarketplaceBuyerRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/marketplace/cart" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceBuyerRoute>
+                {React.createElement(Pages.MarketplaceCart)}
+              </MarketplaceBuyerRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+
+        {/* Marketplace — admin routes (gated by isMarketplaceAdmin) */}
+        <Route path="/admin/marketplace" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/companies" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/companies'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/warehouses" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/warehouses'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/products" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/products'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/products/:id" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/product-editor'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/pricing" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/pricing'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
         } />
 
         {/* Redirect legacy super-dashboard URL to unified admin */}
