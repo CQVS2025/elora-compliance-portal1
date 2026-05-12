@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { adminProductListOptions } from '@/query/options/marketplace';
 import { useDeleteProduct } from '@/query/mutations/marketplace';
 import { toastError, toastSuccess } from '@/lib/toast';
+import { useConfirm } from '@/hooks/useConfirm';
 import { MarketplaceImage } from '@/components/marketplace/MarketplaceImage';
 import { HazardBadge } from '@/components/marketplace/HazardBadge';
 
@@ -19,6 +20,7 @@ export default function MarketplaceProducts() {
   const companyId = userProfile?.company_id;
   const { data: products = [], isLoading } = useQuery(adminProductListOptions(companyId));
   const remove = useDeleteProduct(companyId);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [search, setSearch] = useState('');
 
@@ -34,7 +36,13 @@ export default function MarketplaceProducts() {
   }, [products, search]);
 
   const handleDelete = async (product) => {
-    if (!confirm(`Delete "${product.name}"? This will also remove all packaging prices, images and SDS docs for this product.`)) return;
+    const ok = await confirm({
+      title: `Delete "${product.name}"?`,
+      description: 'This permanently removes the product along with every packaging price, image and SDS document attached to it. Cart items referencing this product will be cleaned up automatically.',
+      confirmLabel: 'Delete product',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await remove.mutateAsync(product.id);
       toastSuccess('delete', 'product');
@@ -143,6 +151,7 @@ export default function MarketplaceProducts() {
           )}
         </CardContent>
       </Card>
+      {ConfirmDialog}
     </div>
   );
 }

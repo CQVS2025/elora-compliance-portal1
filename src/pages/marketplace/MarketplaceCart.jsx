@@ -19,6 +19,7 @@ import {
 } from '@/query/mutations/marketplace';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { calculateLineSubtotal, formatAUD } from '@/lib/marketplaceFormat';
+import { useConfirm } from '@/hooks/useConfirm';
 import { MarketplaceEmpty } from '@/components/marketplace/MarketplaceEmpty';
 import { HazardBadge } from '@/components/marketplace/HazardBadge';
 
@@ -38,6 +39,7 @@ export default function MarketplaceCart() {
   const updateQty = useUpdateCartQuantity(companyId, userId);
   const removeItem = useRemoveFromCart(companyId, userId);
   const clearCart = useClearCart(companyId, userId);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   // Build a lookup of resolved prices: keyed by (product_id, packaging_size_id).
   const priceLookup = useMemo(() => {
@@ -88,7 +90,13 @@ export default function MarketplaceCart() {
   };
 
   const handleClear = async () => {
-    if (!confirm('Empty your entire cart?')) return;
+    const ok = await confirm({
+      title: 'Empty your entire cart?',
+      description: 'This removes every item from your cart. You can re-add them later from the marketplace.',
+      confirmLabel: 'Empty cart',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await clearCart.mutateAsync();
       toastSuccess('delete', 'cart');
@@ -244,6 +252,7 @@ export default function MarketplaceCart() {
           </div>
         </div>
       )}
+      {ConfirmDialog}
     </div>
   );
 }

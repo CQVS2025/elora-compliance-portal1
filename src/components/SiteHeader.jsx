@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { ModeToggle } from '@/components/mode-toggle';
 import AlertNotificationBell from '@/components/AlertNotificationBell';
+import CartHeaderButton from '@/components/marketplace/CartHeaderButton';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import {
@@ -92,6 +93,7 @@ export default function SiteHeader({ title, description, breadcrumbs, showBackBu
         )}
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <CartHeaderButton />
         <AlertNotificationBell />
         <ModeToggle />
         {children}

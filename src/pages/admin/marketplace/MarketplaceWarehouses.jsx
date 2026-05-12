@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { warehousesOptions } from '@/query/options/marketplace';
 import { useUpsertWarehouse, useDeleteWarehouse } from '@/query/mutations/marketplace';
 import { toastError, toastSuccess } from '@/lib/toast';
+import { useConfirm } from '@/hooks/useConfirm';
 
 const EMPTY = {
   name: '',
@@ -35,6 +36,7 @@ export default function MarketplaceWarehouses() {
   const { data: warehouses = [], isLoading } = useQuery(warehousesOptions(companyId));
   const upsert = useUpsertWarehouse(companyId);
   const remove = useDeleteWarehouse(companyId);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -67,7 +69,13 @@ export default function MarketplaceWarehouses() {
   };
 
   const handleDelete = async (w) => {
-    if (!confirm(`Delete warehouse "${w.name}"? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: `Delete warehouse "${w.name}"?`,
+      description: 'This cannot be undone. Any users currently mapped to this warehouse will be unassigned. Orders that already reference this warehouse keep their history.',
+      confirmLabel: 'Delete warehouse',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await remove.mutateAsync(w.id);
       toastSuccess('delete', 'warehouse');
@@ -196,6 +204,7 @@ export default function MarketplaceWarehouses() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {ConfirmDialog}
     </div>
   );
 }

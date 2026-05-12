@@ -187,7 +187,7 @@ export default function MarketplaceProductDetail() {
             <div className="mt-4 p-4 rounded-lg border bg-muted/30">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <PriceTag priceRow={selectedPrice} showSourceTag />
+                  <PriceTag priceRow={selectedPrice} />
                   <p className="text-xs text-muted-foreground mt-1">
                     Min order qty: {selectedPrice.minimum_order_quantity}
                   </p>

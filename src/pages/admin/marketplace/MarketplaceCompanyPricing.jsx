@@ -17,6 +17,7 @@ import {
   useDeleteCompanyPricing,
 } from '@/query/mutations/marketplace';
 import { toastError, toastSuccess } from '@/lib/toast';
+import { useConfirm } from '@/hooks/useConfirm';
 import { formatAUD } from '@/lib/marketplaceFormat';
 
 /**
@@ -44,6 +45,7 @@ export default function MarketplaceCompanyPricing() {
   const { data: matrix, isLoading } = useQuery(adminCompanyPricingOptions(companyId, target));
   const upsert = useUpsertCompanyPricing(companyId, target);
   const remove = useDeleteCompanyPricing(companyId, target);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [drafts, setDrafts] = useState({});
 
@@ -97,7 +99,13 @@ export default function MarketplaceCompanyPricing() {
       setDrafts((p) => { const { [key]: _, ...rest } = p; return rest; });
       return;
     }
-    if (!confirm('Remove this override and revert to the default price?')) return;
+    const ok = await confirm({
+      title: 'Reset this override?',
+      description: 'This customer will see the default price for this packaging variant.',
+      confirmLabel: 'Reset to default',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await remove.mutateAsync(existing.id);
       setDrafts((p) => { const { [key]: _, ...rest } = p; return rest; });
@@ -256,6 +264,7 @@ export default function MarketplaceCompanyPricing() {
           ))}
         </div>
       )}
+      {ConfirmDialog}
     </div>
   );
 }

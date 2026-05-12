@@ -142,7 +142,7 @@ export default function MarketplaceCatalog() {
                     )}
                     <div className="pt-2 border-t mt-2">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">From</p>
-                      <PriceTag priceRow={lowest} showSourceTag />
+                      <PriceTag priceRow={lowest} />
                     </div>
                   </CardContent>
                 </Card>
