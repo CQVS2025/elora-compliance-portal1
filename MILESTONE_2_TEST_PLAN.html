@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Elora Marketplace — Milestone 2 End-to-End Test Plan</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1f2e;
+    --muted: #5b6577;
+    --border: #e3e6ed;
+    --accent: #2563eb;
+    --accent-soft: #eef4ff;
+    --warn-bg: #fff8e1;
+    --warn-border: #f0c869;
+    --code-bg: #f5f7fa;
+    --code-fg: #0f172a;
+    --row-zebra: #fafbfd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --fg: #e6e9ef;
+      --muted: #98a2b3;
+      --border: #2a2f3a;
+      --accent: #60a5fa;
+      --accent-soft: #18233a;
+      --warn-bg: #2a2415;
+      --warn-border: #b88a2a;
+      --code-bg: #161a22;
+      --code-fg: #e6e9ef;
+      --row-zebra: #14171f;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 24px 96px;
+  }
+  h1 {
+    font-size: 28px;
+    line-height: 1.25;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 22px;
+    line-height: 1.3;
+    margin: 40px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    font-size: 17px;
+    margin: 28px 0 8px;
+    letter-spacing: -0.005em;
+  }
+  h4 {
+    font-size: 15px;
+    margin: 18px 0 6px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  p { margin: 0 0 12px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 22px; margin: 0 0 14px; }
+  li { margin: 4px 0; }
+  code {
+    font-family: "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    font-size: 0.9em;
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 14px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 0 0 16px;
+    border: 1px solid var(--border);
+  }
+  pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 18px;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--accent-soft); font-weight: 600; }
+  tr:nth-child(even) td { background: var(--row-zebra); }
+  blockquote {
+    margin: 14px 0;
+    padding: 12px 16px;
+    background: var(--warn-bg);
+    border-left: 4px solid var(--warn-border);
+    border-radius: 4px;
+    color: var(--fg);
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 36px 0; }
+  .subtitle { color: var(--muted); margin: 0 0 28px; font-size: 14px; }
+  .toc {
+    background: var(--accent-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 22px;
+    margin: 24px 0 36px;
+  }
+  .toc ol { margin: 0; padding-left: 22px; }
+  .toc li { margin: 3px 0; }
+  .checkbox {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 8px;
+    border: 1.5px solid var(--muted);
+    border-radius: 3px;
+    vertical-align: -2px;
+  }
+  .check-list { list-style: none; padding-left: 0; }
+  .check-list li { margin: 6px 0; }
+  details {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin: 8px 0;
+  }
+  details summary { cursor: pointer; font-weight: 600; }
+  .meta {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  @media print {
+    body { max-width: 100%; padding: 0; font-size: 12pt; }
+    pre, table { page-break-inside: avoid; }
+    h2 { page-break-before: auto; page-break-after: avoid; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Elora Marketplace — Milestone 2 End-to-End Test Plan</h1>
+<p class="subtitle">Complete test plan for Milestone 2 (checkout, payments, fulfilment, Xero, email). Covers everything from a clean environment setup through to live production verification. Follow it top-to-bottom on a fresh Supabase project (staging recommended); each section ends with explicit pass criteria.</p>
+
+<blockquote>
+  <strong>Configuration discipline:</strong> every Edge Function reads its credentials from <strong>Supabase project secrets</strong> via <code>Deno.env.get(...)</code>. Do NOT use a local <code>.env</code> file for any M2 secret.
+</blockquote>
+
+<div class="toc">
+  <strong>Table of Contents</strong>
+  <ol>
+    <li><a href="#sec-1">Prerequisites</a></li>
+    <li><a href="#sec-2">One-Time Environment Setup</a></li>
+    <li><a href="#sec-3">Database &amp; Migrations</a></li>
+    <li><a href="#sec-4">Edge Function Deployment</a></li>
+    <li><a href="#sec-5">Third-Party Integration Setup (Stripe / Xero / Mailgun)</a></li>
+    <li><a href="#sec-6">Seed Data</a></li>
+    <li><a href="#sec-7">Smoke Tests — System Up</a></li>
+    <li><a href="#sec-8">Functional Test Flows</a></li>
+    <li><a href="#sec-9">Failure / Edge-Case Flows</a></li>
+    <li><a href="#sec-10">Multi-Tenant Isolation Tests</a></li>
+    <li><a href="#sec-11">Production Cutover Verification</a></li>
+    <li><a href="#sec-12">Sign-Off Checklist</a></li>
+  </ol>
+</div>
+
+<hr/>
+
+<h2 id="sec-1">1 · Prerequisites</h2>
+
+<h3>1.1 Accounts &amp; access</h3>
+<table>
+  <thead><tr><th>Item</th><th>Required value / note</th></tr></thead>
+  <tbody>
+    <tr><td>Supabase project</td><td>Staging project with full owner access</td></tr>
+    <tr><td>Supabase CLI installed</td><td><code>supabase --version</code> ≥ 1.180</td></tr>
+    <tr><td>Stripe account</td><td>Same account as Chem Connect; ability to view test mode dashboard, register webhooks, retrieve <code>sk_test_*</code></td></tr>
+    <tr><td>Xero developer account</td><td>OAuth app on the NEW granular scopes: <code>openid</code>, <code>profile</code>, <code>email</code>, <code>offline_access</code>, <code>accounting.invoices</code>, <code>accounting.contacts</code>, <code>accounting.attachments</code>. (Apps created after 2 March 2026 only support the new granular scopes — the old broad <code>accounting.transactions</code> returns <code>invalid_scope</code>.)</td></tr>
+    <tr><td>Mailgun account</td><td>API key + verified sending domain. Same Mailgun account already used by <code>sendOrderStatusNotification</code>, <code>sendEmailReport</code>, etc.</td></tr>
+    <tr><td>Google Cloud project</td><td>Distance Matrix API enabled + an API key restricted to Distance Matrix only. Billing must be linked (Google's free $200/mo credit covers ~40 k quotes). Project owned by the client (Jonny) — we just consume the key.</td></tr>
+    <tr><td>Node.js</td><td>≥ 18.x for the Vite frontend</td></tr>
+    <tr><td>Deno</td><td>≥ 1.42 (only if running Edge Functions locally)</td></tr>
+    <tr><td>Browser</td><td>Chromium-based, with devtools open</td></tr>
+  </tbody>
+</table>
+
+<h3>1.2 Roles you will test as</h3>
+<p>Create these user accounts in Supabase Auth before starting:</p>
+<table>
+  <thead><tr><th>Email pattern</th><th>Role</th><th>company_id</th></tr></thead>
+  <tbody>
+    <tr><td><code>superadmin@elora.test</code></td><td><code>super_admin</code> — <strong>only role allowed to connect/refresh Xero</strong></td><td>Elora seller company</td></tr>
+    <tr><td><code>mpadmin@elora.test</code></td><td><code>admin</code> + <code>user_permissions.marketplace_admin = true</code></td><td>Elora seller company</td></tr>
+    <tr><td><code>warehouse@elora.test</code></td><td><code>user</code> mapped in <code>marketplace_warehouse_users</code></td><td>Elora seller company</td></tr>
+    <tr><td><code>buyer1.admin@acme.test</code></td><td><code>admin</code> of a buyer company</td><td>Acme Buyer Co.</td></tr>
+    <tr><td><code>buyer1.user@acme.test</code></td><td><code>user</code> of the same buyer company</td><td>Acme Buyer Co.</td></tr>
+    <tr><td><code>buyer2.admin@globex.test</code></td><td><code>admin</code> of a second buyer company</td><td>Globex Buyer Co.</td></tr>
+  </tbody>
+</table>
+<p>The second buyer company is mandatory — it's used to prove multi-tenant isolation in §10.</p>
+
+<h3>1.3 Information you need to gather up-front</h3>
+<ul>
+  <li>Supabase project ref (<code>xxxxxxxxxx</code>)</li>
+  <li>Supabase service-role key (for one-off seed scripts only)</li>
+  <li>Supabase Edge Functions base URL: <code>https://&lt;project-ref&gt;.functions.supabase.co</code></li>
+  <li>Public portal URL — production: <code>https://www.eloracomplienceprotal.com</code> (use the staging equivalent when testing against the staging Supabase project)</li>
+</ul>
+
+<hr/>
+
+<h2 id="sec-2">2 · One-Time Environment Setup</h2>
+
+<h3>2.1 Set all Supabase project secrets</h3>
+<p>These must be set via <strong>Supabase project secrets</strong>, NOT in a <code>.env</code> file.</p>
+
+<pre><code>supabase login
+supabase link --project-ref &lt;project-ref&gt;
+
+supabase secrets set \
+  MAILGUN_API_KEY=key-************************ \
+  MAILGUN_DOMAIN=eloracomplienceprotal.com \
+  MAILGUN_BASE_URL=https://api.mailgun.net \
+  MARKETPLACE_EMAIL_FROM='Elora Marketplace &lt;orders@eloracomplienceprotal.com&gt;' \
+  MARKETPLACE_PORTAL_URL=https://www.eloracomplienceprotal.com \
+  XERO_CLIENT_ID=********************************* \
+  XERO_CLIENT_SECRET=********************************* \
+  XERO_REDIRECT_URI=https://&lt;project-ref&gt;.functions.supabase.co/marketplace_xero_oauth_callback \
+  STRIPE_SECRET_KEY=sk_test_*********************** \
+  STRIPE_WEBHOOK_SECRET=whsec_********************* \
+  GOOGLE_DISTANCE_MATRIX_API_KEY=AIzaSy*********************</code></pre>
+
+<blockquote><code>MAILGUN_BASE_URL</code> is optional (defaults to <code>https://api.mailgun.net</code>); set it to <code>https://api.eu.mailgun.net</code> if the Mailgun account is on the EU region. <code>MARKETPLACE_EMAIL_FROM</code> is optional; if unset, the sender falls back to <code>Elora Marketplace &lt;postmaster@${MAILGUN_DOMAIN}&gt;</code>. <code>GOOGLE_DISTANCE_MATRIX_API_KEY</code> is <em>optional but strongly recommended</em>: when set, freight quotes use real Google road km; when unset, the engine silently falls back to haversine × 1.25 (which under-charges on hilly / island routes).</blockquote>
+
+<p><strong>Verify</strong> with <code>supabase secrets list</code> — all 8 required keys must appear (plus any optional ones you set).</p>
+
+<h3>2.2 Pass criteria</h3>
+<ul class="check-list">
+  <li><span class="checkbox"></span><code>supabase secrets list</code> shows all 8 required keys (<code>MAILGUN_API_KEY</code>, <code>MAILGUN_DOMAIN</code>, <code>MARKETPLACE_PORTAL_URL</code>, <code>XERO_CLIENT_ID</code>, <code>XERO_CLIENT_SECRET</code>, <code>XERO_REDIRECT_URI</code>, <code>STRIPE_SECRET_KEY</code>, <code>STRIPE_WEBHOOK_SECRET</code>)</li>
+  <li><span class="checkbox"></span><code>GOOGLE_DISTANCE_MATRIX_API_KEY</code> is set (or you have explicitly accepted that freight quotes will use the haversine × 1.25 fallback)</li>
+  <li><span class="checkbox"></span>No <code>.env</code> file contains M2 secrets in the deployed environment</li>
+</ul>
+
+<hr/>
+
+<h2 id="sec-3">3 · Database &amp; Migrations</h2>
+
+<h3>3.1 Apply migrations</h3>
+<p>From the project root:</p>
+<pre><code>supabase db push</code></pre>
+<p>Required migrations (must apply cleanly, in order):</p>
+<ol>
+  <li>M1 baseline migrations (already applied)</li>
+  <li><code>20260509000001_marketplace_core.sql</code> — products/pricing</li>
+  <li><code>20260510000001_marketplace_admin_seller_scope.sql</code> — admin scoping fix</li>
+  <li><code>20260510000002_marketplace_freight.sql</code> — freight tables + Haversine</li>
+  <li><code>20260510000003_marketplace_orders.sql</code> — orders + items + status history + RPC</li>
+  <li><code>20260510000004_marketplace_integrations.sql</code> — Xero creds + integration log</li>
+  <li><code>20260513000001_marketplace_xero_super_admin_gate.sql</code> — <code>is_marketplace_super_admin()</code> RPC + tighter RLS on <code>marketplace_xero_credentials</code> (writes restricted to super_admin; reads stay at marketplace admin so the Integrations page can show status)</li>
+  <li><code>20260513000002_marketplace_saved_addresses.sql</code> — adds <code>user_profiles.marketplace_saved_addresses JSONB</code> for the buyer checkout address book</li>
+  <li><code>20260513000003_stripe_deferred_order_creation.sql</code> — makes <code>marketplace_checkout_sessions.order_id</code> nullable + adds <code>user_id</code>, <code>company_id</code>, <code>intent_payload</code> so the Stripe webhook can materialise the order on payment success (matches the Chem Connect "no order until paid" pattern)</li>
+  <li><code>20260513000004_companies_xero_contact.sql</code> — adds <code>companies.xero_contact_id</code> + <code>companies.xero_invoicing_enabled</code> so each buyer company can be registered in Xero before any invoice fires</li>
+  <li><code>20260513000005_companies_xero_contact_details.sql</code> — adds <code>companies.xero_contact_details JSONB</code> to remember ABN / primary person / addresses so Edit Details re-uses what was sent last time</li>
+  <li><code>20260514000001_freight_road_distance_multiplier.sql</code> — switches <code>marketplace_postcode_distance_km</code> from raw haversine to haversine × 1.25 (empirical road-distance multiplier; used as the in-DB fallback when the Distance Matrix call is unavailable)</li>
+  <li><code>20260514000002_warehouses_xero_contact.sql</code> — adds <code>marketplace_warehouses.xero_contact_id</code> + <code>xero_contact_details</code> + <code>is_supplier_managed</code> so third-party-managed warehouses can be registered as Xero suppliers (and so we can skip the PO when Elora's own depot is the warehouse)</li>
+  <li><code>20260514000003_orders_xero_po_number.sql</code> — adds <code>marketplace_orders.xero_po_number</code> to store the human-readable PO number for receipts/emails (alongside the existing uuid)</li>
+  <li><code>20260514000004_xero_clear_zero_uuid_invoices.sql</code> — one-off data cleanup: wipes <code>xero_invoice_id</code> / <code>xero_po_id</code> values that are <code>00000000-0000-0000-0000-000000000000</code> (Xero returns 200 + <code>HasErrors=true</code> on validation failure, and the old code stored the all-zero id)</li>
+  <li><code>20260514000005_xero_clear_stale_contact_ids.sql</code> — one-off data cleanup: clears <code>companies.xero_contact_id</code> + <code>marketplace_warehouses.xero_contact_id</code> so a previously connected tenant's contact ids don't survive into the new tenant after a switch</li>
+  <li><code>20260514000006_marketplace_settings_extend.sql</code> — adds <code>platform_name</code>, <code>support_email</code>, <code>support_phone</code>, <code>min_order_amount</code>, <code>default_payment_terms_days</code>, <code>early_access_capacity</code> columns to <code>marketplace_settings</code> (used by emails, invoices, checkout minimum-order gate, Xero invoice DueDate)</li>
+  <li><code>20260515000001_marketplace_distance_cache.sql</code> — <code>marketplace_distance_cache</code> table (postcode pair → distance_km + duration_seconds, 24h TTL) used by the Google Distance Matrix integration</li>
+</ol>
+
+<h3>3.2 Verify schema</h3>
+<pre><code>select table_name from information_schema.tables
+where table_schema='public' and table_name like 'marketplace_%'
+order by table_name;</code></pre>
+<p>Expect at minimum:<br/>
+<code>marketplace_cart_items, marketplace_checkout_sessions, marketplace_distance_cache, marketplace_integration_log, marketplace_order_items, marketplace_order_status_history, marketplace_orders, marketplace_postcodes, marketplace_pricing_overrides, marketplace_product_freight_mappings, marketplace_products, marketplace_rate_sheet_brackets, marketplace_rate_sheets, marketplace_settings, marketplace_warehouse_users, marketplace_warehouses, marketplace_xero_credentials, marketplace_xero_sync_log</code></p>
+
+<h3>3.3 Verify RLS</h3>
+<pre><code>select tablename, rowsecurity
+from pg_tables
+where schemaname='public' and tablename like 'marketplace_%';</code></pre>
+<p>Every row must show <code>rowsecurity = true</code>.</p>
+
+<h3>3.4 Verify atomic order number RPC</h3>
+<pre><code>select marketplace_next_order_number();
+-- repeat 3 times; should yield EL-2026-00001, 00002, 00003</code></pre>
+
+<h3>3.5 Pass criteria</h3>
+<ul class="check-list">
+  <li><span class="checkbox"></span>All migrations applied without error</li>
+  <li><span class="checkbox"></span>All marketplace tables exist</li>
+  <li><span class="checkbox"></span>All marketplace tables have RLS enabled</li>
+  <li><span class="checkbox"></span><code>marketplace_next_order_number()</code> increments atomically</li>
+</ul>
+
+<hr/>
+
+<h2 id="sec-4">4 · Edge Function Deployment</h2>
+
+<h3>4.1 Buyer / checkout / order functions</h3>
+<pre><code># Cart → checkout pipeline
+supabase functions deploy marketplace_freight_quote
+supabase functions deploy marketplace_create_order            # deferred Stripe path
+supabase functions deploy marketplace_approve_order           # gated on xero_invoicing_enabled
+supabase functions deploy marketplace_update_fulfilment
+supabase functions deploy marketplace_send_order_email
+supabase functions deploy marketplace_postcode_seed</code></pre>
+
+<blockquote><strong>Shared-module change discipline.</strong> Edge Functions in this project bundle every file they import at deploy time — they do <em>not</em> hot-reload <code>_shared/*</code>. After any change to <code>_shared/marketplaceFreight.ts</code>, <code>_shared/marketplaceDistance.ts</code>, <code>_shared/marketplaceXero.ts</code>, or <code>_shared/marketplaceEmail.ts</code>, every function that imports them must be re-deployed. The Distance Matrix wiring lives in <code>_shared/marketplaceDistance.ts</code> and is consumed by <code>marketplace_freight_quote</code> and <code>marketplace_create_order</code> — redeploy both.</blockquote>
+
+<h3>4.2 Stripe</h3>
+<pre><code>supabase functions deploy marketplace_stripe_create_checkout  # accepts checkout_session_id
+supabase functions deploy marketplace_stripe_webhook --no-verify-jwt   # materialises order on success</code></pre>
+
+<h3>4.3 Xero suite</h3>
+<pre><code># OAuth lifecycle (super_admin gated)
+supabase functions deploy marketplace_xero_oauth_start
+supabase functions deploy marketplace_xero_oauth_callback --no-verify-jwt
+supabase functions deploy marketplace_xero_refresh_token
+
+# Multi-org management
+supabase functions deploy marketplace_xero_available_tenants
+supabase functions deploy marketplace_xero_select_tenant
+supabase functions deploy marketplace_xero_disconnect
+
+# Per-buyer-company contact registration
+supabase functions deploy marketplace_xero_register_contact
+
+# Invoice / PO writers (called by approve_order + stripe_webhook)
+supabase functions deploy marketplace_xero_create_invoice
+supabase functions deploy marketplace_xero_create_po</code></pre>
+
+<h3>4.4 Freight</h3>
+<pre><code>supabase functions deploy marketplace_freight_matrix_bulk_import   # new multi-column flow (matches Chem Connect)
+supabase functions deploy marketplace_freight_matrix_upload        # legacy single-column (still available for ad-hoc CSV)</code></pre>
+
+<p>The two functions that take external callbacks (<code>marketplace_xero_oauth_callback</code>, <code>marketplace_stripe_webhook</code>) MUST use <code>--no-verify-jwt</code> — Xero/Stripe will not send a Supabase JWT.</p>
+
+<h3>4.5 Verify each deployment</h3>
+<pre><code>supabase functions list</code></pre>
+<p>Confirm all <strong>18</strong> M2 functions appear with <code>ACTIVE</code> status: 6 buyer/order + 2 Stripe + 9 Xero + 2 freight (legacy uploader included). One-off legacy: <code>marketplace_postcode_seed</code> is part of the 6 buyer/order group.</p>
+
+<h3>4.6 Pass criteria</h3>
+<ul class="check-list">
+  <li><span class="checkbox"></span>All 18 functions deploy without error</li>
+  <li><span class="checkbox"></span><code>--no-verify-jwt</code> set on the two public-facing functions</li>
+  <li><span class="checkbox"></span>No deployment-time TypeScript / Deno errors in CLI output</li>
+</ul>
+
+<hr/>
+
+<h2 id="sec-5">5 · Third-Party Integration Setup (Stripe / Xero / Mailgun)</h2>
+
+<h3>5.1 Stripe webhook</h3>
+<p>In Stripe Dashboard (Test mode):</p>
+<ul>
+  <li><strong>Add endpoint</strong> → <code>https://&lt;project-ref&gt;.functions.supabase.co/marketplace_stripe_webhook</code></li>
+  <li>Subscribe to:
+    <ul>
+      <li><code>checkout.session.completed</code></li>
+      <li><code>checkout.session.expired</code></li>
+      <li><code>checkout.session.async_payment_failed</code></li>
+      <li><code>payment_intent.succeeded</code></li>
+      <li><code>payment_intent.payment_failed</code></li>
+      <li><code>charge.refunded</code></li>
+      <li><code>charge.dispute.created</code></li>
+    </ul>
+  </li>
+  <li>Copy the <strong>Signing secret</strong> → <code>STRIPE_WEBHOOK_SECRET</code> (if it doesn't already match what's in Supabase secrets, re-run <code>supabase secrets set</code>).</li>
+  <li>Click <strong>Send test webhook → checkout.session.completed</strong> and confirm Stripe shows <code>200 OK</code>.</li>
+</ul>
+
+<h3>5.2 Xero OAuth</h3>
+<p>In Xero Developer:</p>
+<ul>
+  <li>Create / edit the app</li>
+  <li><strong>Redirect URI</strong> must EXACTLY equal the value in <code>XERO_REDIRECT_URI</code> secret</li>
+  <li>Scopes (NEW granular set — required for apps created after 2 March 2026): <code>openid profile email offline_access accounting.invoices accounting.contacts accounting.attachments</code></li>
+  <li><strong>Do not</strong> request the deprecated <code>accounting.transactions</code> — Xero will return <code>invalid_scope</code>. <code>accounting.invoices</code> covers Invoices, PurchaseOrders, CreditNotes, and Quotes.</li>
+</ul>
+<p>Then from the portal:</p>
+<ol>
+  <li>Sign in as <code>superadmin@elora.test</code> <strong>(super_admin only — Xero connect/refresh is restricted to Elora super_admins; a marketplace admin will get HTTP 403)</strong></li>
+  <li>Navigate to <code>/admin/marketplace/integrations</code></li>
+  <li>Click <strong>Connect Xero</strong></li>
+  <li>Complete the OAuth flow against your Xero demo company</li>
+  <li>Redirect should land back on the Integrations page with <strong>Connected · &lt;tenant name&gt;</strong></li>
+</ol>
+<p>Verify in DB:</p>
+<pre><code>select tenant_id, tenant_name, expires_at from marketplace_xero_credentials;
+-- exactly one row, expires_at ~30 min in the future</code></pre>
+
+<p><strong>Negative check (super_admin gate):</strong></p>
+<ol>
+  <li>Sign in as <code>mpadmin@elora.test</code> (marketplace admin, NOT super_admin).</li>
+  <li>Navigate to <code>/admin/marketplace/integrations</code> and click <strong>Connect Xero</strong>.</li>
+  <li>Expect <code>403 Forbidden — Elora super_admin required to manage the Xero connection</code>. No row in <code>marketplace_xero_credentials</code> should be created/updated, and no <code>oauth_connect</code> row should appear in <code>marketplace_xero_sync_log</code>.</li>
+</ol>
+
+<p><strong>Multi-org pick (only if your Xero account has &gt;1 organisation):</strong></p>
+<ol>
+  <li>After the OAuth consent screen, super_admin should be redirected to <code>/admin/marketplace/xero/choose-org?initial=1</code>.</li>
+  <li>Pick an org → click <strong>Use this organisation</strong>.</li>
+  <li>Returns to Integrations with <strong>Connected · &lt;chosen tenant name&gt;</strong>. Reads from <code>marketplace_xero_credentials</code> confirm <code>tenant_id</code> matches the choice.</li>
+  <li>On the Integrations page, <strong>Choose org</strong> button switches the active org later; <strong>Disconnect</strong> revokes the active org (auto-switches to the next remaining one, else fully clears tokens).</li>
+</ol>
+
+<h3>5.3 Mailgun</h3>
+<ul>
+  <li>API key in <code>MAILGUN_API_KEY</code> is from the same Mailgun account already used by the existing portal email functions (<code>sendOrderStatusNotification</code>, <code>sendEmailReport</code>, etc.).</li>
+  <li><code>MAILGUN_DOMAIN</code> must be a <strong>verified</strong> sending domain in that Mailgun account (DNS records for SPF + DKIM published and verified — check via Mailgun → Sending → Domains).</li>
+  <li>Set <code>MAILGUN_BASE_URL=https://api.eu.mailgun.net</code> if the account lives in the EU region; otherwise the default <code>https://api.mailgun.net</code> is correct.</li>
+  <li>The <code>From:</code> header (<code>MARKETPLACE_EMAIL_FROM</code>) must use the same domain as <code>MAILGUN_DOMAIN</code> (or a subdomain of it) — otherwise Mailgun rejects the send.</li>
+  <li>Send a quick test from the Mailgun dashboard (Sending → Logs → Send test) to your own inbox to confirm deliverability before running flows.</li>
+</ul>
+
+<h3>5.4 Pass criteria</h3>
+<ul class="check-list">
+  <li><span class="checkbox"></span>Stripe webhook returns <code>200 OK</code> on test ping</li>
+  <li><span class="checkbox"></span><code>marketplace_xero_credentials</code> has one row with non-null <code>access_token</code> and future <code>expires_at</code></li>
+  <li><span class="checkbox"></span>Mailgun sending domain shows <strong>Active</strong> / verified</li>
+  <li><span class="checkbox"></span>A test email from the Mailgun dashboard arrives at the configured <code>From:</code>-domain mailbox</li>
+</ul>
+
+<hr/>
+
+<h2 id="sec-6">6 · Seed Data</h2>
+<p>Use the existing scripted seed:</p>
+<pre><code>SUPABASE_SERVICE_ROLE_KEY=eyJ... node scripts/seed-marketplace-demo.mjs</code></pre>
+<p>Or run <code>scripts/seed-marketplace-demo.sql</code> directly in the SQL editor.</p>
+<p>This must create at minimum:</p>
+<ul>
+  <li>1 seller company (Elora) + <code>marketplace_settings.seller_company_id</code> row</li>
+  <li>2 buyer companies (Acme, Globex)</li>
+  <li>3+ products with prices</li>
+  <li>1 warehouse linked to the seller, with <code>warehouse@elora.test</code> mapped via <code>marketplace_warehouse_users</code></li>
+  <li>At least one per-customer pricing override (Acme on one product)</li>
+</ul>
+
+<h3>6.1 Freight matrix bulk import (multi-column, matches Chem Connect)</h3>
+<p>As <code>mpadmin@elora.test</code> or <code>superadmin@elora.test</code>:</p>
+<ol>
+  <li>Open <code>/admin/marketplace/freight</code> (left nav → Marketplace Admin → Freight).</li>
+  <li>Click <strong>Sample template</strong> to download the AdBlue Bulk + Pack matrix CSV (or <strong>Blank template</strong> to email a supplier).</li>
+  <li>Drop the CSV file into the upload box (or paste tab/comma-separated text). The parser auto-detects every rate column and shows a per-column review table.</li>
+  <li>Pick the destination <strong>Warehouse</strong> in the side panel.</li>
+  <li>For each detected column, review:
+    <ul>
+      <li>☑ <strong>Include</strong> — Pre-cutover historical columns default to OFF (heuristic) so old rates don't silently quote.</li>
+      <li><strong>Rate-sheet name</strong> — defaults to the column header (e.g. <em>Bulk (Post-14Jul25)</em>).</li>
+      <li><strong>Unit type</strong> — auto-suggested from the header (<em>Bulk</em>→per_litre, <em>Pack</em>→flat_per_consignment, <em>kg</em>→per_kg, <em>pallet</em>→per_pallet, <em>zone</em>→per_zone).</li>
+      <li><strong>Active</strong> toggle.</li>
+    </ul>
+  </li>
+  <li>Click <strong>Import N rate sheets</strong>. Calls <code>marketplace_freight_matrix_bulk_import</code>, which inserts every sheet + bracket set in one go with manual rollback on first failure.</li>
+  <li>Confirm the Rate Sheets list below now shows one card per imported column with its bracket rows.</li>
+</ol>
+
+<h3>6.2 Buyer-company Xero registration</h3>
+<p>Xero invoice creation only fires for buyer companies that an admin has explicitly opted in. Register at least one buyer company up front:</p>
+<ol>
+  <li>Sign in as <code>superadmin@elora.test</code>.</li>
+  <li>Open <code>/admin/marketplace/companies</code>.</li>
+  <li>Find a buyer (e.g. <strong>Acme</strong>) → confirm the row shows <em>Not in Xero</em> badge → click <strong>Register</strong>.</li>
+  <li>Toast confirms the contact has been created (or reused) in Xero. Badge flips to <strong>Xero on</strong>.</li>
+  <li>Verify: <code>select xero_contact_id, xero_invoicing_enabled from companies where name='Acme'</code> — both populated.</li>
+</ol>
+<p><strong>Negative check:</strong> as <code>mpadmin@elora.test</code> (marketplace admin, not super_admin), the <strong>Register</strong> button should not render.</p>
+
+<h3>6.3 Postcode seed</h3>
+<pre><code>curl -X POST https://&lt;project-ref&gt;.functions.supabase.co/marketplace_postcode_seed \
+  -H "Authorization: Bearer &lt;admin-jwt&gt;" \
+  -d '{}'</code></pre>
+<p>(Or call from the admin Integrations page if the UI button exists.)</p>
+
+<h3>6.4 Marketplace settings (singleton config row)</h3>
+<p>Sign in as <code>superadmin@elora.test</code> and open <code>/admin/marketplace/settings</code>. Set the platform-wide values that downstream code reads:</p>
+<table>
+  <thead><tr><th>Field</th><th>Suggested staging value</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr><td>Platform name</td><td><code>Elora Marketplace</code></td><td>Email footer, receipt header</td></tr>
+    <tr><td>Support email</td><td><code>support@elora.test</code></td><td>Email footer / failure-fallback contact</td></tr>
+    <tr><td>Support phone</td><td><code>+61 2 0000 0000</code></td><td>Email footer</td></tr>
+    <tr><td>Currency (ISO 4217)</td><td><code>AUD</code></td><td>Order rows, Xero invoice currency, Stripe Checkout</td></tr>
+    <tr><td>GST rate</td><td><code>0.10</code></td><td>Cart / checkout GST display, order GST persistence, Xero tax</td></tr>
+    <tr><td>Min order subtotal (ex-GST)</td><td><code>0.00</code> (or e.g. <code>150.00</code> to exercise the gate)</td><td>Hard gate in <code>marketplace_create_order</code> — orders below this are rejected before any payment session is created</td></tr>
+    <tr><td>Default payment terms (days)</td><td><code>30</code></td><td>Xero invoice <code>DueDate</code> for PO orders</td></tr>
+  </tbody>
+</table>
+<p>Click <strong>Save changes</strong>. Verify in DB:</p>
+<pre><code>select platform_name, currency, gst_rate, min_order_amount, default_payment_terms_days
+from marketplace_settings where id = 1;</code></pre>
+<p><strong>Negative check (super_admin gate):</strong> as <code>mpadmin@elora.test</code>, open the settings page — every field is rendered read-only with an italic banner reading <em>"View-only. Only Elora super_admin can change these values."</em>; the Save button is disabled.</p>
+
+<h3>6.5 Warehouse Xero registration (supplier contact)</h3>
+<p>Used when the warehouse is run by a third-party supplier (so PO approvals fire a Xero PO to that supplier). Elora's own depots should NOT be registered.</p>
+<ol>
+  <li>Open <code>/admin/marketplace/warehouses</code>.</li>
+  <li>For each warehouse:
+    <ul>
+      <li>Elora-owned depot → leave <strong>Supplier-managed</strong> toggle <em>off</em>. The <strong>Register in Xero</strong> button does not appear; no PO will fire on approval.</li>
+      <li>Third-party supplier warehouse → flip <strong>Supplier-managed</strong> on, click <strong>Register in Xero</strong>, fill ABN / primary person / address in the dialog, save.</li>
+    </ul>
+  </li>
+  <li>Verify:
+    <pre><code>select name, is_supplier_managed, xero_contact_id, xero_invoicing_enabled
+from marketplace_warehouses;</code></pre>
+    The supplier-managed warehouse should have <code>xero_contact_id</code> populated and <code>xero_invoicing_enabled = true</code>.
+  </li>
+</ol>
+
+<h3>6.6 Pass criteria</h3>
+<ul class="check-list">
+  <li><span class="checkbox"></span>Two distinct buyer companies exist with at least one product price each</li>
+  <li><span class="checkbox"></span>At least one warehouse exists with at least one active rate sheet</li>
+  <li><span class="checkbox"></span>The active rate sheet has ≥ 3 contiguous brackets starting at 0 km</li>
+  <li><span class="checkbox"></span><code>marketplace_postcodes</code> has ≥ 40 rows</li>
+  <li><span class="checkbox"></span>At least one buyer company has <code>xero_invoicing_enabled = true</code> and a non-null <code>xero_contact_id</code></li>
+  <li><span class="checkbox"></span><code>marketplace_settings</code> row id=1 has non-null <code>currency</code>, <code>gst_rate</code>, <code>min_order_amount</code>, <code>default_payment_terms_days</code></li>
+  <li><span class="checkbox"></span>Every supplier-managed warehouse is registered in Xero; every Elora-owned warehouse has <code>is_supplier_managed = false</code></li>
+</ul>
+
+<hr/>
+
+<h2 id="sec-7">7 · Smoke Tests — System Up</h2>
+<p>Each test takes &lt; 2 minutes; do these before the full functional pass to fail fast.</p>
+<table>
+  <thead><tr><th>#</th><th>Test</th><th>Expected</th></tr></thead>
+  <tbody>
+    <tr><td>S1</td><td>Sign in as <code>buyer1.user@acme.test</code>, navigate to <code>/marketplace</code></td><td>Catalogue loads; Acme's pricing override visible</td></tr>
+    <tr><td>S2</td><td>Add a product to cart, observe <code>SiteHeader</code> cart badge</td><td>Badge shows item count and persists across reloads</td></tr>
+    <tr><td>S3</td><td>Open <code>/marketplace/checkout</code></td><td>Three-step wizard renders, freight quote loads after picking a delivery address</td></tr>
+    <tr><td>S4</td><td>Sign in as <code>mpadmin@elora.test</code>, open <code>/admin/marketplace/integrations</code></td><td>Xero status = Connected; recent events table shows the Xero OAuth callback log</td></tr>
+    <tr><td>S5</td><td>Sign in as <code>warehouse@elora.test</code>, open <code>/warehouse/orders</code></td><td>Warehouse dashboard renders, status tabs visible</td></tr>
+    <tr><td>S6</td><td>Sign in as <code>buyer1.admin@acme.test</code></td><td>Buyer-side menu visible; <strong>no Marketplace Admin tab</strong></td></tr>
+  </tbody>
+</table>
+<h3>7.1 Pass criteria</h3>
+<p>All six smoke tests pass with no console errors.</p>
+
+<hr/>
+
+<h2 id="sec-8">8 · Functional Test Flows</h2>
+
+<h3>8.1 Flow A — Stripe (card) checkout happy path <em>(deferred order creation)</em></h3>
+<p class="meta"><span class="pill">Actors</span><code>buyer1.user@acme.test</code>, <code>mpadmin@elora.test</code>, <code>warehouse@elora.test</code></p>
+<blockquote><strong>Critical contract change:</strong> the order row in <code>marketplace_orders</code> is created ONLY after Stripe confirms the payment (via webhook). Before payment, only a <code>marketplace_checkout_sessions</code> row exists with the calculated <code>intent_payload</code>. The buyer's cart is NOT wiped until success. This mirrors Chem Connect's <code>/api/orders/finalize</code> pattern.</blockquote>
+<ol>
+  <li><strong>Buyer</strong> signs in, adds 2 products to cart (one with a pricing override).</li>
+  <li>Go to <code>/marketplace/checkout</code>.</li>
+  <li>Pick a delivery postcode that falls inside the first freight bracket.</li>
+  <li>Answer site-access questions.</li>
+  <li>Choose <strong>Pay by card (Stripe)</strong> and click <strong>Checkout</strong>.</li>
+  <li>Use Stripe test card <code>4242 4242 4242 4242</code>, any future expiry, any CVC.</li>
+  <li>On success, browser redirects to <code>/marketplace/checkout/success?session=&lt;checkout_session_id&gt;</code>. The page polls the session row every 2s for up to 30s while the webhook materialises the order, then renders <strong>View order</strong>.</li>
+</ol>
+<p><strong>Verify in DB (after webhook fires):</strong></p>
+<pre><code>select id, order_number, status, payment_method, stripe_session_id, stripe_paid_at,
+       xero_po_id, total_amount
+from marketplace_orders order by created_at desc limit 1;
+
+select id, order_id, status, stripe_payment_intent_id
+from marketplace_checkout_sessions order by created_at desc limit 1;</code></pre>
+<ul>
+  <li>orders: <code>status = 'approved'</code>, <code>stripe_paid_at</code> set, <code>order_number</code> matches <code>EL-2026-NNNNN</code></li>
+  <li>orders: <code>xero_po_id</code> set (best-effort fire from webhook; Xero PO appears in the connected org)</li>
+  <li>checkout_sessions: <code>status='completed'</code>, <code>order_id</code> now NON-NULL (was NULL before webhook), <code>stripe_payment_intent_id</code> set</li>
+  <li>cart: <code>marketplace_cart_items</code> for the buyer is empty (webhook wiped it after materialising)</li>
+</ul>
+<p><strong>Verify integration log:</strong></p>
+<pre><code>select event_type, status, created_at
+from marketplace_integration_log
+where order_id = '&lt;the-order-id&gt;' order by created_at;</code></pre>
+<p>Expect rows for:</p>
+<ul>
+  <li><code>received</code> (Stripe event)</li>
+  <li><code>order_marked_paid</code></li>
+  <li><code>email_sent</code> (<code>order_stripe_receipt</code>)</li>
+</ul>
+<p><strong>Verify Xero:</strong> open Xero demo company → Purchase Orders. The PO created in our system must appear there with line-items matching the order.</p>
+<p><strong>Verify buyer inbox:</strong> <code>order_stripe_receipt</code> email arrives within 30 seconds.</p>
+<p><strong>Admin step:</strong></p>
+<ol start="8">
+  <li>As <code>mpadmin@elora.test</code>, open the order's admin detail page. Confirm Stripe status badge = "Paid", Xero PO link is clickable.</li>
+</ol>
+<p><strong>Warehouse step:</strong></p>
+<ol start="9">
+  <li>As <code>warehouse@elora.test</code>, open <code>/warehouse/orders</code>, find the new order.</li>
+  <li>Click <strong>Mark dispatched</strong>, set dispatch date = today, save.</li>
+  <li>Verify buyer receives <code>dispatch_confirmed</code> email.</li>
+  <li>Add a tracking URL — verify buyer receives <code>tracking_added</code>.</li>
+  <li>Adjust ETA — verify buyer receives <code>eta_updated</code>.</li>
+</ol>
+<blockquote>Each fulfilment update must send AT MOST ONE email; if you set dispatch + tracking + eta in a single save, the buyer should receive only <code>dispatch_confirmed</code> (priority chain).</blockquote>
+<p><strong>Pass criteria:</strong> all 13 steps complete; integration log shows every event; emails arrive; Xero PO visible.</p>
+
+<h3>8.2 Flow B — Purchase-order (PO) checkout happy path</h3>
+<p class="meta"><span class="pill">Actors</span><code>buyer1.user@acme.test</code>, <code>mpadmin@elora.test</code></p>
+<ol>
+  <li><strong>Buyer</strong> signs in, builds a cart, opens <code>/marketplace/checkout</code>.</li>
+  <li>At payment step, choose <strong>Pay by purchase order</strong>.</li>
+  <li>Upload a PO PDF (under 10 MB).</li>
+  <li>Submit.</li>
+  <li>Order detail page shows <code>status = pending_approval</code>.</li>
+</ol>
+<p><strong>Verify:</strong></p>
+<ul>
+  <li>DB row has <code>status='pending_approval'</code>, <code>po_pdf_path</code> set</li>
+  <li><code>order_placed</code> email arrives in buyer's inbox</li>
+  <li><code>admin_new_po_alert</code> email arrives at every admin of the seller company</li>
+  <li><code>marketplace_integration_log</code> shows both <code>email_sent</code> rows</li>
+</ul>
+<p><strong>Admin step:</strong></p>
+<ol start="6">
+  <li><code>mpadmin@elora.test</code> opens the order, clicks <strong>Approve</strong>.</li>
+</ol>
+<p><strong>Verify after approve (buyer company has <code>xero_invoicing_enabled = true</code> from §6.2):</strong></p>
+<ul>
+  <li>DB: <code>status='approved'</code>, <code>approved_by_user_id</code> set, <code>xero_invoice_id</code> set, <code>xero_po_id</code> set</li>
+  <li>Xero invoice exists in the connected Xero org (customer = the buyer's <code>xero_contact_id</code>)</li>
+  <li>Xero PO exists in the connected Xero org (supplier = warehouse contact)</li>
+  <li><code>order_approved</code> email arrived</li>
+</ul>
+<p><strong>Pass criteria:</strong> invoice + PO both created idempotently (re-clicking Approve in a separate test must NOT create duplicate Xero records).</p>
+
+<p><strong>Negative path — buyer NOT registered in Xero:</strong></p>
+<ol>
+  <li>Pick a buyer company whose row on <code>/admin/marketplace/companies</code> still shows <em>Not in Xero</em>.</li>
+  <li>Place a PO order and approve it.</li>
+  <li><strong>Verify:</strong> the order still moves to <code>status='approved'</code> with <code>xero_po_id</code> set, but <code>xero_invoice_id</code> stays NULL. <code>marketplace_xero_sync_log</code> contains a <code>skipped</code> row reading: <em>"Buyer company &lt;X&gt; is not registered for Xero invoicing. Enable it from Customer Marketplace Access → Register in Xero."</em></li>
+  <li>From the Companies page click <strong>Register</strong> for that buyer, then re-trigger the invoice (call <code>marketplace_xero_create_invoice</code> with the order id). Invoice now succeeds.</li>
+</ol>
+
+<h3>8.3 Flow C — PO rejection</h3>
+<ol>
+  <li>Repeat Flow B steps 1–5 with a fresh order.</li>
+  <li><code>mpadmin@elora.test</code> opens it, clicks <strong>Reject</strong>, enters reason "Out of stock".</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li>DB: <code>status='rejected'</code>, <code>rejected_at</code>, <code>rejection_reason</code> populated</li>
+      <li><code>order_rejected</code> email arrives at buyer with the reason</li>
+      <li>NO Xero invoice or PO created (rejection doesn't fire those)</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>8.4 Flow D — Order cancellation</h3>
+<ol>
+  <li>Take a <code>pending_approval</code> order.</li>
+  <li><code>mpadmin@elora.test</code> clicks <strong>Cancel</strong>.</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li>DB: <code>status='cancelled'</code></li>
+      <li>No email sent by default (this is intentional — admin communicates manually)</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>8.5 Flow E — Status transition guards</h3>
+<p>For each invalid transition below, the Edge Function must return a 409 with a readable error and the DB row must NOT change:</p>
+<table>
+  <thead><tr><th>Attempt</th><th>Expected error</th></tr></thead>
+  <tbody>
+    <tr><td>Approve an order in <code>paid</code> status</td><td>"Cannot approve an order in status \"paid\""</td></tr>
+    <tr><td>Reject an order in <code>approved</code> status</td><td>"Cannot reject an order in status \"approved\""</td></tr>
+    <tr><td>Cancel an order in <code>dispatched</code> status</td><td>"Cannot cancel an order in status \"dispatched\""</td></tr>
+    <tr><td>Warehouse sets status to <code>pending_approval</code> via <code>marketplace_update_fulfilment</code></td><td>"Cannot set status to \"pending_approval\" via fulfilment"</td></tr>
+  </tbody>
+</table>
+
+<h3>8.6 Flow F — Xero idempotency</h3>
+<ol>
+  <li>Complete Flow B (approval creates invoice + PO).</li>
+  <li>Manually clear <code>xero_invoice_id</code> on the order row (simulate retry):
+    <pre><code>update marketplace_orders set xero_invoice_id=null where id='&lt;id&gt;';</code></pre>
+  </li>
+  <li>From Integrations page, click <strong>Retry Xero invoice</strong> for the order (or call <code>marketplace_xero_create_invoice</code> directly).</li>
+  <li><strong>Verify:</strong> a new invoice IS created (because the id was cleared). This proves we don't accidentally double-create when the id is present, AND we DO create when explicitly retried.</li>
+</ol>
+
+<h3>8.7 Flow G — Xero multi-org switch &amp; disconnect</h3>
+<p class="meta"><span class="pill">Actors</span><code>superadmin@elora.test</code> · Requires a Xero account with ≥ 2 organisations.</p>
+<ol>
+  <li>On Integrations, click <strong>Connect another org</strong> — re-runs OAuth, consent to a second Xero org.</li>
+  <li>Open <strong>Choose org</strong> — both orgs appear; currently active is badged.</li>
+  <li>Pick the other org → confirm. Verify <code>marketplace_xero_credentials.tenant_id</code> changed AND every <code>marketplace_orders.xero_invoice_id</code> / <code>xero_po_id</code> from the previous org was wiped (those ids don't resolve against the new tenant).</li>
+  <li>Click <strong>Disconnect</strong> on the active org. With a sibling org still in the grant, the system auto-switches to that sibling and toasts the new active tenant. <code>marketplace_xero_sync_log</code> has a <code>disconnect</code> row with <code>state='switched'</code>.</li>
+  <li>Click <strong>Disconnect</strong> again to revoke the last remaining org. <code>marketplace_xero_credentials</code> row id=1 now has NULL tokens/tenant — next <strong>Connect Xero</strong> is a clean handshake.</li>
+</ol>
+
+<h3>8.8 Flow H — Freight matrix bulk import</h3>
+<p class="meta"><span class="pill">Actors</span><code>mpadmin@elora.test</code> or <code>superadmin@elora.test</code></p>
+<ol>
+  <li>Open <code>/admin/marketplace/freight</code> → click <strong>Sample template</strong>. The downloaded CSV has the AdBlue Bulk + Pack matrix with multiple rate columns.</li>
+  <li>Re-upload that CSV. The parser auto-detects every rate column and shows a per-column review row.</li>
+  <li>Verify each column's auto-suggestion:
+    <ul>
+      <li>"Bulk …" → unit_type = <code>per_litre</code></li>
+      <li>"Pack Existing …" / "Pack New …" → unit_type = <code>flat_per_consignment</code></li>
+      <li>"… Pre-13Jul25" headers → <code>is_active = false</code> AND <strong>Include</strong> unchecked by default</li>
+      <li>"… Post-14Jul25" headers → <code>is_active = true</code> AND <strong>Include</strong> checked</li>
+    </ul>
+  </li>
+  <li>Pick a warehouse → click <strong>Import N rate sheets</strong>. Confirm toast + Rate Sheets list now shows the imported sheets each with their bracket count.</li>
+  <li>Verify in DB:
+    <pre><code>select s.name, s.unit_type, s.is_active, count(b.id) as brackets
+from marketplace_rate_sheets s
+left join marketplace_rate_sheet_brackets b on b.rate_sheet_id = s.id
+group by s.id order by s.created_at desc;</code></pre>
+  </li>
+  <li>Place a buyer test cart → checkout step 1 → confirm the live freight quote uses the imported brackets.</li>
+</ol>
+
+<h3>8.9 Flow I — Buyer saved-address book (checkout)</h3>
+<p class="meta"><span class="pill">Actors</span><code>buyer1.user@acme.test</code></p>
+<ol>
+  <li>Buyer opens <code>/marketplace/checkout</code>, fills the delivery form.</li>
+  <li>Tick <strong>Save this address for future orders</strong>, optionally label it "Head office", click <strong>Continue</strong>.</li>
+  <li>Verify a row was appended to <code>user_profiles.marketplace_saved_addresses</code> for this user.</li>
+  <li>Cancel the order, return to <code>/marketplace/checkout</code>: the address-book panel now appears above the form with a dropdown + chip for the saved entry. Picking it auto-fills every field.</li>
+  <li>Save the SAME address a second time (same line1+postcode). Verify the array did NOT grow — the existing entry was updated (dedupe rule).</li>
+  <li>Click the trash icon on the chip → confirm dialog → entry removed.</li>
+</ol>
+
+<h3>8.10 Flow J — Admin sees readable site-access answers (not raw UUIDs)</h3>
+<p class="meta"><span class="pill">Actors</span><code>buyer1.user@acme.test</code>, <code>mpadmin@elora.test</code></p>
+<ol>
+  <li>Buyer places an order whose products have at least one boolean + one text checkout question.</li>
+  <li>Admin opens <code>/admin/marketplace/orders/&lt;id&gt;</code>.</li>
+  <li>Verify the <strong>Site-access answers</strong> card renders a clean Q&amp;A list (question text bold, answer below as "Yes" / "No" / typed text) — <strong>NOT</strong> a JSON dump keyed by UUIDs.</li>
+  <li>Warehouse dashboard (<code>/warehouse/orders</code>) under the <em>Site-access answers</em> details summary shows the same Q&amp;A rendering.</li>
+</ol>
+
+<h3>8.11 Flow K — Per-buyer-company Xero contact registration</h3>
+<p class="meta"><span class="pill">Actors</span><code>superadmin@elora.test</code></p>
+<ol>
+  <li>On <code>/admin/marketplace/companies</code>, find a company that shows <strong>Not in Xero</strong>.</li>
+  <li>Click <strong>Register</strong>. Edge Function <code>marketplace_xero_register_contact</code> creates the contact in Xero, stores <code>xero_contact_id</code>, flips <code>xero_invoicing_enabled=true</code>. Badge changes to <strong>Xero on</strong>.</li>
+  <li>Click <strong>Disable</strong> → confirm dialog → <code>xero_invoicing_enabled</code> flips to false BUT <code>xero_contact_id</code> is preserved.</li>
+  <li>Click <strong>Register</strong> again → re-enables WITHOUT creating a duplicate Xero contact (the toast says "already registered in Xero — invoicing re-enabled").</li>
+  <li><strong>Collapsible UI:</strong> the company cards default to collapsed (only name + slug + status pills visible). Click anywhere on the header → body expands with the marketplace toggle / invoice-email / Xero block. <strong>Expand all</strong> / <strong>Collapse all</strong> buttons toggle every visible row.</li>
+</ol>
+
+<h3>8.12 Flow L — Marketplace settings drive checkout values</h3>
+<p class="meta"><span class="pill">Actors</span><code>superadmin@elora.test</code>, <code>buyer1.user@acme.test</code></p>
+<ol>
+  <li>On <code>/admin/marketplace/settings</code> (super_admin), change <strong>GST rate</strong> to <code>0.15</code>, <strong>Min order subtotal</strong> to <code>150</code>, <strong>Currency</strong> to <code>NZD</code>, <strong>Default payment terms</strong> to <code>14</code>, click Save.</li>
+  <li>As <code>buyer1.user@acme.test</code>, open <code>/marketplace/cart</code>. The GST label now reads <strong>GST (15%)</strong> instead of 10%. The order summary in <code>/marketplace/checkout</code> matches.</li>
+  <li>Build a cart whose subtotal is below $150 — proceed to checkout → expect a hard error (toast + inline) <em>"Order subtotal $X is below the $150.00 minimum for this marketplace."</em> No <code>marketplace_orders</code> or <code>marketplace_checkout_sessions</code> row is created.</li>
+  <li>Re-build a cart over $150, complete a PO checkout, approve it. Verify on the resulting Xero invoice that the <strong>DueDate</strong> is exactly 14 days after the issue date and the currency is <code>NZD</code>.</li>
+  <li>Restore the staging defaults (GST 0.10, min 0, AUD, 30 days) before continuing other flows.</li>
+</ol>
+
+<h3>8.13 Flow M — Google Distance Matrix accuracy + caching + fallback</h3>
+<p class="meta"><span class="pill">Actors</span><code>buyer1.user@acme.test</code> · Requires <code>GOOGLE_DISTANCE_MATRIX_API_KEY</code> set</p>
+<ol>
+  <li>Empty the cache: <code>delete from marketplace_distance_cache;</code></li>
+  <li>As the buyer, open <code>/marketplace/checkout</code> and pick a delivery postcode you have NOT used before (e.g. <code>4000</code> Brisbane against an Sydney <code>2000</code> warehouse).</li>
+  <li>Verify a freight quote returns within ~1 second.</li>
+  <li><strong>Cache write check:</strong>
+    <pre><code>select origin_postcode, destination_postcode, distance_km, duration_seconds, provider, status, expires_at
+from marketplace_distance_cache
+where destination_postcode='&lt;tested-postcode&gt;';</code></pre>
+    Exactly one row should exist with <code>provider='google_distance_matrix'</code>, <code>status='ok'</code>, a numeric <code>distance_km</code> within ~2% of the actual Google Maps driving distance for that lane, and <code>expires_at</code> ~24h in the future.
+  </li>
+  <li><strong>Cache hit check:</strong> reload checkout — the second quote should arrive in &lt; 200 ms and the cache row's <code>cached_at</code> should NOT update (we don't refresh on every read, only on miss/expiry).</li>
+  <li><strong>Fallback path:</strong> temporarily wipe the key:
+    <pre><code>supabase secrets unset GOOGLE_DISTANCE_MATRIX_API_KEY
+supabase functions deploy marketplace_freight_quote --no-verify-jwt</code></pre>
+    Empty the cache row for a fresh postcode and request a quote. Verify the quote still returns (haversine × 1.25 fallback) AND the quote response's <code>notes</code> array contains <em>"Live road-distance lookup unavailable; using haversine × 1.25 approximation for &lt;postcode&gt;."</em>. The cache row is NOT written on fallback.
+  </li>
+  <li>Restore the key and redeploy <code>marketplace_freight_quote</code> + <code>marketplace_create_order</code>.</li>
+</ol>
+
+<h3>8.14 Flow N — In-place editing of freight brackets &amp; packaging variants</h3>
+<p class="meta"><span class="pill">Actors</span><code>mpadmin@elora.test</code></p>
+<ol>
+  <li>On <code>/admin/marketplace/freight</code>, expand any rate sheet. Click the <strong>pencil</strong> icon on a bracket row.</li>
+  <li>The row's four cells (From km, To km, Rate, Zone) switch to inline inputs; the action column swaps to a green check + cancel. Edit the rate and click the check. Verify the table re-renders with the new value (no page reload) and that the other rows' Edit / Delete buttons were disabled while editing.</li>
+  <li>On <code>/admin/marketplace/products/&lt;id&gt;</code> (any product with packaging variants), click the <strong>pencil</strong> on a packaging row. The row is replaced with an inline edit panel pre-filled with the current values; the top-right "Add variant" button is hidden. Change price / availability / MOQ, click Save changes. Verify the row re-renders with the new values and the mutation hit <code>update marketplace_product_packaging_prices</code> (not insert) — the row's <code>id</code> should remain stable.</li>
+</ol>
+
+<h3>8.15 Flow O — Product SDS PDF can be opened (signed URL)</h3>
+<p class="meta"><span class="pill">Actors</span><code>mpadmin@elora.test</code></p>
+<ol>
+  <li>On the product editor (<code>/admin/marketplace/products/&lt;id&gt;</code>), upload a small PDF (≤ 10 MB) via <strong>Upload SDS PDF</strong>.</li>
+  <li>Once uploaded, hover the document row: filename, file icon, eye, download and trash buttons all show.</li>
+  <li>Click the filename (or the eye icon) → a new browser tab opens the PDF via a Supabase storage signed URL (the <code>marketplace-product-sds</code> bucket is private; the helper calls <code>createSignedUrl(path, 60)</code>).</li>
+  <li>Click the <strong>download</strong> icon → the same signed URL is opened with the <code>download</code> option set so the browser saves the file (not inline view).</li>
+  <li><strong>Negative check:</strong> sign out → paste the signed URL into a fresh tab AFTER 60 seconds. Storage returns 401/expired — the URL is short-lived by design.</li>
+</ol>
+
+<h3>8.16 Flow P — Pagination on order lists (page size 10)</h3>
+<p class="meta"><span class="pill">Actors</span><code>buyer1.user@acme.test</code>, <code>mpadmin@elora.test</code></p>
+<ol>
+  <li>Seed at least 25 orders for one buyer company (any flow above repeated, or insert directly).</li>
+  <li>As the buyer, open <code>/marketplace/orders</code>. Verify exactly 10 rows render, the page footer shows <em>"Showing 1 to 10 of 25 results"</em> and a 1 · 2 · 3 page selector. Navigating to page 3 shows the remaining 5 rows.</li>
+  <li>Type into the search bar — verify the page resets to 1 (no empty "page 3 of 1" state).</li>
+  <li>Switch the status filter dropdown — verify the page resets to 1.</li>
+  <li>As <code>mpadmin@elora.test</code>, open <code>/admin/marketplace/orders</code>. Same expectations apply: 10 per page, pagination only renders when totalPages &gt; 1, page resets on tab change / search.</li>
+</ol>
+
+<h3>8.17 Flow Q — Customer Pricing per-product collapsible view</h3>
+<p class="meta"><span class="pill">Actors</span><code>mpadmin@elora.test</code></p>
+<ol>
+  <li>Open <code>/admin/marketplace/pricing</code>, pick a customer in the dropdown.</li>
+  <li>Verify products render collapsed by default: each row shows product name + count of packaging sizes + a green "<em>N overrides</em>" pill when overrides exist (or muted "No overrides" otherwise).</li>
+  <li>Click a product header → the row expands and shows every (size × override) row inline. Click again → collapses.</li>
+  <li><strong>Expand all</strong> / <strong>Collapse all</strong> buttons toggle every product card at once.</li>
+  <li>Save / reset an override inside an expanded card — the badge count updates without reload.</li>
+</ol>
+
+<h3>8.18 Flow R — Self-PO suppression for Elora-owned warehouses</h3>
+<p class="meta"><span class="pill">Actors</span><code>buyer1.user@acme.test</code>, <code>mpadmin@elora.test</code></p>
+<ol>
+  <li>Confirm the warehouse routed for the test order has <code>is_supplier_managed = false</code> (per §6.5).</li>
+  <li>Place + approve a PO order (Flow B) against that warehouse.</li>
+  <li><strong>Verify:</strong> the Xero invoice fires normally (PO buyer is the Acme contact), but <strong>no</strong> Xero PO is created against Elora itself — <code>marketplace_orders.xero_po_id</code> stays NULL and <code>marketplace_xero_sync_log</code> shows a <code>skipped</code> row reading <em>"Warehouse &lt;X&gt; is Elora-managed (is_supplier_managed=false); skipping supplier PO creation."</em></li>
+  <li>Switch a different warehouse's <code>is_supplier_managed</code> to <code>true</code>, register it in Xero (per §6.5), route an order through it and approve. <code>xero_po_id</code> is now set on the order; the PO appears in the connected Xero org under that supplier contact.</li>
+</ol>
+
+<hr/>
+
+<h2 id="sec-9">9 · Failure / Edge-Case Flows</h2>
+
+<h3>9.1 Stripe webhook replay</h3>
+<ol>
+  <li>In Stripe Dashboard → Events, find a <code>checkout.session.completed</code> event from Flow A.</li>
+  <li>Click <strong>Send to webhook</strong>.</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li>Webhook responds <code>200</code></li>
+      <li>Function logs (<code>supabase functions logs marketplace_stripe_webhook</code>) contain <code>Replay of Stripe event evt_... — ignored.</code></li>
+      <li>No new order rows created; no duplicate emails sent</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>9.2 Stripe payment failure <em>(deferred-creation contract)</em></h3>
+<ol>
+  <li>Buyer initiates checkout, uses Stripe test card <code>4000 0000 0000 9995</code> (insufficient funds).</li>
+  <li>Stripe blocks the payment.</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li><code>marketplace_integration_log</code> has <code>event_type='payment_failed'</code> row with <code>error_message</code> populated</li>
+      <li>NO row in <code>marketplace_orders</code> for this attempt (order never materialised)</li>
+      <li><code>marketplace_checkout_sessions</code> row still exists with <code>order_id IS NULL</code> and a status that's not 'completed'</li>
+      <li>Buyer's cart is still intact — they can retry without rebuilding it</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>9.3 Stripe session expired</h3>
+<ol>
+  <li>Initiate checkout, abandon the Stripe page until it expires (or trigger via Stripe CLI <code>stripe events resend evt_...</code> with a session-expired event).</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li><code>marketplace_checkout_sessions.status</code> becomes <code>'expired'</code></li>
+      <li>The row's <code>order_id</code> stays NULL — no orphan order</li>
+      <li>Buyer's cart is intact</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>9.4 Mailgun outage simulation</h3>
+<ol>
+  <li>Temporarily set <code>MAILGUN_API_KEY</code> to an invalid value:
+    <pre><code>supabase secrets set MAILGUN_API_KEY=invalid_for_test</code></pre>
+  </li>
+  <li>Run Flow B (PO create).</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li>Order is still created in DB</li>
+      <li><code>marketplace_integration_log</code> has an <code>email_send</code> row with <code>status='failed'</code> and <code>error_message</code></li>
+      <li>User-facing flow is NOT blocked</li>
+    </ul>
+  </li>
+  <li>Restore the real key.</li>
+</ol>
+
+<h3>9.5 Xero token expired</h3>
+<ol>
+  <li>In SQL editor, force expiry:
+    <pre><code>update marketplace_xero_credentials set expires_at = now() - interval '1 minute';</code></pre>
+  </li>
+  <li>Trigger any Xero call (e.g. approve a fresh PO order).</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li><code>marketplace_xero_sync_log</code> shows a <code>token_refresh</code> row immediately before the <code>invoice_create</code></li>
+      <li><code>marketplace_xero_credentials.expires_at</code> is now ~30 min in the future</li>
+      <li>The invoice was created successfully</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>9.6 Xero not connected</h3>
+<ol>
+  <li>Temporarily clear creds:
+    <pre><code>delete from marketplace_xero_credentials;</code></pre>
+  </li>
+  <li>Approve a PO order.</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li>Order moves to <code>approved</code> (DB state durable)</li>
+      <li><code>marketplace_xero_sync_log</code> shows a <code>failed</code> row with a clear "Xero not connected" message</li>
+      <li>From Integrations page, <strong>Retry Xero invoice</strong> is shown for this order</li>
+    </ul>
+  </li>
+  <li>Re-connect Xero and retry; the invoice creates successfully.</li>
+</ol>
+
+<h3>9.7 Freight matrix CSV — parser robustness</h3>
+<p>The multi-column parser (<code>src/lib/freightMatrixCsv.js</code>) runs client-side. Verify each case by pasting the variant into the Bulk Import textarea on <code>/admin/marketplace/freight</code>:</p>
+<table>
+  <thead><tr><th>CSV variant</th><th>Expected result</th></tr></thead>
+  <tbody>
+    <tr><td>No header row / blank file</td><td>Inline warning: "No data rows found."</td></tr>
+    <tr><td>Missing both <code>from_km</code> / <code>to_km</code> headers</td><td>Inline warning: <em>Couldn't find "from_km" or "to_km" headers. Found: …</em></td></tr>
+    <tr><td>Headers as <code>From (Km)</code>, <code>To (Km)</code> (Title Case, spaces, parens)</td><td>Recognised — parses normally</td></tr>
+    <tr><td>Tab-delimited file (no commas)</td><td>Auto-detected; parses normally</td></tr>
+    <tr><td>Rate cell <code>$0.067</code>, <code>$1,234.50</code>, or <code>AUD 12.50</code></td><td>Currency/thousands stripped; parsed as the numeric value</td></tr>
+    <tr><td>Empty rate cell in one column on a row (e.g. Pre-cutover blank on a Post-cutover row)</td><td>That bracket is skipped <em>for that column only</em>; the row still contributes to other columns</td></tr>
+    <tr><td>Row where <code>to_km ≤ from_km</code></td><td>Skipped + warning: "Row N: skipped (to_km ≤ from_km)."</td></tr>
+    <tr><td>Out-of-range marker row (e.g. <code>4001,4100,,,,,</code> — every rate blank)</td><td>Silently skipped (no warning, no brackets added)</td></tr>
+    <tr><td>Pre-cutover header (e.g. <code>Bulk (Pre-13Jul25)</code>)</td><td><code>is_active</code> defaults to false AND the Include checkbox starts unchecked</td></tr>
+    <tr><td><code>Bulk …</code> column header</td><td><code>unit_type = per_litre</code> suggested</td></tr>
+    <tr><td><code>Pack …</code> column header</td><td><code>unit_type = flat_per_consignment</code> suggested</td></tr>
+    <tr><td>Header containing <code>pallet</code> / <code>kg</code> / <code>zone</code></td><td>Matching <code>unit_type</code> suggested</td></tr>
+    <tr><td>Click <strong>Import N rate sheets</strong> without picking a warehouse</td><td>Toast error "Pick a warehouse first" — no DB write</td></tr>
+    <tr><td>Click <strong>Import N rate sheets</strong> with 0 columns included</td><td>Toast error "Pick at least one column to import" — no DB write</td></tr>
+    <tr><td>Edge function rollback (simulate: name an included column with a duplicate name already on the sheet so the second insert collides)</td><td>Every already-created row is rolled back; <code>marketplace_rate_sheets</code> count unchanged from before the import</td></tr>
+  </tbody>
+</table>
+
+<h3>9.8 Order number race</h3>
+<p>In two SQL editor tabs, run inside transactions:</p>
+<pre><code>begin; select marketplace_next_order_number(); -- don't commit yet</code></pre>
+<p>Then in tab 2 the same call. Both must return distinct numbers (no deadlock, no duplicates). Commit both.</p>
+
+<h3>9.9 Xero invoicing disabled for buyer</h3>
+<ol>
+  <li>On <code>/admin/marketplace/companies</code>, click <strong>Disable</strong> for a buyer whose row was previously <strong>Xero on</strong>. Confirm dialog → flips to <em>Xero linked, off</em>.</li>
+  <li>Place + approve a PO order for that buyer.</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li>Order moves to <code>status='approved'</code> (DB state durable)</li>
+      <li><code>marketplace_xero_sync_log</code> shows a <code>skipped</code> row for <code>invoice_create</code> referencing the buyer</li>
+      <li><code>marketplace_orders.xero_invoice_id</code> stays NULL</li>
+      <li>Xero PO still fires (PO is per-warehouse, not gated on buyer's <code>xero_invoicing_enabled</code>)</li>
+    </ul>
+  </li>
+  <li>Re-enable from the Companies page; future approvals for that buyer fire the invoice normally.</li>
+</ol>
+
+<h3>9.10 Stripe webhook with stale checkout_session_id</h3>
+<ol>
+  <li>Manually corrupt a webhook payload's <code>metadata.checkout_session_id</code> to a uuid that doesn't exist (simulate a replayed/forged event).</li>
+  <li>Send to the webhook endpoint.</li>
+  <li><strong>Verify:</strong> webhook returns 200 (so Stripe doesn't retry indefinitely), but no order is materialised. <code>marketplace_integration_log</code> still records the receipt. Function logs include "session &lt;id&gt; not found".</li>
+</ol>
+
+<h3>9.11 Distance Matrix outage / unknown postcode</h3>
+<ol>
+  <li><strong>Google rate-limit / outage simulation:</strong> set <code>GOOGLE_DISTANCE_MATRIX_API_KEY</code> to a syntactically valid but bogus value (e.g. <code>AIzaSyINVALID</code>) → redeploy <code>marketplace_freight_quote</code>. Empty the cache, request a fresh quote. Verify:
+    <ul>
+      <li>Function logs include <em>"Distance Matrix status REQUEST_DENIED"</em> (or similar Google error).</li>
+      <li>The quote still returns (haversine × 1.25 fallback) with the <em>"Live road-distance lookup unavailable…"</em> note.</li>
+      <li>No row is written to <code>marketplace_distance_cache</code> for that lane — fallback is NOT cached so the next request retries Google.</li>
+    </ul>
+  </li>
+  <li><strong>Unknown postcode (LVR codes 1xxx / 8xxx / 9xxx):</strong> request a quote against postcode <code>1500</code>. These are Large Volume Recipient codes with no centroid in <code>marketplace_postcodes</code>. Google may also return <code>ZERO_RESULTS</code> for the bare postcode. Verify the response includes <em>"Unknown postcode 1500; distance defaulted to 0."</em> and <code>distance_km = 0</code> — the checkout surface should show the humanised warning, not a stack trace.</li>
+  <li><strong>Cache expiry:</strong> manually expire a cache row to test refresh:
+    <pre><code>update marketplace_distance_cache set expires_at = now() - interval '1 minute'
+where destination_postcode = '&lt;test-postcode&gt;';</code></pre>
+    Re-request the quote → verify the row is updated (new <code>cached_at</code>, new <code>expires_at</code> ~24h forward) and another Google call happened (check function logs).
+  </li>
+  <li>Restore the real Google key + redeploy <code>marketplace_freight_quote</code> + <code>marketplace_create_order</code>.</li>
+</ol>
+
+<h3>9.12 Min order subtotal gate</h3>
+<ol>
+  <li>Set <code>min_order_amount</code> on settings to <code>200</code>.</li>
+  <li>Build a cart with subtotal exactly <code>199.99</code> (ex-GST). Open checkout → click <strong>Pay</strong>.</li>
+  <li><strong>Verify:</strong> <code>marketplace_create_order</code> returns 400 with a message including the minimum and the current subtotal. NO row in <code>marketplace_orders</code> or <code>marketplace_checkout_sessions</code>. Cart intact.</li>
+  <li>Bump the cart to <code>200.01</code> → checkout succeeds.</li>
+  <li>Reset settings.</li>
+</ol>
+
+<h3>9.13 Xero zero-UUID rejection</h3>
+<p>Xero returns HTTP 200 with <code>HasErrors=true</code> and an all-zero UUID (<code>00000000-0000-0000-0000-000000000000</code>) when invoice validation fails (e.g. missing AccountCode). The shared <code>postToXero</code> helper now detects this and surfaces the underlying error instead of silently persisting the bogus id.</p>
+<ol>
+  <li>Pick a buyer company in the connected Xero org and DEliberately leave <code>creds.revenueAccountCode</code> null AND clear the function's fallback env var so no <code>AccountCode</code> can be resolved (this is a hypothetical — the shipped fallback chain creds → env → hardcoded "200" makes this hard to reproduce naturally; test by patching the shared module locally if needed).</li>
+  <li>Approve a PO order.</li>
+  <li><strong>Verify:</strong>
+    <ul>
+      <li><code>marketplace_xero_sync_log</code> has a <code>failed</code> row for <code>invoice_create</code> whose <code>error_message</code> contains Xero's actual validation error (not <code>"OK"</code>, and the id is NOT <code>00000000-…</code>).</li>
+      <li><code>marketplace_orders.xero_invoice_id</code> stays NULL.</li>
+      <li>The order is still durable at <code>status='approved'</code>; the Integrations page shows <strong>Retry Xero invoice</strong>.</li>
+    </ul>
+  </li>
+  <li>Restore the fallback chain (or set <code>creds.revenue_account_code</code> via the Integrations page) and retry — the invoice creates with a real UUID.</li>
+</ol>
+
+<h3>9.14 Xero tenant switch clears stale contact ids</h3>
+<ol>
+  <li>Pre-condition: connected to Xero Org A; at least one company AND one supplier-managed warehouse have been registered in Org A (both have non-null <code>xero_contact_id</code>); at least one approved order has <code>xero_invoice_id</code> / <code>xero_po_id</code> from Org A.</li>
+  <li>On Integrations, switch active org to Org B (per Flow G).</li>
+  <li><strong>Verify in DB (immediately after switch):</strong>
+    <ul>
+      <li><code>marketplace_xero_credentials.tenant_id</code> = Org B's id</li>
+      <li><strong>Every</strong> row in <code>companies</code> for the seller now has <code>xero_contact_id IS NULL</code> AND <code>xero_invoicing_enabled = false</code></li>
+      <li><strong>Every</strong> row in <code>marketplace_warehouses</code> now has <code>xero_contact_id IS NULL</code></li>
+      <li>For previously approved orders, <code>xero_invoice_id</code> and <code>xero_po_id</code> are NULL (these ids belong to Org A and would 404 against Org B)</li>
+    </ul>
+  </li>
+  <li>Re-register one buyer in Org B from the Companies page → registration succeeds without duplicate-contact warning (because the local id was cleared, the helper does an upsert in Xero by ABN/email).</li>
+</ol>
+
+<hr/>
+
+<h2 id="sec-10">10 · Multi-Tenant Isolation Tests</h2>
+
+<h3>10.1 Pricing override leakage</h3>
+<ol>
+  <li>Acme has a per-customer override on Product X at $5.00. Globex has none (sees list price $7.50).</li>
+  <li>Sign in as <code>buyer2.admin@globex.test</code>, browse to Product X.</li>
+  <li><strong>Verify:</strong> price displayed = $7.50, NOT $5.00.</li>
+</ol>
+
+<h3>10.2 Cross-company order visibility</h3>
+<ol>
+  <li>As <code>buyer2.admin@globex.test</code>, attempt:
+    <pre><code>select * from marketplace_orders where buyer_company_id != '&lt;globex-id&gt;';</code></pre>
+  </li>
+  <li><strong>Verify:</strong> zero rows returned (RLS blocks the read).</li>
+</ol>
+
+<h3>10.3 Buyer admin should NOT see Marketplace Admin tab</h3>
+<ol>
+  <li>Sign in as <code>buyer1.admin@acme.test</code> (an admin of a buyer-only company).</li>
+  <li><strong>Verify:</strong> navigation does NOT include <code>/admin/marketplace/*</code>. <code>is_marketplace_admin()</code> returns <code>false</code>.</li>
+</ol>
+
+<h3>10.4 Warehouse user scope</h3>
+<ol>
+  <li>Create a second warehouse and DO NOT map <code>warehouse@elora.test</code> to it.</li>
+  <li>Create an order routed to that second warehouse.</li>
+  <li>As <code>warehouse@elora.test</code>, open <code>/warehouse/orders</code>.</li>
+  <li><strong>Verify:</strong> the second warehouse's order is NOT visible.</li>
+</ol>
+
+<h3>10.5 PO PDF storage isolation</h3>
+<ol>
+  <li>As <code>buyer2.admin@globex.test</code>, attempt:
+    <pre><code>await supabase.storage.from('marketplace-po-uploads').download('&lt;acme-company-id&gt;/.../.pdf');</code></pre>
+  </li>
+  <li><strong>Verify:</strong> download is denied by storage RLS.</li>
+</ol>
+
+<h3>10.6 Saved addresses are strictly per-user</h3>
+<ol>
+  <li>As <code>buyer1.user@acme.test</code>, save 2 addresses through checkout.</li>
+  <li>As <code>buyer1.admin@acme.test</code> (same company, different user), open <code>/marketplace/checkout</code>.</li>
+  <li><strong>Verify:</strong> the address-book panel is empty (or shows only this user's own saved addresses). Querying:
+    <pre><code>select id, marketplace_saved_addresses from user_profiles where id = auth.uid();</code></pre>
+    returns ONLY the calling user's row (existing <code>user_profiles</code> RLS — confirmed).</li>
+</ol>
+
+<h3>10.7 Checkout session ownership</h3>
+<ol>
+  <li>As <code>buyer1.user@acme.test</code>, start a Stripe checkout — note the returned <code>checkout_session_id</code>.</li>
+  <li>Sign out, sign in as <code>buyer2.admin@globex.test</code>.</li>
+  <li>Call <code>marketplace_stripe_create_checkout</code> with that <code>checkout_session_id</code>.</li>
+  <li><strong>Verify:</strong> <code>403 Forbidden — checkout session belongs to another user</code>. No Stripe session created.</li>
+</ol>
+
+<h3>10.8 Xero contact registration restricted to super_admin</h3>
+<ol>
+  <li>Sign in as <code>mpadmin@elora.test</code> (marketplace admin, NOT super_admin).</li>
+  <li>Open <code>/admin/marketplace/companies</code>.</li>
+  <li><strong>Verify:</strong> the per-row <strong>Register</strong> / <strong>Disable</strong> button is NOT rendered.</li>
+  <li>Call <code>marketplace_xero_register_contact</code> directly with the user's JWT:
+    <pre><code>curl -X POST https://&lt;ref&gt;.functions.supabase.co/marketplace_xero_register_contact \
+  -H "Authorization: Bearer &lt;mpadmin-jwt&gt;" -d '{"company_id":"&lt;buyer-id&gt;"}'</code></pre>
+  </li>
+  <li><strong>Verify:</strong> <code>403 Forbidden — Elora super_admin required</code>. No DB change.</li>
+</ol>
+
+<hr/>
+
+<h2 id="sec-11">11 · Production Cutover Verification</h2>
+<p>Execute against the <strong>production</strong> Supabase project ONLY after staging passes §§7–10.</p>
+<table>
+  <thead><tr><th>#</th><th>Step</th></tr></thead>
+  <tbody>
+    <tr><td>11.1</td><td>Repeat §2 (project secrets) with PRODUCTION values: Stripe live keys, Xero production app, production Mailgun key + verified domain, production <code>MARKETPLACE_PORTAL_URL</code></td></tr>
+    <tr><td>11.2</td><td>Apply migrations (§3) on the production DB</td></tr>
+    <tr><td>11.3</td><td>Deploy all 11 Edge Functions (§4) to production</td></tr>
+    <tr><td>11.4</td><td>Register the Stripe LIVE webhook against the production Edge Function URL; copy live webhook secret into <code>STRIPE_WEBHOOK_SECRET</code></td></tr>
+    <tr><td>11.5</td><td>Update Xero app's redirect URI to the production callback; from production admin, click <strong>Connect Xero</strong> and complete OAuth</td></tr>
+    <tr><td>11.6</td><td>Seed production AusPost postcode dataset</td></tr>
+    <tr><td>11.7</td><td>Production Distance Matrix: confirm Jonny's production Google Cloud project has billing enabled, Distance Matrix API enabled, API key restricted to <em>Distance Matrix API only</em>. Set <code>GOOGLE_DISTANCE_MATRIX_API_KEY</code> on the production Supabase project. Smoke-test one freight quote and confirm a row was written to <code>marketplace_distance_cache</code> with <code>provider='google_distance_matrix'</code>.</td></tr>
+    <tr><td>11.8</td><td>Configure the Google Cloud budget alert (recommended $50/mo) so the client gets an email if usage ever exceeds the free tier — paperwork only, no code change.</td></tr>
+    <tr><td>11.9</td><td>Upload the live freight matrix CSV</td></tr>
+    <tr><td>11.10</td><td>Populate production marketplace settings (currency, gst_rate, min_order_amount, default_payment_terms_days, support email/phone) via <code>/admin/marketplace/settings</code></td></tr>
+    <tr><td>11.11</td><td>Register every live buyer company in production Xero (Customer Marketplace Access) AND every supplier-managed warehouse (Warehouses → Register in Xero)</td></tr>
+    <tr><td>11.12</td><td>Run Flow A (Stripe happy path) end-to-end with a real card — small amount, e.g. one $1 item — to prove live payment → Xero PO → email</td></tr>
+    <tr><td>11.13</td><td>Refund that real-money test order in Stripe; confirm <code>charge.refunded</code> is logged in <code>marketplace_integration_log</code></td></tr>
+    <tr><td>11.14</td><td>Run Flow B (PO happy path) with a real internal buyer company; confirm Xero invoice in the production Xero org is correct, DueDate matches the configured payment terms, and no <code>00000000-…</code> uuids land on the order</td></tr>
+    <tr><td>11.15</td><td>Set up daily monitoring: query <code>marketplace_integration_log</code> filtered to <code>status='failed'</code> over the last 24h; same for <code>marketplace_xero_sync_log</code></td></tr>
+  </tbody>
+</table>
+
+<h3>11.16 Pass criteria</h3>
+<ul class="check-list">
+  <li><span class="checkbox"></span>Live Stripe payment succeeds end-to-end</li>
+  <li><span class="checkbox"></span>Live Xero invoice + PO created in production Xero (real uuids, not <code>00000000-…</code>)</li>
+  <li><span class="checkbox"></span>Live refund event captured in integration log</li>
+  <li><span class="checkbox"></span>A live freight quote populates a row in <code>marketplace_distance_cache</code> with <code>provider='google_distance_matrix'</code></li>
+  <li><span class="checkbox"></span>No <code>status='failed'</code> rows in <code>marketplace_integration_log</code> for the past 1 hour after cutover</li>
+</ul>
+
+<hr/>
+
+<h2 id="sec-12">12 · Sign-Off Checklist</h2>
+<p>Tick every box. Any unticked box blocks production go-live.</p>
+
+<h4>Setup</h4>
+<ul class="check-list">
+  <li><span class="checkbox"></span>All 8 required Supabase project secrets set (no <code>.env</code> for M2): <code>MAILGUN_API_KEY</code>, <code>MAILGUN_DOMAIN</code>, <code>MARKETPLACE_PORTAL_URL</code>, <code>XERO_CLIENT_ID</code>, <code>XERO_CLIENT_SECRET</code>, <code>XERO_REDIRECT_URI</code>, <code>STRIPE_SECRET_KEY</code>, <code>STRIPE_WEBHOOK_SECRET</code></li>
+  <li><span class="checkbox"></span><code>GOOGLE_DISTANCE_MATRIX_API_KEY</code> set (or fallback-only mode accepted in writing)</li>
+  <li><span class="checkbox"></span>All M2 migrations applied through <code>20260515000001_marketplace_distance_cache.sql</code>; all marketplace tables have RLS</li>
+  <li><span class="checkbox"></span>All M2 Edge Functions deployed, two with <code>--no-verify-jwt</code> (<code>marketplace_xero_oauth_callback</code>, <code>marketplace_stripe_webhook</code>); functions importing <code>_shared/marketplaceFreight.ts</code> or <code>_shared/marketplaceDistance.ts</code> were re-deployed after the shared changes</li>
+  <li><span class="checkbox"></span>Stripe webhook registered with 7 subscribed events; test ping returns 200</li>
+  <li><span class="checkbox"></span>Xero connected with the NEW granular scopes (<code>accounting.invoices</code>, not <code>accounting.transactions</code>); <code>marketplace_xero_credentials</code> populated</li>
+  <li><span class="checkbox"></span>At least one buyer company registered in Xero via Customer Marketplace Access; every supplier-managed warehouse registered too; every Elora-owned warehouse has <code>is_supplier_managed = false</code></li>
+  <li><span class="checkbox"></span><code>marketplace_settings</code> row id=1 populated (currency, GST rate, min order, payment terms, support contact)</li>
+  <li><span class="checkbox"></span>Mailgun sending domain (<code>eloracomplienceprotal.com</code>) verified; test email delivers; sandbox domain not in use</li>
+  <li><span class="checkbox"></span>At least one freight rate sheet exists with brackets covering 0 km onwards</li>
+</ul>
+
+<h4>Functional flows (§8)</h4>
+<ul class="check-list">
+  <li><span class="checkbox"></span>A — Stripe happy path (deferred order creation; row only exists after webhook)</li>
+  <li><span class="checkbox"></span>B — PO happy path with approval (Xero invoice fires only when buyer is <code>xero_invoicing_enabled</code>)</li>
+  <li><span class="checkbox"></span>C — PO rejection email</li>
+  <li><span class="checkbox"></span>D — Order cancellation</li>
+  <li><span class="checkbox"></span>E — Status transition guards</li>
+  <li><span class="checkbox"></span>F — Xero idempotency</li>
+  <li><span class="checkbox"></span>G — Xero multi-org: connect another, switch active, disconnect</li>
+  <li><span class="checkbox"></span>H — Freight matrix bulk import (multi-column, per-column review)</li>
+  <li><span class="checkbox"></span>I — Buyer saved-address book (save / pick / dedupe / delete)</li>
+  <li><span class="checkbox"></span>J — Admin sees readable Q&amp;A site-access answers (not raw UUIDs)</li>
+  <li><span class="checkbox"></span>K — Per-buyer-company Xero contact registration (register / disable / re-enable without dupes); company cards are collapsible with Expand all / Collapse all</li>
+  <li><span class="checkbox"></span>L — Marketplace settings drive checkout: GST percent, currency, min order gate, Xero invoice DueDate</li>
+  <li><span class="checkbox"></span>M — Google Distance Matrix: real km on cache miss, instant hit on repeat, fallback note on outage, no cache row written on fallback</li>
+  <li><span class="checkbox"></span>N — Inline edit works for both freight brackets and packaging variants (Pencil → inline form → Save updates the same row id)</li>
+  <li><span class="checkbox"></span>O — Product SDS PDF opens via short-lived Supabase signed URL (eye / filename / download icons)</li>
+  <li><span class="checkbox"></span>P — Buyer Orders and Admin Orders paginate at 10 per page; page resets on filter / search change</li>
+  <li><span class="checkbox"></span>Q — Customer Pricing page collapses by product with override-count badge and Expand all / Collapse all</li>
+  <li><span class="checkbox"></span>R — Elora-owned warehouses (<code>is_supplier_managed=false</code>) skip Xero PO creation; supplier-managed warehouses create one</li>
+</ul>
+
+<h4>Failure flows (§9)</h4>
+<ul class="check-list">
+  <li><span class="checkbox"></span>Stripe webhook replay → 200, no duplication</li>
+  <li><span class="checkbox"></span>Stripe <code>payment_failed</code> logged; NO orphan order; cart intact</li>
+  <li><span class="checkbox"></span>Stripe <code>session.expired</code> recorded; <code>order_id</code> on session stays NULL</li>
+  <li><span class="checkbox"></span>Mailgun outage → order still placed, email failure logged</li>
+  <li><span class="checkbox"></span>Xero token expiry triggers refresh inside 60s window</li>
+  <li><span class="checkbox"></span>Xero disconnected → order durable, retry available; auto-switch to sibling org on disconnect</li>
+  <li><span class="checkbox"></span>Freight matrix parser — every variant in 9.7 (tab/comma, currency, blank cells, pre-cutover defaults, malformed rows, rollback)</li>
+  <li><span class="checkbox"></span>Order number race — no duplicates</li>
+  <li><span class="checkbox"></span>Approve PO for buyer with <code>xero_invoicing_enabled=false</code> → order approves, Xero invoice skipped + logged</li>
+  <li><span class="checkbox"></span>Webhook with unknown <code>checkout_session_id</code> → 200, no order materialised, log captured</li>
+  <li><span class="checkbox"></span>Distance Matrix outage / unknown postcode — fallback to haversine × 1.25 with a clear note; cache row NOT written; cache TTL refresh on next miss</li>
+  <li><span class="checkbox"></span>Min order subtotal gate rejects sub-threshold checkouts before any DB row is created</li>
+  <li><span class="checkbox"></span>Xero zero-UUID rejection — <code>00000000-…</code> never persists on an order; the real validation error surfaces in <code>marketplace_xero_sync_log</code></li>
+  <li><span class="checkbox"></span>Xero tenant switch clears <code>companies.xero_contact_id</code>, <code>marketplace_warehouses.xero_contact_id</code> and order-level Xero ids</li>
+</ul>
+
+<h4>Isolation (§10)</h4>
+<ul class="check-list">
+  <li><span class="checkbox"></span>Pricing overrides do NOT leak across companies</li>
+  <li><span class="checkbox"></span>Cross-company order read denied by RLS</li>
+  <li><span class="checkbox"></span>Buyer-company admin does NOT see Marketplace Admin tab</li>
+  <li><span class="checkbox"></span>Warehouse user only sees their warehouse's orders</li>
+  <li><span class="checkbox"></span>PO PDF download denied across companies</li>
+  <li><span class="checkbox"></span>Saved addresses are strictly per-user (same company, different user → empty book)</li>
+  <li><span class="checkbox"></span>Checkout session ownership enforced — another user can't pay it</li>
+  <li><span class="checkbox"></span>Xero contact registration is super_admin only; marketplace admins get 403</li>
+</ul>
+
+<h4>Production (§11)</h4>
+<ul class="check-list">
+  <li><span class="checkbox"></span>Production secrets set</li>
+  <li><span class="checkbox"></span>Production migrations applied</li>
+  <li><span class="checkbox"></span>Production functions deployed</li>
+  <li><span class="checkbox"></span>Live Stripe + Xero verified with a real low-value order</li>
+  <li><span class="checkbox"></span>Monitoring query saved</li>
+</ul>
+
+<p style="margin-top: 32px;"><strong>Signed off by:</strong> ________________ &nbsp;&nbsp; <strong>Date:</strong> ________________</p>
+
+<hr/>
+<p class="meta" style="text-align:center; margin-top: 32px;">End of M2 test plan.</p>
+
+</body>
+</html>

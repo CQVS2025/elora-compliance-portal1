@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Store, Package, Building2, Warehouse, BadgeDollarSign, ShieldCheck, AlertTriangle, Save } from 'lucide-react';
+import { Store, Package, Building2, Warehouse, BadgeDollarSign, ShieldCheck, AlertTriangle, Save, Receipt, Plug } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -72,6 +72,22 @@ export default function MarketplaceAdminDashboard() {
       icon: Warehouse,
       stat: `${warehouses.filter((w) => w.is_active).length}`,
       statLabel: 'active',
+    },
+    {
+      title: 'Orders',
+      description: 'Approve POs, review payments, and track fulfilment.',
+      href: '/admin/marketplace/orders',
+      icon: Receipt,
+      stat: '',
+      statLabel: 'open queue',
+    },
+    {
+      title: 'Integrations',
+      description: 'Xero connection, Stripe webhook log, email events.',
+      href: '/admin/marketplace/integrations',
+      icon: Plug,
+      stat: '',
+      statLabel: 'audit log',
     },
   ];
 
@@ -217,7 +233,7 @@ function SellerCompanyPanel({ settings, companies, className }) {
       <CardContent>
         <div className="flex items-center gap-2 flex-wrap">
           <Select value={picked} onValueChange={setPicked}>
-            <SelectTrigger className="w-[260px]">
+            <SelectTrigger className="w-full sm:w-[260px]">
               <SelectValue placeholder="Choose a company…" />
             </SelectTrigger>
             <SelectContent>

@@ -207,6 +207,13 @@ export const queryKeys = {
       'cart',
       userId,
     ],
+    marketplaceSavedAddresses: (companyId, userId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'savedAddresses',
+      userId,
+    ],
     marketplaceCompanySettings: (companyId, targetCompanyId) => [
       'tenant',
       companyId,
@@ -247,6 +254,76 @@ export const queryKeys = {
       companyId,
       'marketplace',
       'companies',
+    ],
+    // Orders
+    marketplaceBuyerOrders: (companyId, filters = {}) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'buyerOrders',
+      filters,
+    ],
+    marketplaceBuyerOrder: (companyId, orderId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'buyerOrder',
+      orderId,
+    ],
+    marketplaceAdminOrders: (companyId, filters = {}) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'adminOrders',
+      filters,
+    ],
+    marketplaceAdminOrder: (companyId, orderId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'adminOrder',
+      orderId,
+    ],
+    marketplaceWarehouseOrders: (companyId, warehouseId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'warehouseOrders',
+      warehouseId,
+    ],
+    // Freight
+    marketplaceProductRateSheets: (companyId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'productRateSheets',
+    ],
+    marketplaceRateSheets: (companyId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'rateSheets',
+    ],
+    marketplaceRateSheet: (companyId, sheetId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'rateSheet',
+      sheetId,
+    ],
+    // Integrations
+    marketplaceIntegrationLog: (companyId, filters = {}) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'integrationLog',
+      filters,
+    ],
+    marketplaceXeroCredentials: (companyId) => [
+      'tenant',
+      companyId,
+      'marketplace',
+      'xeroCredentials',
     ],
   },
   

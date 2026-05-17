@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -22,9 +22,15 @@ import {
   ShoppingCart,
   ChevronDown,
   Compass,
+  Receipt,
+  Truck,
+  Plug,
+  Settings,
 } from 'lucide-react';
 import { useAvailableTabs, usePermissions } from '@/components/auth/PermissionGuard';
 import { useMarketplaceAccess } from '@/hooks/useMarketplaceAccess';
+import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   SidebarGroup,
@@ -71,7 +77,14 @@ const INTELLIGENCE_TABS = [
 
 const MARKETPLACE_BUYER_ITEM = { value: 'marketplace', label: 'Marketplace', icon: Store, path: '/marketplace' };
 const MARKETPLACE_CART_ITEM = { value: 'marketplace-cart', label: 'My Cart', icon: ShoppingCart, path: '/marketplace/cart' };
-const MARKETPLACE_ADMIN_ITEM = { value: 'marketplace-admin', label: 'Marketplace Admin', icon: Store, path: '/admin/marketplace', showNewBadge: true };
+const MARKETPLACE_ORDERS_ITEM = { value: 'marketplace-orders', label: 'My Orders', icon: Receipt, path: '/marketplace/orders' };
+const MARKETPLACE_ADMIN_ITEM = { value: 'marketplace-admin', label: 'Marketplace Admin', icon: Store, path: '/admin/marketplace' };
+const MARKETPLACE_ADMIN_ORDERS_ITEM = { value: 'marketplace-admin-orders', label: 'Orders', icon: Receipt, path: '/admin/marketplace/orders' };
+const MARKETPLACE_ADMIN_INTEGRATIONS_ITEM = { value: 'marketplace-admin-integrations', label: 'Integrations', icon: Plug, path: '/admin/marketplace/integrations' };
+const MARKETPLACE_ADMIN_SETTINGS_ITEM = { value: 'marketplace-admin-settings', label: 'Settings', icon: Settings, path: '/admin/marketplace/settings' };
+const MARKETPLACE_ADMIN_FREIGHT_ITEM = { value: 'marketplace-admin-freight', label: 'Freight', icon: Truck, path: '/admin/marketplace/freight' };
+const MARKETPLACE_ADMIN_FREIGHT_PRODUCTS_ITEM = { value: 'marketplace-admin-freight-products', label: 'Per-product setup', icon: Truck, path: '/admin/marketplace/freight/products' };
+const WAREHOUSE_DISPATCH_ITEM = { value: 'warehouse-orders', label: 'Dispatch', icon: Truck, path: '/warehouse/orders' };
 
 /**
  * Renders a single nav item with optional "New" badge.
@@ -232,7 +245,14 @@ export default function NavMain() {
   const showDashboard = effectiveTabValues.includes('dashboard');
   const isMarketplaceActive = currentPath === '/marketplace' || currentPath.startsWith('/marketplace/products');
   const isMarketplaceCartActive = currentPath === '/marketplace/cart';
-  const isMarketplaceAdminActive = currentPath.startsWith('/admin/marketplace');
+  const isMarketplaceOrdersActive = currentPath === '/marketplace/orders' || currentPath.startsWith('/marketplace/orders/');
+  const isMarketplaceAdminActive = currentPath === '/admin/marketplace';
+  const isMarketplaceAdminOrdersActive = currentPath.startsWith('/admin/marketplace/orders');
+  const isMarketplaceAdminIntegrationsActive = currentPath.startsWith('/admin/marketplace/integrations');
+  const isMarketplaceAdminFreightActive = currentPath === '/admin/marketplace/freight';
+  const isMarketplaceAdminFreightProductsActive = currentPath.startsWith('/admin/marketplace/freight/products');
+  const isMarketplaceAdminSettingsActive = currentPath.startsWith('/admin/marketplace/settings');
+  const isWarehouseDispatchActive = currentPath.startsWith('/warehouse/');
 
   // Resolve which group should be open at first mount based on the current
   // route, falling back to "navigation". After mount, the user controls
@@ -288,15 +308,69 @@ export default function NavMain() {
         >
           {/* Marketplace tab is visible to admins (preview) AND buyers. */}
           <NavItem item={MARKETPLACE_BUYER_ITEM} isActive={isMarketplaceActive} onNavigate={navigate} />
-          {/* My Cart only matters for users who can actually shop. */}
+          {/* Shopping-only items: cart + my orders */}
           {marketplaceCanShop && (
-            <NavItem item={MARKETPLACE_CART_ITEM} isActive={isMarketplaceCartActive} onNavigate={navigate} />
+            <>
+              <NavItem item={MARKETPLACE_CART_ITEM} isActive={isMarketplaceCartActive} onNavigate={navigate} />
+              <NavItem item={MARKETPLACE_ORDERS_ITEM} isActive={isMarketplaceOrdersActive} onNavigate={navigate} />
+            </>
           )}
+          {/* Admin-only items */}
           {marketplaceCanAdminister && (
-            <NavItem item={MARKETPLACE_ADMIN_ITEM} isActive={isMarketplaceAdminActive} onNavigate={navigate} />
+            <>
+              <NavItem item={MARKETPLACE_ADMIN_ITEM} isActive={isMarketplaceAdminActive} onNavigate={navigate} />
+              <NavItem item={MARKETPLACE_ADMIN_ORDERS_ITEM} isActive={isMarketplaceAdminOrdersActive} onNavigate={navigate} />
+              <NavItem item={MARKETPLACE_ADMIN_FREIGHT_ITEM} isActive={isMarketplaceAdminFreightActive} onNavigate={navigate} />
+              <NavItem item={MARKETPLACE_ADMIN_FREIGHT_PRODUCTS_ITEM} isActive={isMarketplaceAdminFreightProductsActive} onNavigate={navigate} />
+              <NavItem item={MARKETPLACE_ADMIN_INTEGRATIONS_ITEM} isActive={isMarketplaceAdminIntegrationsActive} onNavigate={navigate} />
+              <NavItem item={MARKETPLACE_ADMIN_SETTINGS_ITEM} isActive={isMarketplaceAdminSettingsActive} onNavigate={navigate} />
+            </>
           )}
         </CollapsibleGroup>
       )}
+
+      {/* Warehouse group — only visible to users mapped to a warehouse via marketplace_warehouse_users. */}
+      <WarehouseGroup
+        openGroup={openGroup}
+        toggle={toggle}
+        setOpenGroup={setOpenGroup}
+        isActive={isWarehouseDispatchActive}
+        navigate={navigate}
+      />
     </>
+  );
+}
+
+// ============================================================================
+// Warehouse group — shown only when the user is mapped to at least one
+// warehouse. Lightweight check via Supabase from inside this component so it
+// doesn't slow down NavMain rendering for the 99% of users who aren't
+// warehouse staff.
+// ============================================================================
+function WarehouseGroup({ openGroup, toggle, setOpenGroup, isActive, navigate }) {
+  const { user } = useAuth();
+  const [hasWarehouse, setHasWarehouse] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    if (!user?.id) { setHasWarehouse(false); return; }
+    supabase
+      .from('marketplace_warehouse_users')
+      .select('warehouse_id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .then(({ count }) => { if (alive) setHasWarehouse((count ?? 0) > 0); });
+    return () => { alive = false; };
+  }, [user?.id]);
+
+  if (!hasWarehouse) return null;
+  return (
+    <CollapsibleGroup
+      label="Warehouse"
+      groupIcon={Truck}
+      isOpen={openGroup === 'warehouse'}
+      onToggle={() => toggle('warehouse')}
+      onForceOpen={() => setOpenGroup('warehouse')}
+    >
+      <NavItem item={WAREHOUSE_DISPATCH_ITEM} isActive={isActive} onNavigate={navigate} />
+    </CollapsibleGroup>
   );
 }

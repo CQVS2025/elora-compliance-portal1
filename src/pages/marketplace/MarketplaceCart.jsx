@@ -1,16 +1,17 @@
 import React, { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { ShoppingCart, Trash2, Plus, Minus, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import {
   cartOptions,
   buyerCatalogOptions,
+  marketplaceSettingsOptions,
 } from '@/query/options/marketplace';
 import {
   useUpdateCartQuantity,
@@ -29,12 +30,16 @@ import { HazardBadge } from '@/components/marketplace/HazardBadge';
  * changes propagate immediately to live carts.
  */
 export default function MarketplaceCart() {
+  const navigate = useNavigate();
   const { userProfile, user } = useAuth();
   const companyId = userProfile?.company_id;
   const userId = user?.id;
 
   const { data: items = [], isLoading } = useQuery(cartOptions(companyId, userId));
   const { data: catalog = [] } = useQuery(buyerCatalogOptions(companyId));
+  const { data: settings } = useQuery(marketplaceSettingsOptions());
+  const gstRate = Number(settings?.gst_rate ?? 0.10);
+  const gstPercentLabel = `${(gstRate * 100).toFixed(gstRate * 100 % 1 === 0 ? 0 : 1)}%`;
 
   const updateQty = useUpdateCartQuantity(companyId, userId);
   const removeItem = useRemoveFromCart(companyId, userId);
@@ -69,7 +74,7 @@ export default function MarketplaceCart() {
   }, [items, priceLookup]);
 
   const totalExGst = enriched.reduce((sum, it) => sum + (it.subtotal?.lineSubtotalExGst ?? 0), 0);
-  const gstEstimate = totalExGst * 0.10;
+  const gstEstimate = totalExGst * gstRate;
   const grandTotalEstimate = totalExGst + gstEstimate;
 
   const handleQtyChange = async (cartItemId, quantity) => {
@@ -175,6 +180,7 @@ export default function MarketplaceCart() {
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => handleQtyChange(item.id, Math.max(1, item.quantity - 1))}
+                        disabled={updateQty.isPending || removeItem.isPending}
                       >
                         <Minus className="w-3.5 h-3.5" />
                       </Button>
@@ -184,10 +190,20 @@ export default function MarketplaceCart() {
                         value={item.quantity}
                         onChange={(e) => handleQtyChange(item.id, Math.max(0, Number(e.target.value) || 0))}
                         className="w-16 h-8 text-center"
+                        disabled={updateQty.isPending}
                       />
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleQtyChange(item.id, item.quantity + 1)}>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleQtyChange(item.id, item.quantity + 1)}
+                        disabled={updateQty.isPending || removeItem.isPending}
+                      >
                         <Plus className="w-3.5 h-3.5" />
                       </Button>
+                      {updateQty.isPending && (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground ml-1" />
+                      )}
                     </div>
                   </div>
                   <div className="col-span-4 sm:col-span-3 text-right">
@@ -229,7 +245,7 @@ export default function MarketplaceCart() {
                   <span>{formatAUD(totalExGst)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">GST (10%, est.)</span>
+                  <span className="text-muted-foreground">GST ({gstPercentLabel}, est.)</span>
                   <span className="text-muted-foreground">{formatAUD(gstEstimate)}</span>
                 </div>
                 <div className="flex justify-between">
@@ -241,11 +257,15 @@ export default function MarketplaceCart() {
                   <span>Estimated total</span>
                   <span>{formatAUD(grandTotalEstimate)}</span>
                 </div>
-                <Button className="w-full mt-3" disabled title="Checkout arrives in the next release">
+                <Button
+                  className="w-full mt-3"
+                  onClick={() => navigate('/marketplace/checkout')}
+                  disabled={enriched.some((it) => !it.priceRow)}
+                >
                   Continue to checkout
                 </Button>
                 <p className="text-[11px] text-muted-foreground text-center">
-                  Checkout, freight quoting, payments and Xero invoicing land in the next milestone.
+                  Freight, GST and payment method are confirmed on the next step.
                 </p>
               </CardContent>
             </Card>

@@ -12,7 +12,7 @@
  */
 
 import { useMutation } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { supabase, callEdgeFunction } from '@/lib/supabase';
 import { queryClientInstance } from '@/lib/query-client';
 import { queryKeys } from '../keys';
 
@@ -112,6 +112,104 @@ export function useClearCart(companyId, userId) {
 }
 
 // ============================================================================
+// Per-user saved delivery addresses (address book on checkout)
+// ============================================================================
+
+function genId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `addr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Append a new address to the current user's marketplace_saved_addresses
+ * array. The whole array is read, the new entry is pushed (deduped by
+ * line1+postcode), and the array is written back. Concurrent writes from
+ * two tabs are not handled — fine for an interactive checkout use case.
+ */
+export function useSaveDeliveryAddress(companyId, userId) {
+  return useMutation({
+    mutationFn: async (address) => {
+      if (!userId) throw new Error('Not signed in');
+
+      const { data: row, error: readErr } = await supabase
+        .from('user_profiles')
+        .select('marketplace_saved_addresses')
+        .eq('id', userId)
+        .maybeSingle();
+      if (readErr) throw readErr;
+
+      const existing = Array.isArray(row?.marketplace_saved_addresses)
+        ? row.marketplace_saved_addresses
+        : [];
+
+      // Dedupe — collapse onto an existing entry that matches line1 + postcode
+      const matchIdx = existing.findIndex(
+        (a) =>
+          String(a?.line1 ?? '').trim().toLowerCase() === String(address.line1 ?? '').trim().toLowerCase() &&
+          String(a?.postcode ?? '').trim() === String(address.postcode ?? '').trim()
+      );
+
+      const cleaned = {
+        id: matchIdx >= 0 ? existing[matchIdx].id : genId(),
+        label: (address.label ?? '').trim() || (address.suburb ?? '').trim() || 'Saved address',
+        line1: address.line1 ?? '',
+        line2: address.line2 ?? '',
+        suburb: address.suburb ?? '',
+        state: address.state ?? '',
+        postcode: address.postcode ?? '',
+        contact_name: address.contact_name ?? '',
+        contact_phone: address.contact_phone ?? '',
+        created_at: matchIdx >= 0 ? existing[matchIdx].created_at : new Date().toISOString(),
+      };
+
+      const next = matchIdx >= 0
+        ? existing.map((a, i) => (i === matchIdx ? cleaned : a))
+        : [cleaned, ...existing];
+
+      const { error: writeErr } = await supabase
+        .from('user_profiles')
+        .update({ marketplace_saved_addresses: next })
+        .eq('id', userId);
+      if (writeErr) throw writeErr;
+      return cleaned;
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceSavedAddresses(companyId, userId),
+      });
+    },
+  });
+}
+
+export function useDeleteSavedAddress(companyId, userId) {
+  return useMutation({
+    mutationFn: async (addressId) => {
+      if (!userId) throw new Error('Not signed in');
+      const { data: row, error: readErr } = await supabase
+        .from('user_profiles')
+        .select('marketplace_saved_addresses')
+        .eq('id', userId)
+        .maybeSingle();
+      if (readErr) throw readErr;
+      const existing = Array.isArray(row?.marketplace_saved_addresses)
+        ? row.marketplace_saved_addresses
+        : [];
+      const next = existing.filter((a) => a?.id !== addressId);
+      const { error: writeErr } = await supabase
+        .from('user_profiles')
+        .update({ marketplace_saved_addresses: next })
+        .eq('id', userId);
+      if (writeErr) throw writeErr;
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceSavedAddresses(companyId, userId),
+      });
+    },
+  });
+}
+
+// ============================================================================
 // Admin: Marketplace-wide settings (seller company designation, GST defaults)
 // ============================================================================
 
@@ -160,6 +258,125 @@ export function useUpdateCompanyMarketplace(companyId) {
     onSuccess: () => {
       queryClientInstance.invalidateQueries({
         queryKey: queryKeys.tenant.marketplaceCompanies(companyId),
+      });
+    },
+  });
+}
+
+/**
+ * Register or unregister a buyer company in Xero. Super_admin only — the
+ * Edge Function enforces it. Registering creates a Xero Contact (or reuses
+ * the existing xero_contact_id) and sets xero_invoicing_enabled=true.
+ * Unregistering only flips xero_invoicing_enabled to false; the Xero
+ * contact itself is preserved so re-enabling doesn't duplicate it.
+ *
+ * Pass `details` to persist the rich xero_contact_details payload (ABN,
+ * addresses, phone, primary person, …) before the upsert.
+ */
+export function useRegisterCompanyInXero(companyId) {
+  return useMutation({
+    mutationFn: async ({ targetCompanyId, enabled = true, details }) => {
+      return await callEdgeFunction('marketplace_xero_register_contact', {
+        company_id: targetCompanyId,
+        enabled,
+        ...(details ? { details } : {}),
+      });
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceCompanies(companyId),
+      });
+    },
+  });
+}
+
+/**
+ * Push an update to an already-linked Xero contact. Used by the
+ * "Edit Xero details" dialog on the Customer Marketplace Access page.
+ */
+export function useUpdateCompanyXeroContact(companyId) {
+  return useMutation({
+    mutationFn: async ({ targetCompanyId, details }) => {
+      return await callEdgeFunction('marketplace_xero_update_contact', {
+        company_id: targetCompanyId,
+        details,
+      });
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceCompanies(companyId),
+      });
+    },
+  });
+}
+
+/**
+ * Archive a buyer company's Xero contact (Xero soft-delete) AND clear the
+ * local link so the row falls back to "Not in Xero". The buyer's
+ * marketplace toggle is preserved.
+ */
+export function useArchiveCompanyXeroContact(companyId) {
+  return useMutation({
+    mutationFn: async ({ targetCompanyId }) => {
+      return await callEdgeFunction('marketplace_xero_archive_contact', {
+        company_id: targetCompanyId,
+      });
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceCompanies(companyId),
+      });
+    },
+  });
+}
+
+/**
+ * Register a third-party supplier-managed warehouse in Xero as a supplier
+ * contact. Same UX/flow as buyer-company registration but writes to
+ * marketplace_warehouses.xero_contact_id. Super-admin only.
+ */
+export function useRegisterWarehouseInXero(companyId) {
+  return useMutation({
+    mutationFn: async ({ warehouseId, details }) => {
+      return await callEdgeFunction('marketplace_xero_register_warehouse_contact', {
+        warehouse_id: warehouseId,
+        ...(details ? { details } : {}),
+      });
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceWarehouses(companyId),
+      });
+    },
+  });
+}
+
+export function useUpdateWarehouseXeroContact(companyId) {
+  return useMutation({
+    mutationFn: async ({ warehouseId, details }) => {
+      return await callEdgeFunction('marketplace_xero_update_warehouse_contact', {
+        warehouse_id: warehouseId,
+        details,
+      });
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceWarehouses(companyId),
+      });
+    },
+  });
+}
+
+export function useArchiveWarehouseXeroContact(companyId) {
+  return useMutation({
+    mutationFn: async ({ warehouseId }) => {
+      return await callEdgeFunction('marketplace_xero_archive_warehouse_contact', {
+        warehouse_id: warehouseId,
+      });
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceWarehouses(companyId),
       });
     },
   });
@@ -554,6 +771,342 @@ export function useDeleteCheckoutQuestion(companyId, productId) {
     onSuccess: () => {
       queryClientInstance.invalidateQueries({
         queryKey: queryKeys.tenant.marketplaceAdminProduct(companyId, productId),
+      });
+    },
+  });
+}
+
+// ============================================================================
+// Freight quote (calls Edge Function)
+// ============================================================================
+
+export function useFreightQuote() {
+  return useMutation({
+    mutationFn: async ({ lines, delivery_postcode, delivery_address }) => {
+      return await callEdgeFunction('marketplace_freight_quote', {
+        lines,
+        delivery_postcode,
+        // Optional — when present, the backend forwards the full street to
+        // Google so LVR postcodes (1xxx/8xxx/9xxx) resolve correctly.
+        delivery_address: delivery_address ?? null,
+      });
+    },
+  });
+}
+
+// ============================================================================
+// Order create (calls Edge Function)
+// ============================================================================
+
+export function useCreateOrder(companyId, userId) {
+  return useMutation({
+    mutationFn: async (payload) => {
+      return await callEdgeFunction('marketplace_create_order', payload);
+    },
+    onSuccess: () => {
+      // Wipe cart cache, refresh buyer orders
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceCart(companyId, userId),
+      });
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceBuyerOrders(companyId),
+      });
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceAdminOrders(companyId),
+      });
+    },
+  });
+}
+
+// ============================================================================
+// PO upload helper (client-side direct to storage)
+// ============================================================================
+
+const ALLOWED_PO_MIME = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+]);
+
+export function useUploadPOPdf(companyId) {
+  return useMutation({
+    mutationFn: async ({ file, orderTempId }) => {
+      if (!ALLOWED_PO_MIME.has(file.type)) {
+        throw new Error('PO must be a PDF, Word, Excel, or image (JPG/PNG/WebP) file.');
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('Attachment is larger than the 10 MB maximum.');
+      }
+      const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
+      const path = `${companyId}/${orderTempId ?? crypto.randomUUID()}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from('marketplace-po-uploads')
+        .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+      if (error) throw error;
+      return {
+        storage_path: path,
+        file_name: file.name,
+        file_size: file.size,
+        file_type: file.type,
+      };
+    },
+  });
+}
+
+// ============================================================================
+// Order approval (admin) — calls Edge Function
+// ============================================================================
+
+export function useApproveOrder(companyId) {
+  return useMutation({
+    mutationFn: async ({ order_id, action, reason }) => {
+      return await callEdgeFunction('marketplace_approve_order', { order_id, action, reason });
+    },
+    onSuccess: (_data, { order_id }) => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceAdminOrders(companyId),
+      });
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceAdminOrder(companyId, order_id),
+      });
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceBuyerOrders(companyId),
+      });
+    },
+  });
+}
+
+// ============================================================================
+// Warehouse fulfilment update (admin or warehouse user)
+// ============================================================================
+
+export function useUpdateOrderFulfilment(companyId) {
+  return useMutation({
+    mutationFn: async ({ order_id, ...patch }) => {
+      const allowed = (({
+        supplier_dispatch_date,
+        supplier_eta_date,
+        supplier_tracking_url,
+        supplier_tracking_carrier,
+        supplier_notes,
+        supplier_freight_cost,
+        status,
+      }) => ({
+        supplier_dispatch_date,
+        supplier_eta_date,
+        supplier_tracking_url,
+        supplier_tracking_carrier,
+        supplier_notes,
+        supplier_freight_cost,
+        status,
+      }))(patch);
+      Object.keys(allowed).forEach((k) => allowed[k] === undefined && delete allowed[k]);
+      // Route through the Edge Function so the correct buyer notification
+      // (dispatch_confirmed / tracking_added / eta_updated) is emitted.
+      const res = await callEdgeFunction('marketplace_update_fulfilment', {
+        order_id,
+        patch: allowed,
+      });
+      return res?.order ?? res;
+    },
+    onSuccess: (_data, { order_id }) => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceAdminOrders(companyId),
+      });
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceAdminOrder(companyId, order_id),
+      });
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceBuyerOrders(companyId),
+      });
+    },
+  });
+}
+
+// ============================================================================
+// Stripe — kick off checkout
+// ============================================================================
+
+export function useStripeCreateCheckout() {
+  return useMutation({
+    mutationFn: async ({ checkout_session_id, order_id, success_url, cancel_url }) => {
+      // checkout_session_id is the new deferred-creation path (preferred).
+      // order_id is kept for backward-compat with PO-late-pay flows.
+      const body = { success_url, cancel_url };
+      if (checkout_session_id) body.checkout_session_id = checkout_session_id;
+      if (order_id) body.order_id = order_id;
+      return await callEdgeFunction('marketplace_stripe_create_checkout', body);
+    },
+  });
+}
+
+// ============================================================================
+// Rate sheets (admin CRUD)
+// ============================================================================
+
+export function useUpsertRateSheet(companyId) {
+  return useMutation({
+    mutationFn: async (sheet) => {
+      const payload = { ...sheet };
+      const id = payload.id;
+      delete payload.id;
+      if (id) {
+        const { data, error } = await supabase
+          .from('marketplace_rate_sheets')
+          .update(payload)
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      }
+      const { data, error } = await supabase
+        .from('marketplace_rate_sheets')
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceRateSheets(companyId),
+      });
+    },
+  });
+}
+
+export function useDeleteRateSheet(companyId) {
+  return useMutation({
+    mutationFn: async (sheetId) => {
+      const { error } = await supabase.from('marketplace_rate_sheets').delete().eq('id', sheetId);
+      if (error) throw error;
+      return sheetId;
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceRateSheets(companyId),
+      });
+    },
+  });
+}
+
+export function useUpsertRateSheetBracket(companyId) {
+  return useMutation({
+    mutationFn: async (bracket) => {
+      const payload = { ...bracket };
+      const id = payload.id;
+      delete payload.id;
+      if (id) {
+        const { data, error } = await supabase
+          .from('marketplace_rate_sheet_brackets')
+          .update(payload)
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      }
+      const { data, error } = await supabase
+        .from('marketplace_rate_sheet_brackets')
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceRateSheets(companyId),
+      });
+    },
+  });
+}
+
+/**
+ * Upsert a product → rate sheet mapping.
+ *   - packaging_size_id = null  → product-level default (all sizes)
+ *   - packaging_size_id = uuid  → per-size override
+ *
+ * Schema uses two partial unique indexes (one for NULL packaging, one for
+ * non-NULL) so Postgres ON CONFLICT can't target both. Do an explicit
+ * delete-then-insert — matches the Chem Connect /api/admin/product-freight
+ * upsert pattern.
+ */
+export function useUpsertProductRateSheet(companyId) {
+  return useMutation({
+    mutationFn: async ({ productId, packagingSizeId = null, rateSheetId }) => {
+      if (!productId) throw new Error('productId is required');
+      if (!rateSheetId) throw new Error('rateSheetId is required');
+
+      let delQuery = supabase
+        .from('marketplace_product_rate_sheets')
+        .delete()
+        .eq('product_id', productId);
+      delQuery = packagingSizeId
+        ? delQuery.eq('packaging_size_id', packagingSizeId)
+        : delQuery.is('packaging_size_id', null);
+      const { error: delErr } = await delQuery;
+      if (delErr) throw delErr;
+
+      const { data, error } = await supabase
+        .from('marketplace_product_rate_sheets')
+        .insert({
+          product_id: productId,
+          packaging_size_id: packagingSizeId,
+          rate_sheet_id: rateSheetId,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceProductRateSheets(companyId),
+      });
+    },
+  });
+}
+
+export function useDeleteProductRateSheet(companyId) {
+  return useMutation({
+    mutationFn: async ({ productId, packagingSizeId = null }) => {
+      if (!productId) throw new Error('productId is required');
+      let q = supabase
+        .from('marketplace_product_rate_sheets')
+        .delete()
+        .eq('product_id', productId);
+      q = packagingSizeId
+        ? q.eq('packaging_size_id', packagingSizeId)
+        : q.is('packaging_size_id', null);
+      const { error } = await q;
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceProductRateSheets(companyId),
+      });
+    },
+  });
+}
+
+export function useDeleteRateSheetBracket(companyId) {
+  return useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('marketplace_rate_sheet_brackets').delete().eq('id', id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClientInstance.invalidateQueries({
+        queryKey: queryKeys.tenant.marketplaceRateSheets(companyId),
       });
     },
   });

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { buyerProductDetailOptions } from '@/query/options/marketplace';
 import { useAddToCart } from '@/query/mutations/marketplace';
-import { toastError, toastSuccess } from '@/lib/toast';
+import { toastError, toast } from '@/lib/toast';
 import { useMarketplaceAccess } from '@/hooks/useMarketplaceAccess';
 import { MarketplaceImage } from '@/components/marketplace/MarketplaceImage';
 import { HazardBadge } from '@/components/marketplace/HazardBadge';
@@ -70,7 +70,14 @@ export default function MarketplaceProductDetail() {
         packagingSizeId: selectedSizeId,
         quantity,
       });
-      toastSuccess('add', 'item to cart');
+      const sizeLabel = selectedPrice?.packaging_size?.name ?? '';
+      toast.success('Added to cart', {
+        description: `${quantity} × ${data.product.name}${sizeLabel ? ` (${sizeLabel})` : ''}`,
+        action: {
+          label: 'View cart',
+          onClick: () => navigate('/marketplace/cart'),
+        },
+      });
     } catch (e) {
       toastError(e, 'adding to cart');
     }
@@ -228,8 +235,12 @@ export default function MarketplaceProductDetail() {
                 disabled={addToCart.isPending || !selectedPrice || !canShop}
                 title={!canShop ? 'Adding to cart requires a buyer account in a marketplace-enabled company.' : undefined}
               >
-                <ShoppingCart className="w-4 h-4 mr-1.5" />
-                {canShop ? 'Add to cart' : 'Add to cart (preview only)'}
+                {addToCart.isPending
+                  ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                  : <ShoppingCart className="w-4 h-4 mr-1.5" />}
+                {addToCart.isPending
+                  ? 'Adding…'
+                  : canShop ? 'Add to cart' : 'Add to cart (preview only)'}
               </Button>
               <p className="text-[11px] text-muted-foreground mt-2 text-center">
                 Checkout, freight quoting and Xero invoicing arrive in the next release.

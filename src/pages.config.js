@@ -39,6 +39,19 @@ import MarketplaceWarehouses from './pages/admin/marketplace/MarketplaceWarehous
 import MarketplaceProducts from './pages/admin/marketplace/MarketplaceProducts';
 import MarketplaceProductEditor from './pages/admin/marketplace/MarketplaceProductEditor';
 import MarketplaceCompanyPricing from './pages/admin/marketplace/MarketplaceCompanyPricing';
+// Marketplace (M2)
+import MarketplaceCheckout from './pages/marketplace/MarketplaceCheckout';
+import MarketplaceCheckoutSuccess from './pages/marketplace/MarketplaceCheckoutSuccess';
+import MarketplaceOrders from './pages/marketplace/MarketplaceOrders';
+import MarketplaceOrderDetail from './pages/marketplace/MarketplaceOrderDetail';
+import MarketplaceAdminOrders from './pages/admin/marketplace/MarketplaceAdminOrders';
+import MarketplaceAdminOrderDetail from './pages/admin/marketplace/MarketplaceAdminOrderDetail';
+import MarketplaceIntegrations from './pages/admin/marketplace/MarketplaceIntegrations';
+import MarketplaceXeroChooseOrg from './pages/admin/marketplace/MarketplaceXeroChooseOrg';
+import MarketplaceFreight from './pages/admin/marketplace/MarketplaceFreight';
+import MarketplaceFreightProducts from './pages/admin/marketplace/MarketplaceFreightProducts';
+import MarketplaceSettings from './pages/admin/marketplace/MarketplaceSettings';
+import WarehouseOrders from './pages/warehouse/WarehouseOrders';
 import __Layout from './Layout.jsx';
 
 
@@ -84,6 +97,19 @@ export const PAGES = {
     "admin/marketplace/products": MarketplaceProducts,
     "admin/marketplace/product-editor": MarketplaceProductEditor,
     "admin/marketplace/pricing": MarketplaceCompanyPricing,
+    // Marketplace (M2)
+    "MarketplaceCheckout": MarketplaceCheckout,
+    "MarketplaceCheckoutSuccess": MarketplaceCheckoutSuccess,
+    "MarketplaceOrders": MarketplaceOrders,
+    "MarketplaceOrderDetail": MarketplaceOrderDetail,
+    "admin/marketplace/orders": MarketplaceAdminOrders,
+    "admin/marketplace/order-detail": MarketplaceAdminOrderDetail,
+    "admin/marketplace/integrations": MarketplaceIntegrations,
+    "admin/marketplace/xero/choose-org": MarketplaceXeroChooseOrg,
+    "admin/marketplace/freight": MarketplaceFreight,
+    "admin/marketplace/freight/products": MarketplaceFreightProducts,
+    "admin/marketplace/settings": MarketplaceSettings,
+    "warehouse/orders": WarehouseOrders,
 }
 
 export const pagesConfig = {

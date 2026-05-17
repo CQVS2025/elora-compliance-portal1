@@ -384,6 +384,51 @@ const AuthenticatedApp = () => {
             </DashboardLayout>
           </AuthenticatedRoute>
         } />
+        <Route path="/marketplace/checkout" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceBuyerRoute>
+                {React.createElement(Pages.MarketplaceCheckout)}
+              </MarketplaceBuyerRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/marketplace/checkout/success" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceBuyerRoute>
+                {React.createElement(Pages.MarketplaceCheckoutSuccess)}
+              </MarketplaceBuyerRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/marketplace/orders" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceBuyerRoute>
+                {React.createElement(Pages.MarketplaceOrders)}
+              </MarketplaceBuyerRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/marketplace/orders/:id" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceBuyerRoute>
+                {React.createElement(Pages.MarketplaceOrderDetail)}
+              </MarketplaceBuyerRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+
+        {/* Warehouse — fulfilment user dashboard */}
+        <Route path="/warehouse/orders" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              {React.createElement(Pages['warehouse/orders'])}
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
 
         {/* Marketplace — admin routes (gated by isMarketplaceAdmin) */}
         <Route path="/admin/marketplace" element={
@@ -436,6 +481,69 @@ const AuthenticatedApp = () => {
             <DashboardLayout>
               <MarketplaceAdminRoute>
                 {React.createElement(Pages['admin/marketplace/pricing'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/orders" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/orders'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/orders/:id" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/order-detail'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/integrations" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/integrations'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/freight" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/freight'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/freight/products" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/freight/products'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/settings" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/settings'])}
+              </MarketplaceAdminRoute>
+            </DashboardLayout>
+          </AuthenticatedRoute>
+        } />
+        <Route path="/admin/marketplace/xero/choose-org" element={
+          <AuthenticatedRoute>
+            <DashboardLayout>
+              <MarketplaceAdminRoute>
+                {React.createElement(Pages['admin/marketplace/xero/choose-org'])}
               </MarketplaceAdminRoute>
             </DashboardLayout>
           </AuthenticatedRoute>

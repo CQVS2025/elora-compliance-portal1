@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Save, Trash2, BadgeDollarSign } from 'lucide-react';
+import { Save, Trash2, BadgeDollarSign, ChevronDown, ChevronRight, Layers, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import {
   adminCompanyPricingOptions,
@@ -48,6 +48,8 @@ export default function MarketplaceCompanyPricing() {
   const { confirm, ConfirmDialog } = useConfirm();
 
   const [drafts, setDrafts] = useState({});
+  const [expanded, setExpanded] = useState({});
+  const toggleExpanded = (id) => setExpanded((m) => ({ ...m, [id]: !m[id] }));
 
   const overridesById = useMemo(() => {
     const map = new Map();
@@ -129,6 +131,9 @@ export default function MarketplaceCompanyPricing() {
     return Array.from(byProduct.values()).sort((a, b) => a.product.name.localeCompare(b.product.name));
   }, [matrix]);
 
+  const expandAll = () => setExpanded(Object.fromEntries(grouped.map((g) => [g.product.id, true])));
+  const collapseAll = () => setExpanded({});
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6 flex items-start gap-3">
@@ -174,94 +179,146 @@ export default function MarketplaceCompanyPricing() {
           No active products with default prices yet. Add products + packaging prices first.
         </p>
       ) : (
-        <div className="space-y-5">
-          {grouped.map(({ product, rows }) => (
-            <Card key={product.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{product.name}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="divide-y">
-                  {rows.map((row) => {
-                    const key = `${row.product_id}::${row.packaging_size_id}`;
-                    const existing = overridesById.get(key);
-                    const draft = drafts[key];
-                    const priceType = draft?.price_type ?? existing?.price_type ?? row.price_type;
-                    const valuePerLitre = draft?.price_per_litre ?? existing?.price_per_litre ?? '';
-                    const valueFixed = draft?.fixed_price ?? existing?.fixed_price ?? '';
-                    const isDirty = !!draft;
-                    return (
-                      <div key={key} className="py-3 grid grid-cols-12 gap-2 items-center text-sm">
-                        <div className="col-span-3">
-                          <p className="font-medium">{row.packaging_size?.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Default: {row.price_type === 'per_litre'
-                              ? `${formatAUD(row.price_per_litre)} / L`
-                              : `${formatAUD(row.fixed_price)} fixed`}
-                          </p>
-                        </div>
-                        <div className="col-span-2">
-                          <Select value={priceType} onValueChange={(v) => setDraft(key, { price_type: v })}>
-                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="per_litre">Per litre</SelectItem>
-                              <SelectItem value="fixed">Fixed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="col-span-3">
-                          {priceType === 'per_litre' ? (
-                            <Input
-                              type="number"
-                              step="0.0001"
-                              placeholder="$/L"
-                              value={valuePerLitre}
-                              onChange={(e) => setDraft(key, { price_per_litre: e.target.value, fixed_price: null })}
-                            />
-                          ) : (
-                            <Input
-                              type="number"
-                              step="0.01"
-                              placeholder="Fixed $"
-                              value={valueFixed}
-                              onChange={(e) => setDraft(key, { fixed_price: e.target.value, price_per_litre: null })}
-                            />
-                          )}
-                        </div>
-                        <div className="col-span-2">
-                          {existing ? (
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-                            >
-                              Override active
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-muted-foreground">Default applies</Badge>
-                          )}
-                        </div>
-                        <div className="col-span-2 flex justify-end gap-1">
-                          {existing && (
-                            <Button size="sm" variant="outline" onClick={() => handleClear(row)}>
-                              <Trash2 className="w-3.5 h-3.5 mr-1" /> Reset
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant={isDirty ? 'default' : 'outline'}
-                            disabled={!isDirty || upsert.isPending}
-                            onClick={() => handleSave(row)}
-                          >
-                            <Save className="w-3.5 h-3.5 mr-1" /> Save
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="space-y-3">
+          <div className="flex justify-end gap-1.5">
+            <Button size="sm" variant="ghost" onClick={expandAll} className="text-xs">
+              <ChevronDown className="w-3.5 h-3.5 mr-1" /> Expand all
+            </Button>
+            <Button size="sm" variant="ghost" onClick={collapseAll} className="text-xs">
+              <ChevronRight className="w-3.5 h-3.5 mr-1" /> Collapse all
+            </Button>
+          </div>
+          {grouped.map(({ product, rows }) => {
+            const isExpanded = !!expanded[product.id];
+            const overrideCount = rows.reduce((n, r) => {
+              return n + (overridesById.has(`${r.product_id}::${r.packaging_size_id}`) ? 1 : 0);
+            }, 0);
+            return (
+              <Card key={product.id} className="overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(product.id)}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/40 transition-colors"
+                  aria-expanded={isExpanded}
+                >
+                  <span className="text-muted-foreground shrink-0">
+                    {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{product.name}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant="outline" className="font-mono text-[10px]">
+                      <Layers className="w-2.5 h-2.5 mr-1" />{rows.length} size{rows.length === 1 ? '' : 's'}
+                    </Badge>
+                    {overrideCount > 0 ? (
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      >
+                        {overrideCount} override{overrideCount === 1 ? '' : 's'}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">No overrides</Badge>
+                    )}
+                  </div>
+                </button>
+                {isExpanded && (
+                  <CardContent className="pt-0">
+                    <div className="divide-y">
+                      {rows.map((row) => {
+                        const key = `${row.product_id}::${row.packaging_size_id}`;
+                        const existing = overridesById.get(key);
+                        const draft = drafts[key];
+                        const priceType = draft?.price_type ?? existing?.price_type ?? row.price_type;
+                        const valuePerLitre = draft?.price_per_litre ?? existing?.price_per_litre ?? '';
+                        const valueFixed = draft?.fixed_price ?? existing?.fixed_price ?? '';
+                        const isDirty = !!draft;
+                        return (
+                          <div key={key} className="py-3 grid grid-cols-12 gap-2 items-center text-sm">
+                            <div className="col-span-3">
+                              <p className="font-medium">{row.packaging_size?.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Default: {row.price_type === 'per_litre'
+                                  ? `${formatAUD(row.price_per_litre)} / L`
+                                  : `${formatAUD(row.fixed_price)} fixed`}
+                              </p>
+                            </div>
+                            <div className="col-span-2">
+                              <Select value={priceType} onValueChange={(v) => setDraft(key, { price_type: v })}>
+                                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="per_litre">Per litre</SelectItem>
+                                  <SelectItem value="fixed">Fixed</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="col-span-3">
+                              {priceType === 'per_litre' ? (
+                                <Input
+                                  type="number"
+                                  step="0.0001"
+                                  placeholder="$/L"
+                                  value={valuePerLitre}
+                                  onChange={(e) => setDraft(key, { price_per_litre: e.target.value, fixed_price: null })}
+                                />
+                              ) : (
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="Fixed $"
+                                  value={valueFixed}
+                                  onChange={(e) => setDraft(key, { fixed_price: e.target.value, price_per_litre: null })}
+                                />
+                              )}
+                            </div>
+                            <div className="col-span-2">
+                              {existing ? (
+                                <Badge
+                                  variant="outline"
+                                  className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                >
+                                  Override active
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-muted-foreground">Default applies</Badge>
+                              )}
+                            </div>
+                            <div className="col-span-2 flex justify-end gap-1">
+                              {existing && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleClear(row)}
+                                  disabled={remove.isPending || upsert.isPending}
+                                >
+                                  {remove.isPending
+                                    ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                    : <Trash2 className="w-3.5 h-3.5 mr-1" />}
+                                  Reset
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant={isDirty ? 'default' : 'outline'}
+                                disabled={!isDirty || upsert.isPending || remove.isPending}
+                                onClick={() => handleSave(row)}
+                              >
+                                {upsert.isPending
+                                  ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                  : <Save className="w-3.5 h-3.5 mr-1" />}
+                                Save
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
       {ConfirmDialog}

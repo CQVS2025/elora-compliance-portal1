@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -9,8 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Save, Plus, Trash2, ImagePlus, FileText, Star, StarOff, Loader2, Upload, Pencil, X } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Trash2, ImagePlus, FileText, Loader2, Upload, Pencil, X, Package, ShieldAlert, Images, ExternalLink, Eye, Download, Boxes } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import {
   adminProductDetailOptions,
@@ -96,6 +96,18 @@ export default function MarketplaceProductEditor() {
     }));
   };
 
+  const isDirty = useMemo(() => {
+    if (isNew) return true;
+    if (!detail?.product) return false;
+    return Object.keys(EMPTY_PRODUCT).some((k) => {
+      const a = form[k];
+      const b = detail.product[k];
+      if (typeof a === 'boolean' || typeof b === 'boolean') return !!a !== !!b;
+      if (typeof a === 'number' || typeof b === 'number') return Number(a ?? 0) !== Number(b ?? 0);
+      return (a ?? '') !== (b ?? '');
+    });
+  }, [form, detail, isNew]);
+
   const handleSaveBasic = async () => {
     if (!form.name.trim()) {
       toastError(new Error('Name is required'), 'saving product');
@@ -116,67 +128,130 @@ export default function MarketplaceProductEditor() {
     }
   };
 
+  const [openingDocKey, setOpeningDocKey] = useState(null);
+  const openDocument = async (doc, { download = false } = {}) => {
+    const key = `${doc.id}::${download ? 'dl' : 'view'}`;
+    setOpeningDocKey(key);
+    try {
+      const { data, error } = await supabase.storage
+        .from('marketplace-product-sds')
+        .createSignedUrl(doc.storage_path, 60, download ? { download: doc.file_name } : undefined);
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error('No signed URL returned');
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      toastError(e, 'opening document');
+    } finally {
+      setOpeningDocKey(null);
+    }
+  };
+
   if (isLoading) {
     return <div className="p-6"><Loader2 className="w-5 h-5 animate-spin" /></div>;
   }
 
-  return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="mb-6 flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/admin/marketplace/products')}>
-          <ArrowLeft className="w-4 h-4 mr-1.5" /> Products
-        </Button>
-        <h1 className="text-xl font-semibold">
-          {isNew ? 'New product' : detail?.product?.name || 'Product'}
-        </h1>
-        {!isNew && form.is_active === false && <Badge variant="secondary">inactive</Badge>}
-      </div>
+  const coverImage = (detail?.images ?? []).find((i) => i.is_cover) ?? (detail?.images ?? [])[0];
 
+  return (
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5 pb-24">
+      {/* ===== Hero header ===== */}
+      <Card className="overflow-hidden">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-3 min-w-0 flex-1">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/admin/marketplace/products')} className="shrink-0 -ml-2">
+                <ArrowLeft className="w-4 h-4 mr-1" /> Products
+              </Button>
+              {!isNew && coverImage && (
+                <div className="w-14 h-14 rounded-md bg-muted overflow-hidden shrink-0 border border-border hidden sm:block">
+                  <MarketplaceImage storagePath={coverImage.storage_path} alt="" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate">
+                    {isNew ? 'New product' : (form.name || 'Untitled product')}
+                  </h1>
+                  {!isNew && (form.is_active
+                    ? <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">Active</Badge>
+                    : <Badge variant="secondary">Inactive</Badge>)}
+                  {form.badge && <Badge>{form.badge}</Badge>}
+                  {form.classification && form.classification !== 'Non-DG' && (
+                    <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                      <ShieldAlert className="w-3 h-3 mr-1" />{form.classification}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 font-mono truncate">
+                  /marketplace/products/{form.slug || '(slug pending)'}
+                </p>
+                {form.manufacturer && (
+                  <p className="text-xs text-muted-foreground mt-0.5">by {form.manufacturer}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {!isNew && (
+                <>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border bg-muted/30">
+                    <span className="text-xs text-muted-foreground">{form.is_active ? 'Visible' : 'Hidden'}</span>
+                    <Switch checked={!!form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
+                  </div>
+                  {form.slug && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`/marketplace/products/${form.slug}`} target="_blank" rel="noreferrer">
+                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Preview
+                      </a>
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ===== Body: two-column grid ===== */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* MAIN COLUMN */}
         <div className="lg:col-span-2 space-y-5">
-          {/* Basic info */}
+          {/* Product details */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Product details</CardTitle>
-              <CardDescription>Name, description, manufacturer, slug.</CardDescription>
+              <CardTitle className="text-base flex items-center gap-2"><Package className="w-4 h-4" /> Product details</CardTitle>
+              <CardDescription>Name, identity, descriptions and merchandising.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <Field label="Name *" full>
-                <Input value={form.name} onChange={(e) => handleNameChange(e.target.value)} />
-              </Field>
-              <Field label="Slug (URL) *" full hint="Used in /marketplace/products/<slug>">
-                <Input
-                  value={form.slug}
-                  onChange={(e) => { setSlugTouched(true); setForm({ ...form, slug: slugify(e.target.value) }); }}
-                />
-              </Field>
-              <Field label="Manufacturer">
-                <Input value={form.manufacturer ?? ''} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} />
-              </Field>
-              <Field label="Display order" hint="Lower numbers appear first">
-                <Input type="number" value={form.display_order ?? 0} onChange={(e) => setForm({ ...form, display_order: Number(e.target.value) })} />
-              </Field>
-              <Field label="Short description" full>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Name *">
+                  <Input value={form.name} onChange={(e) => handleNameChange(e.target.value)} />
+                </Field>
+                <Field label="Slug (URL) *" hint="Used in /marketplace/products/<slug>">
+                  <Input
+                    value={form.slug}
+                    onChange={(e) => { setSlugTouched(true); setForm({ ...form, slug: slugify(e.target.value) }); }}
+                  />
+                </Field>
+                <Field label="Manufacturer">
+                  <Input value={form.manufacturer ?? ''} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} />
+                </Field>
+                <Field label="Display order" hint="Lower numbers appear first">
+                  <Input type="number" value={form.display_order ?? 0} onChange={(e) => setForm({ ...form, display_order: Number(e.target.value) })} />
+                </Field>
+              </div>
+              <Field label="Short description">
                 <Input value={form.short_description ?? ''} onChange={(e) => setForm({ ...form, short_description: e.target.value })} />
               </Field>
-              <Field label="Long description" full>
+              <Field label="Long description">
                 <Textarea rows={4} value={form.long_description ?? ''} onChange={(e) => setForm({ ...form, long_description: e.target.value })} />
               </Field>
-              <Field label="Delivery info" full hint="Free-text shown on the product page (e.g. delivery windows, access requirements)">
-                <Textarea rows={2} value={form.delivery_info ?? ''} onChange={(e) => setForm({ ...form, delivery_info: e.target.value })} />
-              </Field>
-              <Field label="Badge" hint='e.g. "Bestseller", "New"'>
-                <Input value={form.badge ?? ''} onChange={(e) => setForm({ ...form, badge: e.target.value })} />
-              </Field>
-              <div className="flex items-center gap-2 pt-1">
-                <Switch checked={!!form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
-                <Label>Active (visible to buyers)</Label>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" size="sm" onClick={() => navigate('/admin/marketplace/products')}>Cancel</Button>
-                <Button size="sm" onClick={handleSaveBasic} disabled={upsertProduct.isPending}>
-                  <Save className="w-4 h-4 mr-1.5" /> {isNew ? 'Create' : 'Save'}
-                </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Delivery info" hint="Free text shown on the product page">
+                  <Textarea rows={2} value={form.delivery_info ?? ''} onChange={(e) => setForm({ ...form, delivery_info: e.target.value })} />
+                </Field>
+                <Field label="Badge" hint='Optional label (e.g. "Bestseller", "New")'>
+                  <Input value={form.badge ?? ''} onChange={(e) => setForm({ ...form, badge: e.target.value })} />
+                </Field>
               </div>
             </CardContent>
           </Card>
@@ -185,12 +260,12 @@ export default function MarketplaceProductEditor() {
           {!isNew && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Hazard &amp; safety</CardTitle>
-                <CardDescription>Classification, dangerous-goods info, SDS notes.</CardDescription>
+                <CardTitle className="text-base flex items-center gap-2"><ShieldAlert className="w-4 h-4" /> Hazard &amp; safety</CardTitle>
+                <CardDescription>Dangerous-goods classification and safe-handling notes.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Classification" full>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <Field label="Classification">
                     <Select value={form.classification} onValueChange={(v) => setForm({ ...form, classification: v })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -213,14 +288,9 @@ export default function MarketplaceProductEditor() {
                     <Input value={form.cas_number ?? ''} onChange={(e) => setForm({ ...form, cas_number: e.target.value })} />
                   </Field>
                 </div>
-                <Field label="Safety / handling notes" full>
+                <Field label="Safety / handling notes">
                   <Textarea rows={3} value={form.safety_info ?? ''} onChange={(e) => setForm({ ...form, safety_info: e.target.value })} />
                 </Field>
-                <div className="flex justify-end pt-1">
-                  <Button size="sm" onClick={handleSaveBasic} disabled={upsertProduct.isPending}>
-                    <Save className="w-4 h-4 mr-1.5" /> Save hazard info
-                  </Button>
-                </div>
               </CardContent>
             </Card>
           )}
@@ -244,18 +314,26 @@ export default function MarketplaceProductEditor() {
               sizes={sizes}
               onUpsert={(q) => upsertQuestion.mutateAsync(q)}
               onDelete={(id) => deleteQuestion.mutateAsync(id)}
+              upsertPending={upsertQuestion.isPending}
+              deletePending={deleteQuestion.isPending}
             />
           )}
         </div>
 
-        {/* Right column */}
+        {/* RIGHT COLUMN */}
         <div className="space-y-5">
           {!isNew && (
             <>
+              {/* Photos */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Photos</CardTitle>
-                  <CardDescription>One image is the cover. Drag-drop coming in v2.</CardDescription>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2"><Images className="w-4 h-4" /> Photos</CardTitle>
+                      <CardDescription className="mt-0.5">Cover image appears on the marketplace tile.</CardDescription>
+                    </div>
+                    <Badge variant="secondary" className="text-[10px]">{(detail?.images ?? []).length}</Badge>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <input
@@ -278,48 +356,63 @@ export default function MarketplaceProductEditor() {
                       e.target.value = '';
                     }}
                   />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => imgInputRef.current?.click()}
-                    disabled={uploadImage.isPending}
-                  >
-                    <ImagePlus className="w-4 h-4 mr-1.5" /> Add photo
-                  </Button>
-                  <div className="space-y-2">
-                    {(detail?.images ?? []).map((img) => (
-                      <div key={img.id} className="flex items-center gap-2 p-2 border rounded-md">
-                        <div className="w-12 h-12 rounded bg-muted overflow-hidden">
-                          <MarketplaceImage storagePath={img.storage_path} alt="" className="w-full h-full object-cover" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs truncate">{img.alt_text || 'Untitled'}</p>
-                          {img.is_cover && <Badge variant="secondary" className="text-[10px]">Cover</Badge>}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteImage.mutate(img)}
-                          disabled={deleteImage.isPending}
+                  {(detail?.images?.length ?? 0) === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => imgInputRef.current?.click()}
+                      disabled={uploadImage.isPending}
+                      className="w-full aspect-video border-2 border-dashed border-border rounded-md flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:bg-muted/40 transition-colors"
+                    >
+                      <ImagePlus className="w-5 h-5" />
+                      <span className="text-xs">Add the first photo</span>
+                    </button>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(detail?.images ?? []).map((img) => (
+                          <div key={img.id} className="group relative aspect-square rounded-md border border-border overflow-hidden bg-muted">
+                            <MarketplaceImage storagePath={img.storage_path} alt="" className="w-full h-full object-cover" />
+                            {img.is_cover && (
+                              <Badge variant="secondary" className="absolute top-1.5 left-1.5 text-[10px] backdrop-blur-sm bg-background/90">Cover</Badge>
+                            )}
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="absolute top-1.5 right-1.5 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-background/90 hover:bg-background"
+                              onClick={() => deleteImage.mutate(img)}
+                              disabled={deleteImage.isPending}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => imgInputRef.current?.click()}
+                          disabled={uploadImage.isPending}
+                          className="aspect-square border-2 border-dashed border-border rounded-md flex flex-col items-center justify-center gap-1 text-muted-foreground hover:bg-muted/40 transition-colors"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                          {uploadImage.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+                          <span className="text-[11px]">Add</span>
+                        </button>
                       </div>
-                    ))}
-                    {(detail?.images?.length ?? 0) === 0 && (
-                      <p className="text-xs text-muted-foreground py-3 text-center">No images yet.</p>
-                    )}
-                  </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
+              {/* Documents */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">SDS &amp; documents</CardTitle>
-                  <CardDescription>PDF only, 10 MB max.</CardDescription>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4" /> SDS &amp; documents</CardTitle>
+                      <CardDescription className="mt-0.5">PDF only, 10 MB max.</CardDescription>
+                    </div>
+                    <Badge variant="secondary" className="text-[10px]">{(detail?.documents ?? []).length}</Badge>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-2">
                   <input
                     type="file"
                     accept="application/pdf"
@@ -344,29 +437,96 @@ export default function MarketplaceProductEditor() {
                     onClick={() => docInputRef.current?.click()}
                     disabled={uploadDoc.isPending}
                   >
-                    <Upload className="w-4 h-4 mr-1.5" /> Upload SDS PDF
+                    {uploadDoc.isPending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Upload className="w-4 h-4 mr-1.5" />}
+                    Upload SDS PDF
                   </Button>
-                  <div className="space-y-2">
-                    {(detail?.documents ?? []).map((d) => (
-                      <div key={d.id} className="flex items-center gap-2 p-2 border rounded-md">
-                        <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs truncate">{d.file_name}</p>
-                          <p className="text-[11px] text-muted-foreground uppercase">{d.doc_type}</p>
+                  {(detail?.documents?.length ?? 0) === 0 ? (
+                    <p className="text-xs text-muted-foreground py-4 text-center">No documents uploaded yet.</p>
+                  ) : (
+                    <div className="space-y-1.5 pt-1">
+                      {(detail?.documents ?? []).map((d) => (
+                        <div key={d.id} className="flex items-center gap-2 p-2 border border-border rounded-md hover:bg-muted/40 transition-colors">
+                          <button
+                            type="button"
+                            onClick={() => openDocument(d)}
+                            className="w-8 h-8 rounded bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 hover:bg-rose-100 dark:hover:bg-rose-950/60 transition-colors"
+                            title="Open PDF in a new tab"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openDocument(d)}
+                            className="flex-1 min-w-0 text-left group"
+                            title="Open PDF in a new tab"
+                          >
+                            <p className="text-xs font-medium truncate group-hover:underline">{d.file_name}</p>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{d.doc_type}</p>
+                          </button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openDocument(d)}
+                            disabled={openingDocKey != null || deleteDoc.isPending}
+                            title="Open"
+                          >
+                            {openingDocKey === `${d.id}::view`
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Eye className="w-3.5 h-3.5" />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openDocument(d, { download: true })}
+                            disabled={openingDocKey != null || deleteDoc.isPending}
+                            title="Download"
+                          >
+                            {openingDocKey === `${d.id}::dl`
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Download className="w-3.5 h-3.5" />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => deleteDoc.mutate(d)}
+                            disabled={deleteDoc.isPending || openingDocKey != null}
+                            title="Delete"
+                          >
+                            {deleteDoc.isPending
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />}
+                          </Button>
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => deleteDoc.mutate(d)} disabled={deleteDoc.isPending}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                    {(detail?.documents?.length ?? 0) === 0 && (
-                      <p className="text-xs text-muted-foreground py-3 text-center">No documents yet.</p>
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </>
           )}
+        </div>
+      </div>
+
+      {/* ===== Sticky save bar ===== */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            {isNew
+              ? 'Fill in product details, then create to enable hazard, pricing, photos and documents.'
+              : isDirty
+                ? <span className="text-amber-700 dark:text-amber-400 font-medium">Unsaved changes to product details.</span>
+                : 'All changes saved.'}
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={() => navigate('/admin/marketplace/products')}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveBasic} disabled={upsertProduct.isPending || (!isNew && !isDirty)}>
+              {upsertProduct.isPending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Save className="w-4 h-4 mr-1.5" />}
+              {isNew ? 'Create product' : 'Save changes'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -386,6 +546,7 @@ function Field({ label, full = false, hint, children }) {
 // ---- Packaging prices sub-card -----------------------------------------------
 function PackagingPricesCard({ productId, prices, sizes, onUpsert, onDelete }) {
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({
     packaging_size_id: '',
     price_type: 'per_litre',
@@ -394,14 +555,22 @@ function PackagingPricesCard({ productId, prices, sizes, onUpsert, onDelete }) {
     minimum_order_quantity: 1,
     is_available: true,
   });
+  const [busy, setBusy] = useState(false);
 
   const sizeById = new Map(sizes.map((s) => [s.id, s]));
   const usedSizeIds = new Set((prices || []).map((p) => p.packaging_size_id));
-  const availableSizes = sizes.filter((s) => !usedSizeIds.has(s.id));
+  const availableSizesForAdd = sizes.filter((s) => !usedSizeIds.has(s.id));
+  // For edit: include the row's own size so the Select can still show it.
+  const sizesForEdit = editingId
+    ? sizes.filter((s) => !usedSizeIds.has(s.id) || s.id === draft.packaging_size_id)
+    : [];
+
+  const closeAll = () => { setAdding(false); setEditingId(null); };
 
   const startAdd = () => {
+    setEditingId(null);
     setDraft({
-      packaging_size_id: availableSizes[0]?.id ?? '',
+      packaging_size_id: availableSizesForAdd[0]?.id ?? '',
       price_type: 'per_litre',
       price_per_litre: '',
       fixed_price: '',
@@ -409,6 +578,19 @@ function PackagingPricesCard({ productId, prices, sizes, onUpsert, onDelete }) {
       is_available: true,
     });
     setAdding(true);
+  };
+
+  const startEdit = (p) => {
+    setAdding(false);
+    setDraft({
+      packaging_size_id: p.packaging_size_id,
+      price_type: p.price_type ?? 'per_litre',
+      price_per_litre: p.price_per_litre ?? '',
+      fixed_price: p.fixed_price ?? '',
+      minimum_order_quantity: p.minimum_order_quantity ?? 1,
+      is_available: !!p.is_available,
+    });
+    setEditingId(p.id);
   };
 
   const submit = async () => {
@@ -439,112 +621,213 @@ function PackagingPricesCard({ productId, prices, sizes, onUpsert, onDelete }) {
       );
       return;
     }
+    if (editingId) payload.id = editingId;
+    setBusy(true);
     try {
       await onUpsert(payload);
-      toastSuccess('save', 'price');
-      setAdding(false);
+      toastSuccess(editingId ? 'update' : 'save', 'price');
+      closeAll();
     } catch (e) {
       toastError(e, 'saving price');
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Packaging &amp; default pricing</CardTitle>
-        <CardDescription>
-          One row per packaging variant. Per-litre prices multiply by the volume of the size; fixed prices are per pack.
-        </CardDescription>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <CardTitle className="text-base flex items-center gap-2"><Boxes className="w-4 h-4" /> Packaging &amp; default pricing</CardTitle>
+            <CardDescription className="mt-0.5">
+              One row per packaging variant. Per-litre prices multiply by the size volume; fixed prices are per pack.
+            </CardDescription>
+          </div>
+          {(prices || []).length > 0 && !adding && editingId === null && availableSizesForAdd.length > 0 && (
+            <Button size="sm" variant="outline" onClick={startAdd} className="shrink-0">
+              <Plus className="w-4 h-4 mr-1.5" /> Add variant
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {(prices || []).length > 0 && (
-          <div className="divide-y border rounded-md">
+        {(prices || []).length === 0 && !adding ? (
+          <div className="border-2 border-dashed border-border rounded-md p-6 text-center">
+            <Boxes className="w-6 h-6 mx-auto text-muted-foreground" />
+            <p className="text-sm font-medium mt-2">No packaging variants yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Add the first packaging size to make this product orderable.</p>
+            <Button size="sm" onClick={startAdd} className="mt-3" disabled={availableSizesForAdd.length === 0}>
+              <Plus className="w-4 h-4 mr-1.5" /> Add packaging variant
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
             {(prices || []).map((p) => {
+              if (editingId === p.id) {
+                return (
+                  <VariantForm
+                    key={p.id}
+                    mode="edit"
+                    draft={draft}
+                    setDraft={setDraft}
+                    sizes={sizesForEdit}
+                    busy={busy}
+                    onCancel={closeAll}
+                    onSubmit={submit}
+                  />
+                );
+              }
               const size = sizeById.get(p.packaging_size_id);
               const totalPerPack = p.price_type === 'per_litre' && size?.volume_litres
                 ? Number(p.price_per_litre) * Number(size.volume_litres)
                 : null;
+              const unitLabel = p.price_type === 'per_litre'
+                ? `${formatAUD(p.price_per_litre)} / L`
+                : `${formatAUD(p.fixed_price)} fixed`;
               return (
-                <div key={p.id} className="p-3 grid grid-cols-12 gap-2 items-center text-sm">
-                  <div className="col-span-3 font-medium">{size?.name ?? 'Unknown size'}</div>
-                  <div className="col-span-3 text-muted-foreground">
-                    {p.price_type === 'per_litre'
-                      ? `${formatAUD(p.price_per_litre)} / L`
-                      : `${formatAUD(p.fixed_price)} fixed`}
-                  </div>
-                  <div className="col-span-3 text-muted-foreground">
-                    {totalPerPack != null ? `= ${formatAUD(totalPerPack)} / pack` : `MOQ ${p.minimum_order_quantity}`}
-                  </div>
-                  <div className="col-span-2">
-                    {p.is_available ? <Badge variant="outline" className="border-emerald-300 text-emerald-700">Available</Badge> : <Badge variant="secondary">Hidden</Badge>}
-                  </div>
-                  <div className="col-span-1 flex justify-end">
-                    <Button variant="ghost" size="sm" onClick={() => onDelete(p.id)}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                <div
+                  key={p.id}
+                  className={`rounded-md border p-3 transition-colors ${p.is_available ? 'bg-background hover:bg-muted/30' : 'bg-muted/30 opacity-75'}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <Package className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 sm:items-center">
+                      {/* Size + status */}
+                      <div className="sm:col-span-4 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium truncate">{size?.name ?? 'Unknown size'}</p>
+                          {p.is_available
+                            ? <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px]">Available</Badge>
+                            : <Badge variant="secondary" className="text-[10px]">Hidden</Badge>}
+                        </div>
+                        {p.minimum_order_quantity > 1 && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">MOQ {p.minimum_order_quantity}</p>
+                        )}
+                      </div>
+                      {/* Unit price */}
+                      <div className="sm:col-span-3">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">Unit price</p>
+                        <p className="text-sm font-mono">{unitLabel}</p>
+                      </div>
+                      {/* Pack total */}
+                      <div className="sm:col-span-4">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground sm:hidden">Per pack</p>
+                        <p className="text-sm font-mono text-muted-foreground">
+                          {totalPerPack != null ? `= ${formatAUD(totalPerPack)} / pack` : ''}
+                        </p>
+                      </div>
+                      {/* Actions */}
+                      <div className="sm:col-span-1 flex justify-start sm:justify-end gap-0.5">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => startEdit(p)} disabled={adding || editingId !== null} title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600 hover:text-rose-700 dark:text-rose-400" onClick={() => onDelete(p.id)} disabled={adding || editingId !== null} title="Remove">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-        {adding ? (
-          <div className="border rounded-md p-3 grid grid-cols-12 gap-2 items-end bg-muted/30">
-            <div className="col-span-3">
-              <Label className="text-xs">Packaging size</Label>
-              <Select value={draft.packaging_size_id} onValueChange={(v) => setDraft({ ...draft, packaging_size_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Choose size" /></SelectTrigger>
-                <SelectContent>
-                  {availableSizes.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="col-span-2">
-              <Label className="text-xs">Price type</Label>
-              <Select value={draft.price_type} onValueChange={(v) => setDraft({ ...draft, price_type: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="per_litre">Per litre</SelectItem>
-                  <SelectItem value="fixed">Fixed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="col-span-2">
-              <Label className="text-xs">Price (AUD)</Label>
-              {draft.price_type === 'per_litre' ? (
-                <Input type="number" step="0.0001" value={draft.price_per_litre} onChange={(e) => setDraft({ ...draft, price_per_litre: e.target.value })} />
-              ) : (
-                <Input type="number" step="0.01" value={draft.fixed_price} onChange={(e) => setDraft({ ...draft, fixed_price: e.target.value })} />
-              )}
-            </div>
-            <div className="col-span-2">
-              <Label className="text-xs">Min qty</Label>
-              <Input type="number" min="1" value={draft.minimum_order_quantity} onChange={(e) => setDraft({ ...draft, minimum_order_quantity: e.target.value })} />
-            </div>
-            <div className="col-span-2 flex items-center gap-2 pt-5">
-              <Switch checked={!!draft.is_available} onCheckedChange={(v) => setDraft({ ...draft, is_available: v })} />
-              <span className="text-xs">Available</span>
-            </div>
-            <div className="col-span-1 flex justify-end gap-1 pt-5">
-              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
-              <Button size="sm" onClick={submit}>Save</Button>
-            </div>
-          </div>
-        ) : (
-          <Button variant="outline" size="sm" onClick={startAdd} disabled={availableSizes.length === 0}>
-            <Plus className="w-4 h-4 mr-1.5" />
-            {availableSizes.length === 0 ? 'All packaging sizes added' : 'Add packaging variant'}
-          </Button>
+
+        {adding && (
+          <VariantForm
+            mode="add"
+            draft={draft}
+            setDraft={setDraft}
+            sizes={availableSizesForAdd}
+            busy={busy}
+            onCancel={closeAll}
+            onSubmit={submit}
+          />
+        )}
+
+        {availableSizesForAdd.length === 0 && !adding && editingId === null && (prices || []).length > 0 && (
+          <p className="text-[11px] text-muted-foreground italic text-center pt-1">
+            All packaging sizes added. Create more in Admin → Operations log categories → Packaging sizes.
+          </p>
         )}
       </CardContent>
     </Card>
   );
 }
 
+function VariantForm({ mode, draft, setDraft, sizes, busy, onCancel, onSubmit }) {
+  const isEdit = mode === 'edit';
+  return (
+    <div className="border border-primary/40 rounded-md p-4 bg-primary/5 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium flex items-center gap-2">
+          {isEdit
+            ? <><Pencil className="w-4 h-4 text-primary" /> Edit packaging variant</>
+            : <><Plus className="w-4 h-4 text-primary" /> New packaging variant</>}
+        </p>
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onCancel} disabled={busy}>
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Packaging size</Label>
+          <Select value={draft.packaging_size_id} onValueChange={(v) => setDraft({ ...draft, packaging_size_id: v })}>
+            <SelectTrigger className="mt-1"><SelectValue placeholder="Choose size" /></SelectTrigger>
+            <SelectContent>
+              {sizes.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Price type</Label>
+          <Select value={draft.price_type} onValueChange={(v) => setDraft({ ...draft, price_type: v })}>
+            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="per_litre">Per litre</SelectItem>
+              <SelectItem value="fixed">Fixed (per pack)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            {draft.price_type === 'per_litre' ? 'Price per litre (AUD)' : 'Fixed price (AUD)'}
+          </Label>
+          {draft.price_type === 'per_litre' ? (
+            <Input type="number" step="0.0001" placeholder="0.0000" className="mt-1" value={draft.price_per_litre ?? ''} onChange={(e) => setDraft({ ...draft, price_per_litre: e.target.value })} />
+          ) : (
+            <Input type="number" step="0.01" placeholder="0.00" className="mt-1" value={draft.fixed_price ?? ''} onChange={(e) => setDraft({ ...draft, fixed_price: e.target.value })} />
+          )}
+        </div>
+        <div>
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Minimum order qty</Label>
+          <Input type="number" min="1" className="mt-1" value={draft.minimum_order_quantity} onChange={(e) => setDraft({ ...draft, minimum_order_quantity: e.target.value })} />
+        </div>
+      </div>
+      <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+        <label className="flex items-center gap-2 text-sm">
+          <Switch checked={!!draft.is_available} onCheckedChange={(v) => setDraft({ ...draft, is_available: v })} />
+          <span className="text-muted-foreground">Available to buyers</span>
+        </label>
+        <div className="flex gap-2 ml-auto">
+          <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
+          <Button size="sm" onClick={onSubmit} disabled={busy}>
+            {busy ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Save className="w-4 h-4 mr-1.5" />}
+            {isEdit ? 'Save changes' : 'Save variant'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---- Checkout questions sub-card --------------------------------------------
-function CheckoutQuestionsCard({ productId, questions, sizes, onUpsert, onDelete }) {
+function CheckoutQuestionsCard({ productId, questions, sizes, onUpsert, onDelete, upsertPending = false, deletePending = false }) {
   const EMPTY_Q = {
     question_text: '',
     question_type: 'boolean',
@@ -575,6 +858,7 @@ function CheckoutQuestionsCard({ productId, questions, sizes, onUpsert, onDelete
 
   const cancel = () => { setEditingId(null); setDraft(EMPTY_Q); };
 
+  const [deletingId, setDeletingId] = useState(null);
   const submit = async () => {
     if (!draft.question_text.trim()) {
       toastError(new Error('Question text required'), 'saving question');
@@ -586,6 +870,14 @@ function CheckoutQuestionsCard({ productId, questions, sizes, onUpsert, onDelete
       cancel();
     } catch (e) {
       toastError(e, 'saving question');
+    }
+  };
+  const handleDelete = async (id) => {
+    setDeletingId(id);
+    try {
+      await onDelete(id);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -600,17 +892,19 @@ function CheckoutQuestionsCard({ productId, questions, sizes, onUpsert, onDelete
           <div className="divide-y border rounded-md">
             {(questions || []).map((q) => (
               editingId === q.id ? (
-                <QuestionForm key={q.id} draft={draft} setDraft={setDraft} onCancel={cancel} onSubmit={submit} editing />
+                <QuestionForm key={q.id} draft={draft} setDraft={setDraft} onCancel={cancel} onSubmit={submit} editing busy={upsertPending} />
               ) : (
                 <div key={q.id} className="p-3 flex items-center gap-3 text-sm">
                   <Badge variant="outline" className="text-[10px]">{q.question_type}</Badge>
                   <p className="flex-1">{q.question_text}</p>
                   {q.is_required && <Badge variant="secondary" className="text-[10px]">required</Badge>}
-                  <Button variant="ghost" size="sm" onClick={() => startEdit(q)} title="Edit">
+                  <Button variant="ghost" size="sm" onClick={() => startEdit(q)} disabled={editingId !== null || deletingId === q.id} title="Edit">
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => onDelete(q.id)} title="Delete">
-                    <Trash2 className="w-3.5 h-3.5" />
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(q.id)} disabled={editingId !== null || deletingId === q.id} title="Delete">
+                    {deletingId === q.id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Trash2 className="w-3.5 h-3.5" />}
                   </Button>
                 </div>
               )
@@ -618,9 +912,9 @@ function CheckoutQuestionsCard({ productId, questions, sizes, onUpsert, onDelete
           </div>
         )}
         {editingId === 'new' ? (
-          <QuestionForm draft={draft} setDraft={setDraft} onCancel={cancel} onSubmit={submit} />
+          <QuestionForm draft={draft} setDraft={setDraft} onCancel={cancel} onSubmit={submit} busy={upsertPending} />
         ) : editingId === null ? (
-          <Button variant="outline" size="sm" onClick={startAdd}>
+          <Button variant="outline" size="sm" onClick={startAdd} disabled={deletePending || deletingId !== null}>
             <Plus className="w-4 h-4 mr-1.5" /> Add question
           </Button>
         ) : null}
@@ -629,16 +923,17 @@ function CheckoutQuestionsCard({ productId, questions, sizes, onUpsert, onDelete
   );
 }
 
-function QuestionForm({ draft, setDraft, onCancel, onSubmit, editing = false }) {
+function QuestionForm({ draft, setDraft, onCancel, onSubmit, editing = false, busy = false }) {
   return (
     <div className="border rounded-md p-3 space-y-2 bg-muted/30">
       <Input
         placeholder="Question text"
         value={draft.question_text}
         onChange={(e) => setDraft({ ...draft, question_text: e.target.value })}
+        disabled={busy}
       />
       <div className="flex items-center gap-3 flex-wrap">
-        <Select value={draft.question_type} onValueChange={(v) => setDraft({ ...draft, question_type: v })}>
+        <Select value={draft.question_type} onValueChange={(v) => setDraft({ ...draft, question_type: v })} disabled={busy}>
           <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="boolean">Yes / No</SelectItem>
@@ -648,12 +943,17 @@ function QuestionForm({ draft, setDraft, onCancel, onSubmit, editing = false }) 
           </SelectContent>
         </Select>
         <label className="flex items-center gap-2 text-sm">
-          <Switch checked={!!draft.is_required} onCheckedChange={(v) => setDraft({ ...draft, is_required: v })} />
+          <Switch checked={!!draft.is_required} onCheckedChange={(v) => setDraft({ ...draft, is_required: v })} disabled={busy} />
           Required
         </label>
         <div className="flex-1" />
-        <Button size="sm" variant="ghost" onClick={onCancel}><X className="w-3.5 h-3.5 mr-1" />Cancel</Button>
-        <Button size="sm" onClick={onSubmit}><Save className="w-3.5 h-3.5 mr-1" />{editing ? 'Save' : 'Add'}</Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}><X className="w-3.5 h-3.5 mr-1" />Cancel</Button>
+        <Button size="sm" onClick={onSubmit} disabled={busy}>
+          {busy
+            ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+            : <Save className="w-3.5 h-3.5 mr-1" />}
+          {editing ? 'Save' : 'Add'}
+        </Button>
       </div>
     </div>
   );

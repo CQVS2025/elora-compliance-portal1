@@ -234,6 +234,29 @@ export function cartOptions(companyId, userId) {
   });
 }
 
+/**
+ * Per-user marketplace delivery address book. Reads
+ * user_profiles.marketplace_saved_addresses for the current user.
+ */
+export function savedAddressesOptions(companyId, userId) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceSavedAddresses(companyId, userId),
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('marketplace_saved_addresses')
+        .eq('id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      const arr = data?.marketplace_saved_addresses;
+      return Array.isArray(arr) ? arr : [];
+    },
+    enabled: !!userId && !!companyId,
+    staleTime: 30 * 1000,
+  });
+}
+
 // ============================================================================
 // Admin-facing
 // ============================================================================
@@ -383,10 +406,265 @@ export function marketplaceCompaniesOptions(companyId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('companies')
-        .select('id, name, slug, email_domain, is_active, marketplace_enabled, marketplace_invoice_email, marketplace_default_address')
+        .select('id, name, slug, email_domain, is_active, marketplace_enabled, marketplace_invoice_email, marketplace_default_address, xero_contact_id, xero_invoicing_enabled, xero_contact_details')
         .order('name', { ascending: true });
       if (error) throw error;
       return data ?? [];
+    },
+    enabled: !!companyId,
+    staleTime: 60 * 1000,
+  });
+}
+
+// ============================================================================
+// Orders — buyer-side
+// ============================================================================
+
+export function buyerOrdersOptions(companyId) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceBuyerOrders(companyId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('marketplace_orders')
+        .select(`
+          id, order_number, status, payment_method,
+          subtotal_ex_gst, freight_ex_gst, gst_amount, total_amount, currency,
+          supplier_dispatch_date, supplier_eta_date, supplier_tracking_url, supplier_tracking_carrier,
+          created_at, updated_at,
+          buyer_user_id
+        `)
+        .eq('buyer_company_id', companyId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!companyId,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function buyerOrderDetailOptions(companyId, orderId) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceBuyerOrder(companyId, orderId),
+    queryFn: async () => {
+      if (!orderId) return null;
+      const [orderRes, itemsRes, historyRes] = await Promise.all([
+        supabase
+          .from('marketplace_orders')
+          .select('*')
+          .eq('id', orderId)
+          .maybeSingle(),
+        supabase
+          .from('marketplace_order_items')
+          .select('*')
+          .eq('order_id', orderId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('marketplace_order_status_history')
+          .select('*')
+          .eq('order_id', orderId)
+          .order('created_at', { ascending: true }),
+      ]);
+      if (orderRes.error) throw orderRes.error;
+      if (itemsRes.error) throw itemsRes.error;
+      if (historyRes.error) throw historyRes.error;
+      return {
+        order: orderRes.data,
+        items: itemsRes.data ?? [],
+        history: historyRes.data ?? [],
+      };
+    },
+    enabled: !!companyId && !!orderId,
+    staleTime: 15 * 1000,
+  });
+}
+
+// ============================================================================
+// Orders — admin-side
+// ============================================================================
+
+export function adminOrdersOptions(companyId, filters = {}) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceAdminOrders(companyId, filters),
+    queryFn: async () => {
+      let q = supabase
+        .from('marketplace_orders')
+        .select(`
+          id, order_number, status, payment_method,
+          subtotal_ex_gst, freight_ex_gst, gst_amount, total_amount, currency,
+          buyer_company_id, buyer_user_id,
+          created_at, updated_at,
+          approved_at, rejected_at, rejection_reason,
+          supplier_dispatch_date, supplier_eta_date, supplier_tracking_url,
+          delivery_postcode, delivery_address,
+          stripe_payment_intent_id, xero_invoice_number,
+          buyer_company:companies!buyer_company_id ( id, name )
+        `)
+        .order('created_at', { ascending: false });
+      if (filters.status) q = q.eq('status', filters.status);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!companyId,
+    staleTime: 20 * 1000,
+  });
+}
+
+export function adminOrderDetailOptions(companyId, orderId) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceAdminOrder(companyId, orderId),
+    queryFn: async () => {
+      if (!orderId) return null;
+      const [orderRes, itemsRes, historyRes, syncRes] = await Promise.all([
+        supabase
+          .from('marketplace_orders')
+          .select(`
+            *,
+            buyer_company:companies!buyer_company_id ( id, name, marketplace_invoice_email ),
+            warehouse:marketplace_warehouses ( id, name, contact_email )
+          `)
+          .eq('id', orderId)
+          .maybeSingle(),
+        supabase
+          .from('marketplace_order_items')
+          .select('*')
+          .eq('order_id', orderId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('marketplace_order_status_history')
+          .select('*')
+          .eq('order_id', orderId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('marketplace_xero_sync_log')
+          .select('*')
+          .eq('order_id', orderId)
+          .order('created_at', { ascending: false }),
+      ]);
+      if (orderRes.error) throw orderRes.error;
+      if (itemsRes.error) throw itemsRes.error;
+      if (historyRes.error) throw historyRes.error;
+      // sync log may fail for non-admin; tolerate
+      return {
+        order: orderRes.data,
+        items: itemsRes.data ?? [],
+        history: historyRes.data ?? [],
+        xero_log: syncRes.data ?? [],
+      };
+    },
+    enabled: !!companyId && !!orderId,
+    staleTime: 15 * 1000,
+  });
+}
+
+// ============================================================================
+// Orders — warehouse-side
+// ============================================================================
+
+export function warehouseOrdersOptions(companyId, warehouseId) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceWarehouseOrders(companyId, warehouseId),
+    queryFn: async () => {
+      if (!warehouseId) return [];
+      const { data, error } = await supabase
+        .from('marketplace_orders')
+        .select(`
+          id, order_number, status, payment_method,
+          supplier_dispatch_date, supplier_eta_date, supplier_tracking_url, supplier_tracking_carrier, supplier_notes,
+          delivery_address, delivery_postcode, delivery_contact_name, delivery_contact_phone, delivery_notes,
+          created_at, approved_at,
+          site_access_answers
+        `)
+        .eq('warehouse_id', warehouseId)
+        .in('status', ['approved', 'paid', 'dispatched', 'delivered'])
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!companyId && !!warehouseId,
+    staleTime: 30 * 1000,
+  });
+}
+
+// ============================================================================
+// Freight
+// ============================================================================
+
+/**
+ * All product → rate sheet mappings for the org. One row per
+ * (product, packaging_size_id) — NULL packaging_size_id is the
+ * product-level default; non-null is a per-size override.
+ */
+export function productRateSheetMappingsOptions(companyId) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceProductRateSheets(companyId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('marketplace_product_rate_sheets')
+        .select('id, product_id, packaging_size_id, rate_sheet_id, created_at');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!companyId,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function rateSheetsOptions(companyId) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceRateSheets(companyId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('marketplace_rate_sheets')
+        .select(`
+          *,
+          warehouse:marketplace_warehouses ( id, name, postcode ),
+          brackets:marketplace_rate_sheet_brackets ( id, distance_from_km, distance_to_km, rate, zone_name )
+        `)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!companyId,
+    staleTime: 60 * 1000,
+  });
+}
+
+// ============================================================================
+// Integrations
+// ============================================================================
+
+export function integrationLogOptions(companyId, filters = {}) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceIntegrationLog(companyId, filters),
+    queryFn: async () => {
+      let q = supabase
+        .from('marketplace_integration_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (filters.integration) q = q.eq('integration', filters.integration);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!companyId,
+    staleTime: 15 * 1000,
+  });
+}
+
+export function xeroCredentialsOptions(companyId) {
+  return queryOptions({
+    queryKey: queryKeys.tenant.marketplaceXeroCredentials(companyId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('marketplace_xero_credentials')
+        .select('id, tenant_id, tenant_name, expires_at, connected_at, last_refreshed_at, revenue_account_code, freight_account_code, gst_tax_type, branding_theme_id, po_sender_email')
+        .eq('id', 1)
+        .maybeSingle();
+      if (error) throw error;
+      return data ?? null;
     },
     enabled: !!companyId,
     staleTime: 60 * 1000,
